@@ -51,6 +51,7 @@ Reihenfolge der restlichen Schritte: **6 → 11 (Link teilen) → 7 → 8 → 9 
   Unterschied der Mischwerte angepasst (× Anteil zugegebenes Mehl am Gesamtmehl) – ein Vorschlag, überschreibbar.
 - Quellstück: Jede Saat hat ein Wasserverhältnis (g Wasser je g Saat). Vorlagen speichern ihr eigenes
   Quellwasser; die Verhältnisse wirken nur als Zu-/Abschlag, wenn Saaten gewählt oder geändert werden. Überschreibbar.
+  Beim Entfernen einer Saat: Ist der Rest knapper als laut Verhältnis, gilt das Verhältnis (nie mehr als vorher).
 - Hinweise: Hafer nur als Beimischung (kein Klebereiweiß, ab 20 % deutlicher);
   Roggen ab 50 % ohne Sauerteig-Starter → Hinweis auf Säuerung.
 

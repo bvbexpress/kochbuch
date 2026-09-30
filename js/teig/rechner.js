@@ -258,11 +258,18 @@ export function quellbedarf(saaten, verhaeltnisVon) {
  * Wie beim Mehl: nur der Mehr- oder Minderbedarf der geänderten Saaten
  * kommt dazu, das Quellwasser der Vorlage bleibt sonst erhalten.
  * Ohne Saaten gibt es kein Quellwasser.
+ *
+ * Beim Entfernen einer Saat kann dabei zu wenig übrig bleiben (die Vorlage
+ * hatte weniger Wasser als die Verhältnisse). Dann gilt der Bedarf der
+ * übrigen Saaten laut Verhältnis – aber nie mehr Wasser als vorher.
  */
 export function quellwasserNachSaatwechsel(teig, alteSaaten, neueSaaten, verhaeltnisVon) {
   if (neueSaaten.length === 0) return 0;
-  const unterschied = quellbedarf(neueSaaten, verhaeltnisVon) - quellbedarf(alteSaaten, verhaeltnisVon);
-  return (teig.quellwasser ?? 0) + unterschied;
+  const vorher = teig.quellwasser ?? 0;
+  const bedarf = quellbedarf(neueSaaten, verhaeltnisVon);
+  const neu = vorher + bedarf - quellbedarf(alteSaaten, verhaeltnisVon);
+  if (neueSaaten.length < alteSaaten.length) return Math.max(neu, Math.min(bedarf, vorher));
+  return neu;
 }
 
 // ---------- Hinweise zur Mehlart ----------

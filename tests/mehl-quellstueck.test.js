@@ -138,6 +138,26 @@ test('Saatmenge ändern: Mehrbedarf nach Verhältnis', () => {
   ungefaehr((teig.quellwasser * 550) / 100, 105); // 80 + 10 × 2,5
 });
 
+test('Saat entfernen: zu knapper Rest geht aufs Verhältnis zurück', () => {
+  const { teig } = ladeVorlage(VORLAGEN[1]);
+  const ohneLein = teig.saaten.filter((s) => s.id !== 'leinsamen');
+  // 80 − 62,5 = 17,5 g wären zu knapp; 50 g Sonnenblumenkerne × 1 = 50 g
+  const q = quellwasserNachSaatwechsel(teig, teig.saaten, ohneLein, verhaeltnisVon);
+  ungefaehr((q * 550) / 100, 50);
+});
+
+test('Saat entfernen: nie mehr Wasser als vorher', () => {
+  const teig = { quellwasser: 5 };
+  const alt = [{ id: 'sesam', prozent: 10 }, { id: 'kuerbiskerne', prozent: 10 }];
+  ungefaehr(quellwasserNachSaatwechsel(teig, alt, alt.slice(0, 1), verhaeltnisVon), 5);
+});
+
+test('Saat entfernen: reicht der Rest, bleibt es beim Abzug', () => {
+  const teig = { quellwasser: 40 };
+  const alt = [{ id: 'sesam', prozent: 10 }, { id: 'leinsamen', prozent: 4 }];
+  ungefaehr(quellwasserNachSaatwechsel(teig, alt, alt.slice(0, 1), verhaeltnisVon), 30);
+});
+
 test('Alle Saaten entfernt: kein Quellwasser', () => {
   const { teig } = ladeVorlage(VORLAGEN[1]);
   assert.equal(quellwasserNachSaatwechsel(teig, teig.saaten, [], verhaeltnisVon), 0);
