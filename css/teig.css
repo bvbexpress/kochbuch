@@ -141,3 +141,10 @@
   background: color-mix(in srgb, var(--akzent) 15%, transparent);
   font-weight: 500;
 }
+
+/* Kleine Zusatzinfo unter einem Feld */
+.info {
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+  color: var(--text-leise);
+}

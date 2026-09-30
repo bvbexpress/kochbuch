@@ -6,6 +6,7 @@ import {
   berechne,
   teigAusGramm,
   mehlAusTeiglingen,
+  gesamtmehlAusMehl,
   hefeUmrechnen,
   auffrischen,
 } from '../js/teig/rechner.js';
@@ -99,6 +100,31 @@ test('Mehlmenge 0 ergibt überall 0', () => {
   const e = berechne(teig, 0);
   assert.equal(e.teigGesamt, 0);
   assert.equal(e.wasser, 0);
+});
+
+// ---------- Eingabe: zugegebenes Mehl ----------
+
+test('Focaccia: 300 g zugegebenes Mehl ergeben 325 g Gesamtmehl', () => {
+  const { teig, mehl } = teigAusGramm(focaccia);
+  assert.equal(mehl, 300);
+  ungefaehr(gesamtmehlAusMehl(teig, 300), 325);
+});
+
+test('Zugegebenes Mehl bleibt gleich, wenn sich der Starter-Anteil ändert', () => {
+  const { teig } = teigAusGramm(focaccia);
+  teig.starter = 30;
+  ungefaehr(berechne(teig, gesamtmehlAusMehl(teig, 300)).mehl, 300);
+});
+
+test('Ohne Starter ist zugegebenes Mehl gleich Gesamtmehl', () => {
+  assert.equal(gesamtmehlAusMehl({ starter: 0 }, 500), 500);
+});
+
+test('Starter ab 200 % ist unmöglich: Gesamtmehl 0', () => {
+  assert.equal(gesamtmehlAusMehl({ starter: 200 }, 300), 0);
+  assert.equal(gesamtmehlAusMehl({ starter: 250 }, 300), 0);
+  const teig = { hydration: 100, starter: 200, salz: 2, oel: 0, hefe: 0, mehlsorten: [] };
+  assert.ok(berechne(teig, 0).hinweise.includes('starter-zu-viel'));
 });
 
 // ---------- Mehlmischung ----------

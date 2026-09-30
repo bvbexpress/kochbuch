@@ -38,6 +38,18 @@ export function mehlAusTeiglingen(teig, anzahl, gewicht) {
 }
 
 /**
+ * Gesamtmehl aus dem zugegebenen Mehl (das, was man abwiegt).
+ * Zugegebenes Mehl = Gesamtmehl − Mehl im Starter
+ *                  = Gesamtmehl × (1 − Starter% / 200)
+ * Bei 200 % Starter oder mehr bestünde das Mehl nur noch aus Starter → 0.
+ */
+export function gesamtmehlAusMehl(teig, mehl) {
+  const nenner = 1 - teig.starter / 200;
+  if (mehl <= 0 || nenner <= 0) return 0;
+  return mehl / nenner;
+}
+
+/**
  * Rechnet einen Teig für eine bestimmte Gesamtmehlmenge in Gramm aus.
  * Ergebnis: ungerundete Grammzahlen und eine Liste von Hinweisen.
  */
@@ -53,7 +65,7 @@ export function berechne(teig, gesamtmehl) {
   const wasser = wasserGesamt - starterWasser; // zugegebenes Wasser
 
   const hinweise = [];
-  if (mehl < 0) hinweise.push('starter-zu-viel');
+  if (mehl < 0 || teig.starter >= 200) hinweise.push('starter-zu-viel');
   if (wasser < 0) hinweise.push('hydration-zu-niedrig');
 
   const mehlsorten = verteileMehl(teig.mehlsorten ?? [], Math.max(mehl, 0), hinweise);
@@ -106,7 +118,7 @@ function verteileMehl(sorten, mehl, hinweise) {
 /**
  * Wandelt ein Rezept in Gramm (so wie man es aufschreibt) in einen Teig in Prozent um.
  * Wird für die eingebauten Vorlagen benutzt.
- * Liefert { teig, gesamtmehl }.
+ * Liefert { teig, gesamtmehl, mehl } – mehl ist das zugegebene Mehl.
  */
 export function teigAusGramm(rezept) {
   const mehlZugegeben = summe(rezept.mehlsorten.map((s) => s.gramm));
@@ -131,7 +143,7 @@ export function teigAusGramm(rezept) {
     saaten: saaten.map((s) => ({ name: s.name, prozent: inProzent(s.gramm) })),
     quellwasser: saatenGesamt > 0 ? ((rezept.quellwasser ?? 0) / saatenGesamt) * 100 : 0,
   };
-  return { teig, gesamtmehl };
+  return { teig, gesamtmehl, mehl: mehlZugegeben };
 }
 
 /**

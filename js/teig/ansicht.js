@@ -2,7 +2,7 @@
 // Liest Eingaben, ruft den Rechner auf und schreibt die Grammzahlen in die Seite.
 // Gerechnet wird hier nichts – das macht ausschließlich rechner.js.
 
-import { berechne, hefeUmrechnen } from './rechner.js';
+import { berechne, gesamtmehlAusMehl, hefeUmrechnen } from './rechner.js';
 import { VORLAGEN, ladeVorlage } from './vorlagen.js';
 import { leseZahl, formatGramm, formatGrammFein, formatProzent } from '../kern/zahlen.js';
 
@@ -13,7 +13,7 @@ const HINWEISE = {
 };
 
 let wurzel;   // das HTML-Element, in dem der Teigrechner steht
-let zustand;  // { vorlageId, teig, gesamtmehl }
+let zustand;  // { vorlageId, teig, mehl } – mehl = zugegebenes Mehl (Eingabefeld)
 
 export function zeigeTeigrechner(ziel) {
   wurzel = ziel;
@@ -30,13 +30,14 @@ export function zeigeTeigrechner(ziel) {
 }
 
 function vorlageZustand(vorlage) {
-  return { vorlageId: vorlage.id, ...ladeVorlage(vorlage) };
+  const { teig, mehl } = ladeVorlage(vorlage);
+  return { vorlageId: vorlage.id, teig, mehl };
 }
 
 // ---------- Aufbau der Seite (nur beim Start und beim Laden einer Vorlage) ----------
 
 function zeichne() {
-  const { teig, gesamtmehl, vorlageId } = zustand;
+  const { teig, mehl, vorlageId } = zustand;
 
   const vorlagenKnoepfe = VORLAGEN.map(
     (v) => `<button type="button" class="knopf vorlage" data-vorlage="${v.id}"
@@ -62,13 +63,15 @@ function zeichne() {
 
     <section class="karte">
       <label class="feld">
-        <span class="feld-name">Mehl gesamt, inkl. Mehl im Starter</span>
+        <span class="feld-name">Mehl</span>
         <span class="mit-einheit">
-          <input class="eingabe eingabe-gross" data-feld="gesamtmehl"
-                 inputmode="decimal" autocomplete="off" value="${Math.round(gesamtmehl)}">
+          <input class="eingabe eingabe-gross" data-feld="mehl"
+                 inputmode="decimal" autocomplete="off" value="${Math.round(mehl)}">
           <span class="einheit">g</span>
         </span>
       </label>
+      <p class="info">Gesamtmehl inkl. Starter:
+        <output class="zahl" data-ausgabe="gesamtmehl"></output></p>
     </section>
 
     <section class="karte">
@@ -120,9 +123,11 @@ function zeileMitProzent(name, zusatz, feld, ausgabe, istHefe = false) {
 // ---------- Live-Aktualisierung (bei jedem Tastendruck) ----------
 
 function aktualisiere() {
-  const e = berechne(zustand.teig, zustand.gesamtmehl);
+  const { teig, mehl } = zustand;
+  const e = berechne(teig, gesamtmehlAusMehl(teig, mehl));
 
   const werte = {
+    gesamtmehl: e.gesamtmehl,
     wasser: e.wasser,
     starter: e.starter,
     salz: e.salz,
@@ -155,8 +160,8 @@ function beiEingabe(ereignis) {
   const feld = ereignis.target.dataset.feld;
   if (!feld) return;
   const wert = leseZahl(ereignis.target.value);
-  if (feld === 'gesamtmehl') {
-    zustand.gesamtmehl = wert;
+  if (feld === 'mehl') {
+    zustand.mehl = wert;
   } else {
     zustand.teig[feld] = wert;
   }
