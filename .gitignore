@@ -1,0 +1,9 @@
+# Systemdateien, die nie ins Repository gehören
+.DS_Store
+Thumbs.db
+
+# Lokale Notizen, Exporte oder Backups mit persönlichen Daten
+*.local.*
+export/
+backup/
+node_modules/

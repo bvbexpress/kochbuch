@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <!-- viewport-fit=cover: nutzt auf dem iPhone auch den Bereich um die Notch -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Kochbuch</title>
+  <meta name="description" content="Teigrechner für Brot, Pizza und Focaccia">
+
+  <!-- Sagt dem Browser, dass die Seite hell und dunkel kann (Formularfelder, Scrollbalken) -->
+  <meta name="color-scheme" content="light dark">
+  <!-- Farbe der Statusleiste auf dem Handy, passend zum Modus -->
+  <meta name="theme-color" content="#faf7f2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1b1814" media="(prefers-color-scheme: dark)">
+
+  <!-- Wichtig: alle Pfade relativ (./), weil GitHub Pages die App unter /kochbuch/ ausliefert -->
+  <link rel="stylesheet" href="./css/basis.css">
+</head>
+<body>
+  <header class="kopf">
+    <h1 class="kopf-titel">Kochbuch</h1>
+  </header>
+
+  <!-- Hier setzt später app.js den jeweiligen Bereich ein (Teigrechner, Rezepte, Vorrat) -->
+  <main id="inhalt" class="inhalt">
+    <section class="karte">
+      <h2>Teigrechner</h2>
+      <p class="leise">Wird gerade gebaut.</p>
+    </section>
+  </main>
+</body>
+</html>

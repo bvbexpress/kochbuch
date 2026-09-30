@@ -1,0 +1,208 @@
+/* ==========================================================================
+   basis.css – gemeinsames Design für alle Bereiche der App
+   Farben stehen als Variablen oben; der dunkle Modus überschreibt nur diese.
+   ========================================================================== */
+
+/* ---------- Farben: heller Modus ---------- */
+:root {
+  --hintergrund: #faf7f2;   /* warmes Mehl-Weiß */
+  --flaeche: #ffffff;       /* Karten, Eingabefelder */
+  --text: #1f1b16;
+  --text-leise: #6b6258;
+  --linie: #e3dcd2;
+  --akzent: #b5541c;        /* Kruste */
+  --akzent-text: #ffffff;   /* Text auf Akzentfarbe */
+  --fokus: #d9772f;
+
+  --radius: 14px;
+  --abstand: 16px;
+  --tipp-hoehe: 56px;       /* Mindesthöhe für alles Antippbare */
+
+  color-scheme: light dark;
+}
+
+/* ---------- Farben: dunkler Modus (folgt der Handy-Einstellung) ---------- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --hintergrund: #1b1814;
+    --flaeche: #26221d;
+    --text: #f3ede5;
+    --text-leise: #a89e92;
+    --linie: #3a342d;
+    --akzent: #e08a4f;
+    --akzent-text: #1b1814;
+    --fokus: #f0a26b;
+  }
+}
+
+/* ---------- Grundlagen ---------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--hintergrund);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 18px;
+  line-height: 1.4;
+  /* Abstand zu Notch und Home-Balken auf dem iPhone */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
+  /* Kein versehentliches Markieren von Text beim Tippen mit Teigfingern */
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1, h2, h3 {
+  margin: 0 0 0.5em;
+  line-height: 1.2;
+}
+
+h2 { font-size: 1.25rem; }
+h3 { font-size: 1.05rem; }
+
+p { margin: 0 0 0.75em; }
+
+/* ---------- Seitenaufbau ---------- */
+.kopf {
+  padding: var(--abstand);
+  padding-bottom: 0;
+}
+
+.kopf-titel {
+  font-size: 1.5rem;
+  margin: 0;
+}
+
+.inhalt {
+  display: grid;
+  gap: var(--abstand);
+  padding: var(--abstand);
+  max-width: 40rem;         /* auf Tablet/PC nicht zu breit */
+  margin: 0 auto;
+}
+
+.karte {
+  background: var(--flaeche);
+  border: 1px solid var(--linie);
+  border-radius: var(--radius);
+  padding: var(--abstand);
+}
+
+.leise {
+  color: var(--text-leise);
+}
+
+/* ---------- Zahlen: gleich breite Ziffern, damit nichts springt ---------- */
+.zahl {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Knöpfe ---------- */
+.knopf {
+  min-height: var(--tipp-hoehe);
+  padding: 0 1.25rem;
+  border: 2px solid var(--akzent);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--akzent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation; /* kein Doppeltipp-Zoom */
+}
+
+.knopf-voll {
+  background: var(--akzent);
+  color: var(--akzent-text);
+}
+
+.knopf:active {
+  transform: scale(0.97);
+}
+
+/* ---------- Eingabefelder ---------- */
+.feld {
+  display: grid;
+  gap: 4px;
+}
+
+.feld-name {
+  font-size: 0.9rem;
+  color: var(--text-leise);
+}
+
+/* Mindestens 16px Schrift, sonst zoomt iOS beim Antippen hinein */
+.eingabe {
+  min-height: var(--tipp-hoehe);
+  width: 100%;
+  padding: 0 0.75rem;
+  border: 2px solid var(--linie);
+  border-radius: var(--radius);
+  background: var(--flaeche);
+  color: var(--text);
+  font: inherit;
+  font-size: 1.4rem;
+  font-variant-numeric: tabular-nums;
+  touch-action: manipulation;
+}
+
+/* Deutliche Markierung, welches Feld gerade aktiv ist */
+.eingabe:focus,
+.knopf:focus-visible {
+  outline: 3px solid var(--fokus);
+  outline-offset: 2px;
+}
+
+/* ---------- Einklappbare Bereiche (<details>) ---------- */
+details.klappe {
+  background: var(--flaeche);
+  border: 1px solid var(--linie);
+  border-radius: var(--radius);
+}
+
+details.klappe > summary {
+  min-height: var(--tipp-hoehe);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--abstand);
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+  touch-action: manipulation;
+}
+
+details.klappe > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Pfeil, der sich beim Aufklappen dreht */
+details.klappe > summary::after {
+  content: "›";
+  margin-left: auto;
+  font-size: 1.5rem;
+  transition: transform 0.15s;
+}
+
+details.klappe[open] > summary::after {
+  transform: rotate(90deg);
+}
+
+details.klappe > .klappe-inhalt {
+  padding: 0 var(--abstand) var(--abstand);
+}
+
+/* Weniger Bewegung, falls am Handy so eingestellt */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}
