@@ -6,6 +6,10 @@
 // (Sammlung "teigvorlagen") – in Prozent, zusammen mit der Mehlmenge.
 
 import { teigAusGramm } from './rechner.js';
+import { MEHLE, SAATEN, idNachName } from './zutaten.js';
+
+// Version des Teig-Formats. 2 = Mehle/Saaten mit id, Quellwasser in % vom Gesamtmehl.
+const FORMAT = 2;
 
 const SAMMLUNG = 'teigvorlagen';
 
@@ -14,7 +18,7 @@ export const VORLAGEN = [
     id: 'focaccia',
     name: 'Sauerteig-Focaccia',
     rezept: {
-      mehlsorten: [{ name: 'Tipo 00', gramm: 300 }],
+      mehlsorten: [{ id: 'tipo00', name: 'Tipo 00', gramm: 300 }],
       starter: 50,
       wasser: 225,
       salz: 7,
@@ -25,15 +29,15 @@ export const VORLAGEN = [
     id: 'weizenvollkorn',
     name: 'Weizenvollkorn-Sauerteigbrot',
     rezept: {
-      mehlsorten: [{ name: 'Weizenvollkorn', gramm: 500 }],
+      mehlsorten: [{ id: 'weizenvollkorn', name: 'Weizenvollkorn', gramm: 500 }],
       starter: 100,
       wasser: 400,
       salz: 11,
       saaten: [
-        { name: 'Sonnenblumenkerne', gramm: 50 },
-        { name: 'Leinsamen', gramm: 25 },
+        { id: 'sonnenblumenkerne', name: 'Sonnenblumenkerne', gramm: 50 },
+        { id: 'leinsamen', name: 'Leinsamen', gramm: 25 },
       ],
-      quellwasser: 80,
+      quellwasser: 80, // erprobt – bleibt so, unabhängig von den Quellverhältnissen
     },
   },
 ];
@@ -43,7 +47,7 @@ export function alleVorlagen(speicher) {
   const eigene = speicher.alle(SAMMLUNG).filter((v) => istGueltigerTeig(v.teig));
   return [
     ...VORLAGEN.map((v) => ({ ...v, eingebaut: true })),
-    ...eigene.map((v) => ({ ...v, eingebaut: false })),
+    ...eigene.map((v) => ({ ...v, teig: normalisiereTeig(v.teig), eingebaut: false })),
   ];
 }
 
@@ -51,9 +55,9 @@ export function alleVorlagen(speicher) {
 export function ladeVorlage(vorlage) {
   if (vorlage.rezept) {
     const { teig, mehl } = teigAusGramm(vorlage.rezept);
-    return { teig, mehl };
+    return { teig: { ...teig, format: FORMAT }, mehl };
   }
-  return { teig: structuredClone(vorlage.teig), mehl: vorlage.mehl };
+  return { teig: normalisiereTeig(vorlage.teig), mehl: vorlage.mehl };
 }
 
 /** Speichert eine eigene Vorlage (neu ohne id, sonst Änderung). Gibt sie zurück oder null. */
@@ -81,4 +85,21 @@ export function istGueltigerTeig(teig) {
     zahlen.every((k) => typeof teig[k] === 'number' && Number.isFinite(teig[k])) &&
     Array.isArray(teig.mehlsorten)
   );
+}
+
+/**
+ * Bringt gespeicherte Teige auf das aktuelle Format (liefert immer eine Kopie).
+ * Format 1 (Schritt 5): Mehle/Saaten nur mit Namen, Quellwasser in % der Saaten.
+ */
+export function normalisiereTeig(teig) {
+  const kopie = structuredClone(teig);
+  kopie.saaten = Array.isArray(kopie.saaten) ? kopie.saaten : [];
+  if (kopie.format === FORMAT) return kopie;
+
+  kopie.mehlsorten = kopie.mehlsorten.map((s) => ({ ...s, id: s.id ?? idNachName(MEHLE, s.name) }));
+  kopie.saaten = kopie.saaten.map((s) => ({ ...s, id: s.id ?? idNachName(SAATEN, s.name) }));
+  const saatenProzent = kopie.saaten.reduce((a, s) => a + (s.prozent || 0), 0);
+  kopie.quellwasser = (saatenProzent * (kopie.quellwasser || 0)) / 100;
+  kopie.format = FORMAT;
+  return kopie;
 }

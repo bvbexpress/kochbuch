@@ -166,3 +166,43 @@
   color: var(--text-leise);
   font-weight: 500;
 }
+
+/* ---------- Mehle und Saaten wählen (einklappbar) ---------- */
+/* Zeile: Auswahl | Wert | Entfernen */
+.zeile-wahl {
+  grid-template-columns: 1fr 6.5rem var(--tipp-hoehe);
+}
+
+.zeile-wahl-kurz {
+  grid-template-columns: 1fr var(--tipp-hoehe);
+}
+
+/* Auswahlliste: gleiche Höhe wie Felder, Schrift ≥ 16px gegen iOS-Zoom */
+.auswahl {
+  font-size: 1.05rem;
+  padding-right: 0.5rem;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
+.klappe-inhalt > .auswahl {
+  margin-top: 12px;
+}
+
+.knopf-weg {
+  padding: 0;
+  font-size: 1.2rem;
+}
+
+/* Umschalter "in %" / "in Gramm" */
+.umschaltgruppe {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.umschaltgruppe [aria-pressed="true"] {
+  background: var(--akzent);
+  color: var(--akzent-text);
+}

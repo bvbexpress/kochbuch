@@ -27,7 +27,7 @@ Homescreen hinzufügen kann und die auch offline funktioniert.
 | `css/<bereich>.css` | Design eines einzelnen Bereichs |
 | `js/app.js` | Start und Navigation |
 | `js/kern/` | Gemeinsames: Speicher, Bildschirm-an |
-| `js/teig/` | Teigrechner (Rechenlogik, Vorlagen, Oberfläche) |
+| `js/teig/` | Teigrechner (Rechenlogik, Vorlagen, Mehle & Saaten, Oberfläche) |
 | `tests/` | Tests der Rechenlogik |
 
 Ordner für spätere Etappen (`js/rezepte/`, `js/vorrat/`) werden angelegt,
