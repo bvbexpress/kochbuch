@@ -1,7 +1,8 @@
 # CLAUDE.md – Leitfaden für dieses Repo
 
-Koch- und Back-App als PWA, **deutsch**, **mobile first**, für zwei iPhones (iOS 26).
-Live unter https://bvbexpress.github.io/kochbuch/ (GitHub Pages aus `main`).
+Koch- und Back-App als PWA, **deutsch**, **mobile first**.
+Nutzer: zwei iPhones mit iOS 26, Nutzung **nur als Homescreen-Web-App**.
+Veröffentlichung über GitHub Pages aus `main`: https://bvbexpress.github.io/kochbuch/ – **das Repo ist öffentlich**.
 Der Nutzer ist Anfänger und arbeitet nur in der Cloud: Erklärungen knapp halten.
 
 ## Etappen
@@ -9,6 +10,8 @@ Der Nutzer ist Anfänger und arbeitet nur in der Cloud: Erklärungen knapp halte
 1. **Teigrechner** – Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen *(in Arbeit, Schritte 1–5 fertig, Schritt 6: Mehlauswahl + Quellstück)*
 2. **Rezeptsammlung** *(später)*
 3. **Vorratsverwaltung** mit Sync zwischen zwei Handys *(später)*
+
+Reihenfolge der restlichen Schritte: **6 → 11 (Link teilen) → 7 → 8 → 9 → 10**.
 
 ## Technik-Vorgaben
 
@@ -40,12 +43,20 @@ Der Nutzer ist Anfänger und arbeitet nur in der Cloud: Erklärungen knapp halte
 - Das **Eingabefeld „Mehl“ zeigt das zugegebene Mehl** (was man abwiegt), nicht das Gesamtmehl.
   Gesamtmehl = zugegebenes Mehl / (1 − Starter% / 200).
 - Mehlsorten-Anteile beziehen sich auf das zugegebene Mehl (Summe 100 %).
-- Quellstück: Saaten in % vom Gesamtmehl, Quellwasser zusätzlich (nicht in der Hydration).
-- Hefe: 3 g Frischhefe ≈ 1 g Trockenhefe.
+- Quellstück: Saaten und Quellwasser in % vom Gesamtmehl; Quellwasser zählt nicht zur Hydration.
+- Hefe mit Umschalter Frisch/Trocken: Trocken = Frisch ÷ 3.
+- Starter-Auffrischung mit frei einstellbarem Verhältnis Anstellgut:Mehl:Wasser (z. B. 1:1,5:1,5 oder 1:2,5:2,5).
+- Anzeige: Gramm auf ganze Gramm gerundet, Prozente mit einer Nachkommastelle.
+- Mehlwasser: Jedes Mehl hat eine Wasseraufnahme (%). Beim Tauschen/Mischen wird die Hydration um den
+  Unterschied der Mischwerte angepasst (× Anteil zugegebenes Mehl am Gesamtmehl) – ein Vorschlag, überschreibbar.
+- Quellstück: Jede Saat hat ein Wasserverhältnis (g Wasser je g Saat). Vorlagen speichern ihr eigenes
+  Quellwasser; die Verhältnisse wirken nur als Zu-/Abschlag, wenn Saaten gewählt oder geändert werden. Überschreibbar.
+- Hinweise: Hafer nur als Beimischung (kein Klebereiweiß, ab 20 % deutlicher);
+  Roggen ab 50 % ohne Sauerteig-Starter → Hinweis auf Säuerung.
 
 ## Datenmodell (für späteren Sync)
 
-Jeder Datensatz (Vorlagen, eigene Mehle/Saaten, später Rezepte, Vorräte) hat:
+Jeder Datensatz (Vorlagen, Mehle/Saaten – eigene und geänderte Standardwerte –, später Rezepte, Vorräte) hat:
 - `id` – UUID, auf beiden Handys gleich
 - `geaendert` – Zeitstempel (ms) der letzten Änderung, neuere Version gewinnt
 - `geloescht` – `true` statt echtem Löschen („Grabstein“)
@@ -55,9 +66,13 @@ Gespeicherte Daten beim Laden immer auf Gültigkeit prüfen.
 
 ## Bedien-Anforderungen
 
-- Einhändig am iPhone bedienbar; alles Antippbare mind. **56 px** hoch (`--tipp-hoehe`).
+- **Sehr schnell:** sofortiger Start, offline nutzbar, keine unnötigen Bibliotheken.
+- **Küchentauglich:** große Schaltflächen (mind. **56 px**, `--tipp-hoehe`), mit einer Hand und Teig an den Fingern bedienbar.
+- **Live-Ergebnisse** beim Tippen, kein „Berechnen“-Knopf.
+- Häufigster Weg (Vorlage laden → Mehlmenge ändern → ablesen) in **höchstens zwei Tippern**.
+- **Bildschirm bleibt an**, solange die App offen ist.
+- **Nur das Nötige sichtbar**, Zusatzoptionen einklappbar (`details.klappe`).
 - Zahlenfelder mit `inputmode="decimal"`, Komma und Punkt erlaubt; beim Antippen wird der Inhalt markiert.
-- **Live-Rechnung** bei jeder Eingabe, kein „Berechnen“-Knopf.
 - Heller und dunkler Modus nach Systemeinstellung, Safe-Area (Notch) beachten.
 - Letzter Stand wird gemerkt; eingebaute Vorlagen bleiben unverändert.
 - Verständliche deutsche Hinweise statt Fehlermeldungen; App darf nie an kaputten Daten hängen.
