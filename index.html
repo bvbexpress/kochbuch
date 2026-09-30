@@ -15,6 +15,10 @@
 
   <!-- Wichtig: alle Pfade relativ (./), weil GitHub Pages die App unter /kochbuch/ ausliefert -->
   <link rel="stylesheet" href="./css/basis.css">
+  <link rel="stylesheet" href="./css/teig.css">
+
+  <!-- type="module": der Browser lädt import/export selbst, ohne Build-Tool -->
+  <script type="module" src="./js/app.js"></script>
 </head>
 <body>
   <header class="kopf">
@@ -23,10 +27,7 @@
 
   <!-- Hier setzt später app.js den jeweiligen Bereich ein (Teigrechner, Rezepte, Vorrat) -->
   <main id="inhalt" class="inhalt">
-    <section class="karte">
-      <h2>Teigrechner</h2>
-      <p class="leise">Wird gerade gebaut.</p>
-    </section>
+    <noscript>Der Teigrechner braucht JavaScript.</noscript>
   </main>
 </body>
 </html>
