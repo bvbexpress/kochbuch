@@ -1,9 +1,17 @@
 // ansicht.js – Oberfläche des Teigrechners.
 // Liest Eingaben, ruft den Rechner auf und schreibt die Grammzahlen in die Seite.
 // Gerechnet wird hier nichts – das macht ausschließlich rechner.js.
+// Gespeichert wird hier nichts direkt – das läuft über vorlagen.js bzw. speicher.js.
 
 import { berechne, gesamtmehlAusMehl, hefeUmrechnen } from './rechner.js';
-import { VORLAGEN, ladeVorlage } from './vorlagen.js';
+import {
+  alleVorlagen,
+  ladeVorlage,
+  speichereEigeneVorlage,
+  loescheEigeneVorlage,
+  istGueltigerTeig,
+} from './vorlagen.js';
+import { speicher } from '../kern/speicher.js';
 import { leseZahl, formatGramm, formatGrammFein, formatProzent } from '../kern/zahlen.js';
 
 const HINWEISE = {
@@ -12,12 +20,15 @@ const HINWEISE = {
   'mehlanteile-nicht-100': 'Die Mehlanteile ergeben zusammen nicht 100 %.',
 };
 
+// Geräte-Einstellung: der zuletzt offene Teig (wird nicht synchronisiert)
+const STAND = 'teig.stand';
+
 let wurzel;   // das HTML-Element, in dem der Teigrechner steht
-let zustand;  // { vorlageId, teig, mehl } – mehl = zugegebenes Mehl (Eingabefeld)
+let zustand;  // { vorlageId, teig, mehl, geaendert } – mehl = zugegebenes Mehl
 
 export function zeigeTeigrechner(ziel) {
   wurzel = ziel;
-  zustand = vorlageZustand(VORLAGEN[0]);
+  zustand = letzterStand() ?? vorlageZustand(alleVorlagen(speicher)[0]);
   zeichne();
 
   // Ein Zuhörer für alle Felder statt einer pro Feld ("Event-Delegation")
@@ -31,16 +42,32 @@ export function zeigeTeigrechner(ziel) {
 
 function vorlageZustand(vorlage) {
   const { teig, mehl } = ladeVorlage(vorlage);
-  return { vorlageId: vorlage.id, teig, mehl };
+  return { vorlageId: vorlage.id, teig, mehl, geaendert: false };
 }
 
-// ---------- Aufbau der Seite (nur beim Start und beim Laden einer Vorlage) ----------
+function letzterStand() {
+  const stand = speicher.einstellung(STAND);
+  if (!stand || !istGueltigerTeig(stand.teig) || typeof stand.mehl !== 'number') return null;
+  return stand;
+}
+
+function merkeStand() {
+  speicher.setzeEinstellung(STAND, zustand);
+}
+
+function aktuelleVorlage() {
+  return alleVorlagen(speicher).find((v) => v.id === zustand.vorlageId) ?? null;
+}
+
+// ---------- Aufbau der Seite (beim Start, beim Laden/Speichern einer Vorlage) ----------
 
 function zeichne() {
   const { teig, mehl, vorlageId } = zustand;
+  const vorlage = aktuelleVorlage();
+  const eigene = vorlage && !vorlage.eingebaut;
 
-  const vorlagenKnoepfe = VORLAGEN.map(
-    (v) => `<button type="button" class="knopf vorlage" data-vorlage="${v.id}"
+  const vorlagenKnoepfe = alleVorlagen(speicher).map(
+    (v) => `<button type="button" class="knopf vorlage" data-vorlage="${text(v.id)}"
               aria-pressed="${v.id === vorlageId}">${text(v.name)}</button>`,
   ).join('');
 
@@ -89,6 +116,18 @@ function zeichne() {
         <output class="zahl" data-ausgabe="teigGesamt"></output>
       </p>
       <p class="hinweis" data-ausgabe="hinweise" role="status" hidden></p>
+    </section>
+
+    <section class="aktionen">
+      ${eigene
+        ? `<button type="button" class="knopf knopf-voll" data-aktion="aktualisieren" hidden>
+             Änderungen in „${text(vorlage.name)}“ speichern</button>`
+        : ''}
+      <button type="button" class="knopf" data-aktion="neu">Als neue Vorlage speichern</button>
+      ${eigene
+        ? `<button type="button" class="knopf knopf-leise" data-aktion="loeschen">
+             „${text(vorlage.name)}“ löschen</button>`
+        : ''}
     </section>`;
 
   aktualisiere();
@@ -147,6 +186,10 @@ function aktualisiere() {
   const hinweis = wurzel.querySelector('[data-ausgabe="hinweise"]');
   hinweis.textContent = e.hinweise.map((h) => HINWEISE[h]).join(' ');
   hinweis.hidden = e.hinweise.length === 0;
+
+  // "Änderungen speichern" nur zeigen, wenn eine eigene Vorlage verändert wurde
+  const aktualisieren = wurzel.querySelector('[data-aktion="aktualisieren"]');
+  if (aktualisieren) aktualisieren.hidden = !zustand.geaendert;
 }
 
 function setzeAusgabe(name, wert) {
@@ -165,28 +208,86 @@ function beiEingabe(ereignis) {
   } else {
     zustand.teig[feld] = wert;
   }
+  zustand.geaendert = true;
   aktualisiere();
+  merkeStand();
 }
 
 function beiKlick(ereignis) {
   const vorlageKnopf = ereignis.target.closest('[data-vorlage]');
   if (vorlageKnopf) {
-    const vorlage = VORLAGEN.find((v) => v.id === vorlageKnopf.dataset.vorlage);
-    zustand = vorlageZustand(vorlage);
-    zeichne();
+    const vorlage = alleVorlagen(speicher).find((v) => v.id === vorlageKnopf.dataset.vorlage);
+    if (vorlage) ladeUndZeige(vorlage);
     return;
   }
 
-  if (ereignis.target.closest('[data-aktion="hefeart"]')) {
-    const { teig } = zustand;
-    const neu = teig.hefeArt === 'trocken' ? 'frisch' : 'trocken';
-    teig.hefe = hefeUmrechnen(teig.hefe, teig.hefeArt, neu);
-    teig.hefeArt = neu;
-    zeichne();
-  }
+  const aktion = ereignis.target.closest('[data-aktion]')?.dataset.aktion;
+  if (aktion === 'hefeart') wechsleHefeart();
+  if (aktion === 'neu') speichereAlsNeu();
+  if (aktion === 'aktualisieren') speichereAenderungen();
+  if (aktion === 'loeschen') loescheVorlage();
 }
 
-// Schützt vor HTML in Namen (wichtig, sobald eigene Vorlagen dazukommen)
+function ladeUndZeige(vorlage) {
+  zustand = vorlageZustand(vorlage);
+  merkeStand();
+  zeichne();
+}
+
+function wechsleHefeart() {
+  const { teig } = zustand;
+  const neu = teig.hefeArt === 'trocken' ? 'frisch' : 'trocken';
+  teig.hefe = hefeUmrechnen(teig.hefe, teig.hefeArt, neu);
+  teig.hefeArt = neu;
+  zustand.geaendert = true;
+  merkeStand();
+  zeichne();
+}
+
+// ---------- Eigene Vorlagen ----------
+
+function speichereAlsNeu() {
+  const aktuell = aktuelleVorlage();
+  const vorschlag = !aktuell ? '' : aktuell.eingebaut ? `${aktuell.name} (eigene)` : aktuell.name;
+  const name = window.prompt('Name der neuen Vorlage:', vorschlag)?.trim();
+  if (!name) return; // abgebrochen oder leer
+
+  const neu = speichereEigeneVorlage(speicher, { name, teig: zustand.teig, mehl: zustand.mehl });
+  if (!neu) return meldeFehler();
+  ladeUndZeige(neu);
+}
+
+function speichereAenderungen() {
+  const vorlage = aktuelleVorlage();
+  if (!vorlage || vorlage.eingebaut) return;
+  const gespeichert = speichereEigeneVorlage(speicher, {
+    id: vorlage.id,
+    name: vorlage.name,
+    teig: zustand.teig,
+    mehl: zustand.mehl,
+  });
+  if (!gespeichert) return meldeFehler();
+  zustand.geaendert = false;
+  merkeStand();
+  zeichne();
+}
+
+function loescheVorlage() {
+  const vorlage = aktuelleVorlage();
+  if (!vorlage || vorlage.eingebaut) return;
+  if (!window.confirm(`Vorlage „${vorlage.name}“ wirklich löschen?`)) return;
+  loescheEigeneVorlage(speicher, vorlage.id);
+  // Die Zahlen bleiben stehen, sie gehören nur zu keiner Vorlage mehr
+  zustand.vorlageId = null;
+  merkeStand();
+  zeichne();
+}
+
+function meldeFehler() {
+  window.alert('Speichern hat nicht geklappt. Ist der Speicher des Handys voll?');
+}
+
+// Schützt vor HTML in Namen (wichtig bei eigenen Vorlagen)
 function text(wert) {
   return String(wert)
     .replaceAll('&', '&amp;')

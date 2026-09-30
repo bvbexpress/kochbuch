@@ -148,3 +148,21 @@
   font-size: 0.9rem;
   color: var(--text-leise);
 }
+
+/* ---------- Knöpfe unten: Vorlage speichern / löschen ---------- */
+.aktionen {
+  display: grid;
+  gap: 8px;
+  padding-bottom: 24px;
+}
+
+.aktionen [hidden] {
+  display: none;
+}
+
+/* Zurückhaltend, damit Löschen nicht versehentlich angetippt wird */
+.knopf-leise {
+  border-color: var(--linie);
+  color: var(--text-leise);
+  font-weight: 500;
+}

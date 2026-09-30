@@ -1,9 +1,13 @@
-// vorlagen.js – die fest eingebauten Vorlagen.
-// Sie stehen hier in Gramm, so wie man ein Rezept aufschreibt,
+// vorlagen.js – eingebaute und eigene Vorlagen.
+//
+// Eingebaute Vorlagen stehen hier in Gramm, so wie man ein Rezept aufschreibt,
 // und werden beim Laden in Prozent umgerechnet.
-// Eigene Vorlagen landen NICHT hier, sondern im Speicher auf dem Handy.
+// Eigene Vorlagen liegen NICHT hier im Code, sondern im Speicher auf dem Handy
+// (Sammlung "teigvorlagen") – in Prozent, zusammen mit der Mehlmenge.
 
 import { teigAusGramm } from './rechner.js';
+
+const SAMMLUNG = 'teigvorlagen';
 
 export const VORLAGEN = [
   {
@@ -34,7 +38,47 @@ export const VORLAGEN = [
   },
 ];
 
-/** Liefert { teig, gesamtmehl } als frische Kopie, damit Änderungen die Vorlage nicht verändern. */
+/** Eingebaute und eigene Vorlagen in einer Liste. Eigene haben eingebaut = false. */
+export function alleVorlagen(speicher) {
+  const eigene = speicher.alle(SAMMLUNG).filter((v) => istGueltigerTeig(v.teig));
+  return [
+    ...VORLAGEN.map((v) => ({ ...v, eingebaut: true })),
+    ...eigene.map((v) => ({ ...v, eingebaut: false })),
+  ];
+}
+
+/** Liefert { teig, mehl } als frische Kopie, damit Änderungen die Vorlage nicht verändern. */
 export function ladeVorlage(vorlage) {
-  return teigAusGramm(vorlage.rezept);
+  if (vorlage.rezept) {
+    const { teig, mehl } = teigAusGramm(vorlage.rezept);
+    return { teig, mehl };
+  }
+  return { teig: structuredClone(vorlage.teig), mehl: vorlage.mehl };
+}
+
+/** Speichert eine eigene Vorlage (neu ohne id, sonst Änderung). Gibt sie zurück oder null. */
+export function speichereEigeneVorlage(speicher, { id, name, teig, mehl }) {
+  return speicher.speichere(SAMMLUNG, {
+    ...(id ? { id } : {}),
+    name: name.trim(),
+    teig: structuredClone(teig),
+    mehl,
+  });
+}
+
+export function loescheEigeneVorlage(speicher, id) {
+  return speicher.loesche(SAMMLUNG, id);
+}
+
+/**
+ * Prüft, ob gespeicherte Daten wie ein Teig aussehen.
+ * Schützt vor kaputten oder veralteten Daten im Speicher.
+ */
+export function istGueltigerTeig(teig) {
+  if (!teig || typeof teig !== 'object') return false;
+  const zahlen = ['hydration', 'starter', 'salz', 'oel', 'hefe'];
+  return (
+    zahlen.every((k) => typeof teig[k] === 'number' && Number.isFinite(teig[k])) &&
+    Array.isArray(teig.mehlsorten)
+  );
 }
