@@ -3,6 +3,8 @@
 Eine kleine Koch- und Back-App fürs Handy – als Web-App (PWA), die man zum
 Homescreen hinzufügen kann und die auch offline funktioniert.
 
+**App öffnen:** https://bvbexpress.github.io/kochbuch/
+
 ## Etappen
 
 1. **Teigrechner** – Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen *(in Arbeit)*
@@ -30,6 +32,11 @@ Homescreen hinzufügen kann und die auch offline funktioniert.
 
 Ordner für spätere Etappen (`js/rezepte/`, `js/vorrat/`) werden angelegt,
 sobald dort Code entsteht.
+
+## Tests
+
+Die Rechenlogik wird mit dem eingebauten Testwerkzeug von Node.js geprüft
+(keine zusätzlichen Pakete): `npm test`
 
 ## Datenschutz
 
