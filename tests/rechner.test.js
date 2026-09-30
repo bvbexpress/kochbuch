@@ -47,7 +47,7 @@ test('Focaccia: Prozente beziehen sich auf Gesamtmehl inkl. Starter', () => {
   ungefaehr(teig.starter, (50 / 325) * 100, 'Starter');
   ungefaehr(teig.salz, (7 / 325) * 100, 'Salz');
   ungefaehr(teig.oel, (15 / 325) * 100, 'Öl');
-  assert.deepEqual(teig.mehlsorten, [{ name: 'Tipo 00', anteil: 100 }]);
+  assert.deepEqual(teig.mehlsorten, [{ id: undefined, name: 'Tipo 00', anteil: 100 }]);
 });
 
 test('Focaccia: zurückgerechnet ergeben sich exakt die Originalmengen', () => {
@@ -66,7 +66,7 @@ test('Focaccia: zurückgerechnet ergeben sich exakt die Originalmengen', () => {
 test('Vollkornbrot mit Quellstück: zurückgerechnet exakt', () => {
   const { teig, gesamtmehl } = teigAusGramm(vollkornbrot);
   assert.equal(gesamtmehl, 550);
-  ungefaehr(teig.quellwasser, (80 / 75) * 100, 'Quellwasser in % der Saaten');
+  ungefaehr(teig.quellwasser, (80 / 550) * 100, 'Quellwasser in % vom Gesamtmehl');
 
   const e = berechne(teig, gesamtmehl);
   ungefaehr(e.mehl, 500);

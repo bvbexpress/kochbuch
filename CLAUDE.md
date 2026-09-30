@@ -7,7 +7,7 @@ Der Nutzer ist Anfänger und arbeitet nur in der Cloud: Erklärungen knapp halte
 
 ## Etappen
 
-1. **Teigrechner** – Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen *(in Arbeit, Schritte 1–5 fertig, Schritt 6: Mehlauswahl + Quellstück)*
+1. **Teigrechner** – Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen *(in Arbeit, Schritte 1–6 fertig)*
 2. **Rezeptsammlung** *(später)*
 3. **Vorratsverwaltung** mit Sync zwischen zwei Handys *(später)*
 
@@ -31,7 +31,7 @@ Reihenfolge der restlichen Schritte: **6 → 11 (Link teilen) → 7 → 8 → 9 
 | `css/<bereich>.css` | Design eines Bereichs (z. B. `teig.css`) |
 | `js/app.js` | Start und (später) Navigation |
 | `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js` |
-| `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js`, `ansicht.js` (Oberfläche) |
+| `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js`, `zutaten.js` (Mehle/Saaten), `ansicht.js` (Oberfläche) |
 | `tests/` | Tests (`*.test.js`) |
 
 `js/rezepte/`, `js/vorrat/` erst anlegen, wenn dort Code entsteht.

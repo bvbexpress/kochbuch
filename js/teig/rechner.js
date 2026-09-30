@@ -10,9 +10,9 @@
 //   starter: 15.4,           // Starter in % vom Gesamtmehl
 //   salz: 2.2, oel: 4.6,
 //   hefe: 0, hefeArt: 'frisch' | 'trocken',
-//   mehlsorten: [{ name: 'Tipo 00', anteil: 100 }],   // Anteile am zugegebenen Mehl, Summe 100
-//   saaten: [{ name: 'Leinsamen', prozent: 4.5 }],    // Quellstück: Saaten in % vom Gesamtmehl
-//   quellwasser: 106.7,      // Quellwasser in % vom Saatengewicht
+//   mehlsorten: [{ id: 'tipo00', name: 'Tipo 00', anteil: 100 }], // Anteile am zugegebenen Mehl, Summe 100
+//   saaten: [{ id: 'leinsamen', name: 'Leinsamen', prozent: 4.5 }], // Quellstück: Saaten in % vom Gesamtmehl
+//   quellwasser: 14.5,       // Quellwasser in % vom Gesamtmehl
 // }
 
 const TROCKENHEFE_FAKTOR = 3; // 3 g Frischhefe ≈ 1 g Trockenhefe
@@ -20,9 +20,8 @@ const TROCKENHEFE_FAKTOR = 3; // 3 g Frischhefe ≈ 1 g Trockenhefe
 /** Summe der Zutaten pro 1 g Gesamtmehl (ohne Mehl selbst). */
 function anteileProGrammMehl(teig) {
   const saatenProzent = summe((teig.saaten ?? []).map((s) => s.prozent));
-  const quellwasserProzent = (saatenProzent * (teig.quellwasser ?? 0)) / 100;
   return (
-    (teig.hydration + teig.salz + teig.oel + teig.hefe + saatenProzent + quellwasserProzent) / 100
+    (teig.hydration + teig.salz + teig.oel + teig.hefe + saatenProzent + quellwasserProzent(teig)) / 100
   );
 }
 
@@ -70,9 +69,9 @@ export function berechne(teig, gesamtmehl) {
 
   const mehlsorten = verteileMehl(teig.mehlsorten ?? [], Math.max(mehl, 0), hinweise);
 
-  const saaten = (teig.saaten ?? []).map((s) => ({ name: s.name, gramm: p(s.prozent) }));
+  const saaten = (teig.saaten ?? []).map((s) => ({ id: s.id, name: s.name, gramm: p(s.prozent) }));
   const saatenGesamt = summe(saaten.map((s) => s.gramm));
-  const quellwasser = (saatenGesamt * (teig.quellwasser ?? 0)) / 100;
+  const quellwasser = p(quellwasserProzent(teig));
 
   const salz = p(teig.salz);
   const oel = p(teig.oel);
@@ -110,9 +109,9 @@ function verteileMehl(sorten, mehl, hinweise) {
     hinweise.push('mehlanteile-nicht-100');
   }
   if (anteilSumme <= 0) {
-    return sorten.map((s) => ({ name: s.name, gramm: 0 }));
+    return sorten.map((s) => ({ id: s.id, name: s.name, gramm: 0 }));
   }
-  return sorten.map((s) => ({ name: s.name, gramm: (mehl * s.anteil) / anteilSumme }));
+  return sorten.map((s) => ({ id: s.id, name: s.name, gramm: (mehl * s.anteil) / anteilSumme }));
 }
 
 /**
@@ -127,7 +126,6 @@ export function teigAusGramm(rezept) {
   const inProzent = (gramm) => (gesamtmehl > 0 ? ((gramm ?? 0) / gesamtmehl) * 100 : 0);
 
   const saaten = rezept.saaten ?? [];
-  const saatenGesamt = summe(saaten.map((s) => s.gramm));
 
   const teig = {
     hydration: inProzent((rezept.wasser ?? 0) + starter / 2),
@@ -137,11 +135,12 @@ export function teigAusGramm(rezept) {
     hefe: inProzent(rezept.hefe),
     hefeArt: rezept.hefeArt ?? 'frisch',
     mehlsorten: rezept.mehlsorten.map((s) => ({
+      id: s.id,
       name: s.name,
       anteil: mehlZugegeben > 0 ? (s.gramm / mehlZugegeben) * 100 : 0,
     })),
-    saaten: saaten.map((s) => ({ name: s.name, prozent: inProzent(s.gramm) })),
-    quellwasser: saatenGesamt > 0 ? ((rezept.quellwasser ?? 0) / saatenGesamt) * 100 : 0,
+    saaten: saaten.map((s) => ({ id: s.id, name: s.name, prozent: inProzent(s.gramm) })),
+    quellwasser: saaten.length > 0 ? inProzent(rezept.quellwasser) : 0,
   };
   return { teig, gesamtmehl, mehl: mehlZugegeben };
 }
@@ -179,6 +178,114 @@ export function auffrischen(bedarf, rest, verhaeltnis) {
     wasser: w * teil,
     hydration: mehlGesamt > 0 ? (wasserGesamt / mehlGesamt) * 100 : 0,
   };
+}
+
+// ---------- Mehlmischung und Wasseraufnahme ----------
+
+/**
+ * Wasseraufnahme einer Mischung: nach Anteil gewichteter Mittelwert.
+ * wasserVon: Funktion id → Wasseraufnahme in %.
+ * Ohne Anteile (alles 0) gibt es keinen Mischwert → null.
+ */
+export function mischwert(sorten, wasserVon) {
+  const anteile = summe(sorten.map((s) => s.anteil));
+  if (anteile <= 0) return null;
+  return summe(sorten.map((s) => s.anteil * wasserVon(s.id))) / anteile;
+}
+
+/**
+ * Neue Hydration nach einer Änderung der Mehlmischung.
+ * Es wird nur der Mehr- oder Minderbedarf dazugerechnet, damit eine
+ * erprobte oder selbst eingetippte Hydration erhalten bleibt.
+ * Das Starter-Mehl ändert sich nicht, darum zählt nur der Anteil
+ * des zugegebenen Mehls am Gesamtmehl.
+ */
+export function hydrationNachMehlwechsel(teig, alteSorten, neueSorten, wasserVon) {
+  const vorher = mischwert(alteSorten, wasserVon);
+  const nachher = mischwert(neueSorten, wasserVon);
+  if (vorher === null || nachher === null) return teig.hydration;
+  const anteilZugegeben = Math.max(1 - teig.starter / 200, 0);
+  return Math.max(teig.hydration + (nachher - vorher) * anteilZugegeben, 0);
+}
+
+/**
+ * Setzt die Grammzahl einer Mehlsorte (Eingabe in Gramm statt Prozent).
+ * Die übrigen Sorten behalten ihre Gramm, das zugegebene Mehl ist die Summe.
+ * Liefert { mehlsorten, mehl } mit neuen Anteilen.
+ */
+export function mehlsortenMitGramm(sorten, index, gramm, mehl) {
+  const anteile = summe(sorten.map((s) => s.anteil));
+  const grammListe = sorten.map((s, i) =>
+    i === index ? gramm : anteile > 0 ? (mehl * s.anteil) / anteile : 0,
+  );
+  const neuesMehl = summe(grammListe);
+  return {
+    mehl: neuesMehl,
+    mehlsorten: sorten.map((s, i) => ({
+      ...s,
+      anteil: neuesMehl > 0 ? (grammListe[i] / neuesMehl) * 100 : 0,
+    })),
+  };
+}
+
+/**
+ * Setzt den Anteil einer Mehlsorte in %.
+ * Bei genau zwei Sorten wird die andere auf 100 % ergänzt – das ist der
+ * häufigste Fall und erspart das Nachrechnen.
+ */
+export function mehlsortenMitAnteil(sorten, index, anteil) {
+  return sorten.map((s, i) => {
+    if (i === index) return { ...s, anteil };
+    if (sorten.length === 2) return { ...s, anteil: Math.max(100 - anteil, 0) };
+    return { ...s };
+  });
+}
+
+// ---------- Quellstück ----------
+
+/** Quellwasser in % vom Gesamtmehl; negative Werte gibt es nicht. */
+function quellwasserProzent(teig) {
+  return Math.max(teig.quellwasser ?? 0, 0);
+}
+
+/** Wasserbedarf der Saaten laut Quellverhältnis, in % vom Gesamtmehl. */
+export function quellbedarf(saaten, verhaeltnisVon) {
+  return summe(saaten.map((s) => s.prozent * verhaeltnisVon(s.id)));
+}
+
+/**
+ * Neues Quellwasser nach einer Änderung der Saaten.
+ * Wie beim Mehl: nur der Mehr- oder Minderbedarf der geänderten Saaten
+ * kommt dazu, das Quellwasser der Vorlage bleibt sonst erhalten.
+ * Ohne Saaten gibt es kein Quellwasser.
+ */
+export function quellwasserNachSaatwechsel(teig, alteSaaten, neueSaaten, verhaeltnisVon) {
+  if (neueSaaten.length === 0) return 0;
+  const unterschied = quellbedarf(neueSaaten, verhaeltnisVon) - quellbedarf(alteSaaten, verhaeltnisVon);
+  return (teig.quellwasser ?? 0) + unterschied;
+}
+
+// ---------- Hinweise zur Mehlart ----------
+
+export const HAFER_GRENZE = 20;   // ab hier deutlicher Hinweis (% vom zugegebenen Mehl)
+export const ROGGEN_GRENZE = 50;  // ab hier ohne Sauerteig ein Hinweis
+
+/**
+ * Hinweise zur Mehlmischung. artVon: Funktion (id, name) → 'hafer' | 'roggen' | null.
+ */
+export function mehlHinweise(teig, artVon) {
+  const sorten = teig.mehlsorten ?? [];
+  const anteile = summe(sorten.map((s) => s.anteil));
+  if (anteile <= 0) return [];
+  const anteilVon = (art) =>
+    (summe(sorten.filter((s) => artVon(s.id, s.name) === art).map((s) => s.anteil)) / anteile) * 100;
+
+  const hinweise = [];
+  const hafer = anteilVon('hafer');
+  if (hafer >= HAFER_GRENZE) hinweise.push('hafer-viel');
+  else if (hafer > 0) hinweise.push('hafer');
+  if (anteilVon('roggen') >= ROGGEN_GRENZE && !(teig.starter > 0)) hinweise.push('roggen-ohne-sauerteig');
+  return hinweise;
 }
 
 function summe(zahlen) {
