@@ -5,11 +5,14 @@
 
 import {
   berechne,
+  auffrischen,
   gesamtmehlAusMehl,
   hefeUmrechnen,
   hydrationNachMehlwechsel,
   mehlsortenMitAnteil,
   mehlsortenMitGramm,
+  mehlFuerTeiglinge,
+  STANDARD_VERLUST,
   quellwasserNachSaatwechsel,
   mehlHinweise,
 } from './rechner.js';
@@ -49,6 +52,10 @@ const HINWEISE = {
 // Geräte-Einstellungen (werden nicht synchronisiert)
 const STAND = 'teig.stand';            // der zuletzt offene Teig
 const MEHL_EINHEIT = 'teig.mehlEinheit'; // Mehlanteile in 'prozent' oder 'gramm'
+const TEIGLINGE = 'teig.teiglinge';    // Teiglinge-Modus: { aktiv, anzahl, gewicht, verlust }
+const AUFFRISCHUNG = 'teig.auffrischung'; // Starter-Auffrischung: { bedarf, rest, verhaeltnis }
+const VERHAELTNISSE = [[1, 1, 1], [1, 1.5, 1.5], [1, 2.5, 2.5]]; // Schnellwahl Anstellgut:Mehl:Wasser
+const STANDARD_REST = 20;             // g Starter für den Kühlschrank
 const EIGENE = '__eigene';             // Auswahl-Eintrag „Eigene Sorte …“
 
 let wurzel;   // das HTML-Element, in dem der Teigrechner steht
@@ -56,6 +63,7 @@ let zustand;  // { vorlageId, teig, mehl, geaendert, anpassung } – mehl = zuge
 let katalog;  // { mehle, saaten, wasserVon, verhaeltnisVon, art } – aus den Einstellungen
 const offeneKlappen = new Set(); // welche einklappbaren Bereiche offen sind
 let paket = null;   // erhaltene Vorlagen aus einem Link, wartet auf „Übernehmen“: { vorlagen, verworfen, link }
+let aufHinweis = null; // einmaliger Hinweis in der Starter-Auffrischung
 let meldung = null; // einmalige Rückmeldung (wird beim nächsten Zeichnen angezeigt und gelöscht)
 
 export function zeigeTeigrechner(ziel) {
@@ -115,6 +123,36 @@ function mehlEinheit() {
   return speicher.einstellung(MEHL_EINHEIT) === 'gramm' ? 'gramm' : 'prozent';
 }
 
+/** Einstellung als Zahl ≥ 0 lesen, sonst Ersatzwert (gespeicherte Daten immer prüfen). */
+function zahlOder(wert, ersatz) {
+  return typeof wert === 'number' && Number.isFinite(wert) && wert >= 0 ? wert : ersatz;
+}
+
+function teiglinge() {
+  const t = speicher.einstellung(TEIGLINGE) ?? {};
+  return {
+    aktiv: t.aktiv === true,
+    anzahl: zahlOder(t.anzahl, 4),
+    gewicht: zahlOder(t.gewicht, 250),
+    verlust: zahlOder(t.verlust, STANDARD_VERLUST),
+  };
+}
+
+function setzeTeiglinge(aenderung) {
+  speicher.setzeEinstellung(TEIGLINGE, { ...teiglinge(), ...aenderung });
+}
+
+function auffrischung() {
+  const a = speicher.einstellung(AUFFRISCHUNG) ?? {};
+  const v = Array.isArray(a.verhaeltnis) && a.verhaeltnis.length === 3
+    ? a.verhaeltnis.map((x) => zahlOder(x, 1)) : VERHAELTNISSE[0];
+  return { bedarf: zahlOder(a.bedarf, 50), rest: zahlOder(a.rest, STANDARD_REST), verhaeltnis: v };
+}
+
+function setzeAuffrischung(aenderung) {
+  speicher.setzeEinstellung(AUFFRISCHUNG, { ...auffrischung(), ...aenderung });
+}
+
 function merkeStand() {
   speicher.setzeEinstellung(STAND, zustand);
 }
@@ -150,6 +188,7 @@ function zeichne() {
   const hefeName = trocken ? 'Trockenhefe' : 'Frischhefe';
   const hefeWechsel = trocken ? '⇄ frisch' : '⇄ trocken';
 
+  const tl = teiglinge();
   const hinweisMeldung = meldung;
   meldung = null;
 
@@ -159,10 +198,17 @@ function zeichne() {
     <section class="vorlagen" aria-label="Vorlagen">${vorlagenKnoepfe}</section>
 
     <section class="karte">
+      <div class="umschaltgruppe" role="group" aria-label="Menge angeben als">
+        <button type="button" class="knopf" data-aktion="modus" data-modus="mehl"
+                aria-pressed="${!tl.aktiv}">Mehl</button>
+        <button type="button" class="knopf" data-aktion="modus" data-modus="teiglinge"
+                aria-pressed="${tl.aktiv}">Teiglinge</button>
+      </div>
+      ${tl.aktiv ? teigeZeilen() : ''}
       <label class="feld">
-        <span class="feld-name">Mehl</span>
+        <span class="feld-name">Mehl${tl.aktiv ? '<small>errechnet</small>' : ''}</span>
         <span class="mit-einheit">
-          <input class="eingabe eingabe-gross" data-feld="mehl"
+          <input class="eingabe eingabe-gross" data-feld="mehl" ${tl.aktiv ? 'readonly' : ''}
                  inputmode="decimal" autocomplete="off" value="${Math.round(mehl)}">
           <span class="einheit">g</span>
         </span>
@@ -191,6 +237,7 @@ function zeichne() {
 
     ${mehlKlappe()}
     ${saatenKlappe()}
+    ${auffrischKlappe()}
     ${einstellungenKlappe()}
     ${teilenKlappe()}
 
@@ -209,6 +256,24 @@ function zeichne() {
     </section>`;
 
   aktualisiere();
+}
+
+/** Teiglinge-Modus: Anzahl, Gewicht je Teigling, Verlust-Zuschlag. */
+function teigeZeilen() {
+  const zeile = (name, zusatz, feld, einheit) => `
+      <li class="zeile">
+        <label class="zeile-name" for="feld-${feld}">${name}${zusatz ? `<small>${zusatz}</small>` : ''}</label>
+        <span class="mit-einheit prozent">
+          <input class="eingabe" id="feld-${feld}" data-feld="${feld}" inputmode="decimal"
+                 autocomplete="off" value="${feldWert(feld)}" aria-label="${name} in ${einheit}">
+          <span class="einheit">${einheit}</span>
+        </span>
+      </li>`;
+  return `<ul class="zutaten">
+      ${zeile('Anzahl', 'z. B. 4 Pizzen', 'tl-anzahl', '×')}
+      ${zeile('Gewicht je Teigling', '', 'tl-gewicht', 'g')}
+      ${zeile('Verlust-Zuschlag', 'Rest in der Schüssel', 'tl-verlust', '%')}
+    </ul>`;
 }
 
 function zeileNurGramm(name, ausgabe, zusatzAusgabe = '') {
@@ -271,7 +336,7 @@ function mehlKlappe() {
           daten: `data-wahl="mehl" data-index="${i}" aria-label="Mehlsorte ${i + 1}"`,
           eigeneText: 'Eigenes Mehl …' })}
         <span class="mit-einheit prozent">
-          <input class="eingabe" data-feld="mehlanteil" data-index="${i}" inputmode="decimal"
+          <input class="eingabe" data-feld="mehlanteil" data-index="${i}" inputmode="decimal" ${teiglinge().aktiv && gramm ? 'readonly' : ''}
                  autocomplete="off" value="${feldWert('mehlanteil', i)}"
                  aria-label="${text(s.name)} in ${gramm ? 'Gramm' : 'Prozent'}">
           <span class="einheit">${gramm ? 'g' : '%'}</span>
@@ -314,6 +379,52 @@ function saatenKlappe() {
         das Quellwasser rechnet die App dazu.</p>`);
 }
 
+function auffrischKlappe() {
+  const a = auffrischung();
+  const feld = (name, daten, wert, einheit) => `
+      <li class="zeile">
+        <label class="zeile-name" for="auf-${daten}">${name}</label>
+        <span class="mit-einheit prozent">
+          <input class="eingabe" id="auf-${daten}" data-auf="${daten}" inputmode="decimal"
+                 autocomplete="off" value="${formatProzent(wert)}" aria-label="${name}">
+          ${einheit ? `<span class="einheit">${einheit}</span>` : ''}
+        </span>
+      </li>`;
+  const schnell = VERHAELTNISSE.map((v) => {
+    const gleich = v.every((x, i) => x === a.verhaeltnis[i]);
+    return `<button type="button" class="knopf" data-aktion="verhaeltnis" data-wert="${v.join(',')}"
+              aria-pressed="${gleich}">${v.map(formatProzent).join(':')}</button>`;
+  }).join('');
+  const ausgabe = (name, id) => `
+      <li class="zeile"><span class="zeile-name">${name}</span>
+        <output class="gramm zahl" data-ausgabe="${id}"></output></li>`;
+  const hinweis = aufHinweis;
+  aufHinweis = null;
+
+  return klappe('auffrischen', 'Starter auffrischen', `
+      <ul class="zutaten">
+        ${feld('Starter für das Rezept', 'bedarf', a.bedarf, 'g')}
+        ${feld('Rest für den Kühlschrank', 'rest', a.rest, 'g')}
+      </ul>
+      <button type="button" class="knopf" data-aktion="bedarf-uebernehmen">
+        Bedarf aus aktuellem Rezept übernehmen</button>
+      ${hinweis ? `<p class="info" role="status">${text(hinweis)}</p>` : ''}
+      <p class="info">Verhältnis Anstellgut : Mehl : Wasser</p>
+      <div class="umschaltgruppe drei" role="group" aria-label="Schnellwahl Verhältnis">${schnell}</div>
+      <ul class="zutaten verhaeltnis-felder">
+        ${feld('Anstellgut', 'v0', a.verhaeltnis[0], '')}
+        ${feld('Mehl', 'v1', a.verhaeltnis[1], '')}
+        ${feld('Wasser', 'v2', a.verhaeltnis[2], '')}
+      </ul>
+      <ul class="zutaten">
+        ${ausgabe('Anstellgut', 'auf-anstellgut')}
+        ${ausgabe('Mehl', 'auf-mehl')}
+        ${ausgabe('Wasser', 'auf-wasser')}
+      </ul>
+      <p class="summe"><span>Starter gesamt</span><output class="zahl" data-ausgabe="auf-gesamt"></output></p>
+      <p class="info" data-ausgabe="auf-hydration"></p>`);
+}
+
 function einstellungenKlappe() {
   const zeile = (s, art, wertName, einheit) => {
     const knopf = !s.eingebaut
@@ -350,6 +461,9 @@ function einstellungenKlappe() {
 function feldWert(feld, index) {
   const { teig, mehl } = zustand;
   if (feld === 'mehl') return String(Math.round(mehl));
+  if (feld === 'tl-anzahl') return formatProzent(teiglinge().anzahl);
+  if (feld === 'tl-gewicht') return formatProzent(teiglinge().gewicht);
+  if (feld === 'tl-verlust') return formatProzent(teiglinge().verlust);
   if (feld === 'mehlanteil') {
     if (mehlEinheit() === 'gramm') {
       const e = berechne(teig, gesamtmehlAusMehl(teig, mehl));
@@ -365,7 +479,11 @@ function feldWert(feld, index) {
 // ---------- Live-Aktualisierung (bei jedem Tastendruck) ----------
 
 function aktualisiere() {
-  const { teig, mehl } = zustand;
+  const { teig } = zustand;
+  // Teiglinge-Modus: Das Mehl folgt aus Anzahl × Gewicht (+ Verlust) und dem Teig
+  const tl = teiglinge();
+  if (tl.aktiv) zustand.mehl = mehlFuerTeiglinge(teig, tl.anzahl, tl.gewicht, tl.verlust);
+  const mehl = zustand.mehl;
   const e = berechne(teig, gesamtmehlAusMehl(teig, mehl));
 
   const werte = {
@@ -396,6 +514,7 @@ function aktualisiere() {
   hinweis.hidden = e.hinweise.length === 0;
 
   zeigeAnpassung(e);
+  zeigeAuffrischung();
   synchronisiereFelder();
 
   // "Änderungen speichern" nur zeigen, wenn eine eigene Vorlage verändert wurde
@@ -404,6 +523,17 @@ function aktualisiere() {
   // Geteilt wird die gespeicherte Vorlage – darum erst nach dem Speichern
   const teilen = wurzel.querySelector('[data-aktion="teilen"]');
   if (teilen) teilen.hidden = zustand.geaendert;
+}
+
+/** Ergebnis der Starter-Auffrischung in die Seite schreiben. */
+function zeigeAuffrischung() {
+  const a = auffrischung();
+  const e = auffrischen(a.bedarf, a.rest, a.verhaeltnis);
+  setzeAusgabe('auf-anstellgut', `${formatGramm(e.anstellgut)} g`);
+  setzeAusgabe('auf-mehl', `${formatGramm(e.mehl)} g`);
+  setzeAusgabe('auf-wasser', `${formatGramm(e.wasser)} g`);
+  setzeAusgabe('auf-gesamt', `${formatGramm(e.gesamt)} g`);
+  setzeAusgabe('auf-hydration', e.gesamt > 0 ? `Hydration des Starters: ${formatProzent(e.hydration)} %` : '');
 }
 
 /** Kurzer Hinweis, wie viel Wasser die App seit dem Laden automatisch angepasst hat. */
@@ -442,6 +572,7 @@ function setzeAusgabe(name, wert) {
 function beiEingabe(ereignis) {
   const ziel = ereignis.target;
   if (ziel.dataset.einstellung) return aendereEinstellung(ziel);
+  if (ziel.dataset.auf) return aendereAuffrischung(ziel);
   const feld = ziel.dataset.feld;
   if (!feld) return;
   const wert = leseZahl(ziel.value);
@@ -449,6 +580,8 @@ function beiEingabe(ereignis) {
 
   if (feld === 'mehl') {
     zustand.mehl = wert;
+  } else if (feld.startsWith('tl-')) {
+    setzeTeiglinge({ [feld.slice(3)]: wert });
   } else if (feld === 'mehlanteil') {
     const index = Number(ziel.dataset.index);
     if (mehlEinheit() === 'gramm') {
@@ -489,6 +622,19 @@ function setzeSaaten(neu) {
   zustand.anpassung.quellwasser += teig.quellwasser - vorher;
   if (neu.length === 0) zustand.anpassung.quellwasser = 0;
   teig.saaten = neu;
+}
+
+function aendereAuffrischung(feld) {
+  const wert = leseZahl(feld.value);
+  const art = feld.dataset.auf;
+  if (art.startsWith('v')) {
+    const v = [...auffrischung().verhaeltnis];
+    v[Number(art.slice(1))] = wert;
+    setzeAuffrischung({ verhaeltnis: v });
+  } else {
+    setzeAuffrischung({ [art]: wert });
+  }
+  zeigeAuffrischung();
 }
 
 function aendereEinstellung(feld) {
@@ -561,6 +707,9 @@ function beiKlick(ereignis) {
   if (aktion === 'mehl-weg') entferneMehl(Number(knopf.dataset.index));
   if (aktion === 'saat-weg') entferneSaat(Number(knopf.dataset.index));
   if (aktion === 'einheit') wechsleEinheit(knopf.dataset.einheit);
+  if (aktion === 'modus') wechsleModus(knopf.dataset.modus === 'teiglinge');
+  if (aktion === 'verhaeltnis') waehleVerhaeltnis(knopf.dataset.wert);
+  if (aktion === 'bedarf-uebernehmen') uebernimmBedarf();
   if (aktion === 'sorte-weg') entferneSorte(knopf.dataset.art, knopf.dataset.id);
   if (aktion === 'hefeart') wechsleHefeart();
   if (aktion === 'neu') speichereAlsNeu();
@@ -597,6 +746,26 @@ function entferneSaat(index) {
 
 function wechsleEinheit(einheit) {
   speicher.setzeEinstellung(MEHL_EINHEIT, einheit);
+  zeichne();
+}
+
+/** Ein Tipper: zwischen Mehl- und Teiglinge-Modus umschalten. */
+function wechsleModus(aktiv) {
+  setzeTeiglinge({ aktiv });
+  zeichne();
+}
+
+function waehleVerhaeltnis(wert) {
+  setzeAuffrischung({ verhaeltnis: wert.split(',').map(Number) });
+  zeichne();
+}
+
+/** Startermenge aus dem aktuellen Rezept als Bedarf eintragen. */
+function uebernimmBedarf() {
+  const e = berechne(zustand.teig, gesamtmehlAusMehl(zustand.teig, zustand.mehl));
+  const bedarf = Math.round(e.starter);
+  setzeAuffrischung({ bedarf });
+  if (bedarf <= 0) aufHinweis = 'Das aktuelle Rezept enthält keinen Starter.';
   zeichne();
 }
 

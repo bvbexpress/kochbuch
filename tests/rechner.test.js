@@ -6,6 +6,8 @@ import {
   berechne,
   teigAusGramm,
   mehlAusTeiglingen,
+  mehlFuerTeiglinge,
+  STANDARD_VERLUST,
   gesamtmehlAusMehl,
   hefeUmrechnen,
   auffrischen,
@@ -195,6 +197,25 @@ test('Teiglinge: Anzahl 0 ergibt 0 g Mehl', () => {
   assert.equal(mehlAusTeiglingen(teig, 0, 85), 0);
 });
 
+test('Teiglinge: Verlust-Zuschlag erhöht die Teigmenge', () => {
+  const teig = { hydration: 65, starter: 0, salz: 2.5, oel: 0, hefe: 0.2, mehlsorten: [] };
+  assert.equal(STANDARD_VERLUST, 2);
+  const mehl = mehlAusTeiglingen(teig, 4, 250, 2);
+  ungefaehr(berechne(teig, mehl).teigGesamt, 1020);
+  assert.equal(mehlAusTeiglingen(teig, 4, 250, 0), mehlAusTeiglingen(teig, 4, 250));
+  // negativer Verlust zählt wie 0
+  assert.equal(mehlAusTeiglingen(teig, 4, 250, -5), mehlAusTeiglingen(teig, 4, 250));
+});
+
+test('Teiglinge: zugegebenes Mehl zieht das Starter-Mehl ab', () => {
+  const { teig } = teigAusGramm(vollkornbrot);
+  const gesamt = mehlAusTeiglingen(teig, 2, 900, 2);
+  const zugegeben = mehlFuerTeiglinge(teig, 2, 900, 2);
+  ungefaehr(gesamtmehlAusMehl(teig, zugegeben), gesamt);
+  ungefaehr(berechne(teig, gesamt).mehl, zugegeben);
+  assert.equal(mehlFuerTeiglinge(teig, 0, 900, 2), 0);
+});
+
 // ---------- Hefe ----------
 
 test('Hefe umrechnen: frisch ↔ trocken (Faktor 3)', () => {
@@ -232,6 +253,15 @@ test('Auffrischen mit ungleichem Mehl/Wasser meldet die Hydration', () => {
   const a = auffrischen(100, 0, [1, 2, 1]);
   // Mehl: 0,5 + 2 = 2,5 Teile, Wasser: 0,5 + 1 = 1,5 Teile → 60 %
   ungefaehr(a.hydration, 60);
+});
+
+test('Auffrischen rundet auf ganze Gramm, Summe bleibt stimmig', () => {
+  const a = auffrischen(33, 20, [1, 1.5, 1.5]); // 53 g → Teil 13,25
+  for (const x of [a.anstellgut, a.mehl, a.wasser, a.gesamt]) assert.equal(x, Math.round(x));
+  assert.equal(a.gesamt, 53);
+  assert.equal(a.anstellgut + a.mehl + a.wasser, 53);
+  const b = auffrischen(10.4, 20, [1, 1, 1]);
+  assert.equal(b.gesamt, 30);
 });
 
 test('Auffrischen ohne Bedarf ergibt 0', () => {
