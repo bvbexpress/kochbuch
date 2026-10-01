@@ -206,3 +206,28 @@ details.klappe > .klappe-inhalt {
     transition: none !important;
   }
 }
+
+/* ---------- Hinweis „Neue Version“ und Versionsanzeige ---------- */
+.update {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--abstand);
+  width: calc(100% - 2 * var(--abstand));
+  max-width: calc(40rem - 2 * var(--abstand)); /* so breit wie der Inhalt darunter */
+  margin: var(--abstand) auto 0;
+  font-weight: 600;
+}
+
+.update .knopf {
+  white-space: nowrap;
+}
+
+.update[hidden] {
+  display: none;
+}
+
+.fuss {
+  padding: 0 var(--abstand) var(--abstand);
+  text-align: center;
+}

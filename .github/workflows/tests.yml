@@ -1,0 +1,21 @@
+# Führt bei jedem Pull Request (und bei Änderungen an main) die Tests aus.
+# Keine Pakete nötig: nur Node.js mit dem eingebauten Testwerkzeug.
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test

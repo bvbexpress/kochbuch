@@ -14,6 +14,11 @@
   <meta name="theme-color" content="#1b1814" media="(prefers-color-scheme: dark)">
 
   <!-- Wichtig: alle Pfade relativ (./), weil GitHub Pages die App unter /kochbuch/ ausliefert -->
+  <!-- Homescreen-App: Name, Icon, Vollbild -->
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icons/icon-180.png">
+  <meta name="apple-mobile-web-app-title" content="Kochbuch">
+
   <link rel="stylesheet" href="./css/basis.css">
   <link rel="stylesheet" href="./css/teig.css">
 
@@ -25,9 +30,17 @@
     <h1 class="kopf-titel">Kochbuch</h1>
   </header>
 
+  <!-- Erscheint, wenn eine neue Version geladen ist (siehe js/kern/aktualisierung.js) -->
+  <div id="update" class="update karte" role="status" hidden>
+    <span>Neue Version da</span>
+    <button type="button" class="knopf knopf-voll">Jetzt laden</button>
+  </div>
+
   <!-- Hier setzt später app.js den jeweiligen Bereich ein (Teigrechner, Rezepte, Vorrat) -->
   <main id="inhalt" class="inhalt">
     <noscript>Der Teigrechner braucht JavaScript.</noscript>
   </main>
+
+  <footer class="fuss leise"><small id="version"></small></footer>
 </body>
 </html>
