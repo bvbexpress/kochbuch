@@ -20,7 +20,7 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   Knopf **„Bedarf aus aktuellem Rezept übernehmen“**. Ergebnis in **ganzen Gramm**. Rechnung in `rechner.js` (`auffrischen`), mit Tests.
 - **Schritt 9 – PWA:** Manifest, App-Icon, Service Worker für Offline-Betrieb. **Neue Versionen müssen zuverlässig auf den
   iPhones ankommen und dürfen nicht im Cache hängen bleiben** (Cache mit Versionsnummer, alte Caches beim Aktivieren löschen,
-  `index.html` zuerst im Netz versuchen, Update-Hinweis in der App). Alle Pfade relativ wegen `/kochbuch/`.
+  alles inkl. `index.html` aus dem Cache für sofortigen Start, Update-Hinweis in der App). Alle Pfade relativ wegen `/kochbuch/`.
 - **Schritt 10 – Bildschirm bleibt an**, solange die App offen ist (Wake Lock, nach Rückkehr in die App erneut anfordern).
 
 ## Offline und Updates (Schritt 9/10)
@@ -29,7 +29,8 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
 - **Nach jeder Änderung an einer ausgelieferten Datei `VERSION` in `sw.js` anpassen.** `npm test` schlägt sonst fehl
   und nennt den neuen Wert (Prüfsumme der Dateien). Ohne neue Version kommt das Update nicht auf die iPhones.
 - Ablauf: neuer Service Worker lädt alles frisch (`cache: 'reload'`) → App zeigt „Neue Version da“ → Tipper aktiviert,
-  alte Caches werden gelöscht. Bei Rückkehr in die App wird nach Updates gesucht. `index.html` zuerst aus dem Netz (3 s Zeitlimit).
+  alte Caches werden gelöscht. Bei Rückkehr in die App wird nach Updates gesucht.
+  Alles, auch `index.html`, kommt aus dem Cache (sofortiger Start); Updates laufen nur über `VERSION` und Hinweis.
 - Versionsanzeige ganz unten in der App (zum Vergleich beider Handys).
 - Icon: Quelle `icons/icon.svg`, daraus die PNGs (180 für iOS, 192/512 fürs Manifest).
 
@@ -82,6 +83,7 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 - JS als ES-Module (`import`/`export`), direkt vom Browser geladen.
 - Alle Pfade relativ (`./…`) wegen GitHub Pages unter `/kochbuch/`.
 - Tests: `npm test` (eingebautes `node --test`, keine Abhängigkeiten). Rechenlogik immer mit Tests.
+  GitHub führt sie bei jedem Pull Request automatisch aus (`.github/workflows/tests.yml`); rot = nicht mergen.
 - Rechnen nur in `rechner.js`, Speichern nur über `kern/speicher.js`, Oberfläche rechnet nicht.
 - Namen und Kommentare auf Deutsch, Code-Stil wie im Bestand.
 

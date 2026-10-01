@@ -6,13 +6,13 @@
 // - Der neue Service Worker lädt alle Dateien frisch aus dem Netz in einen eigenen Cache.
 // - Die App zeigt „Neue Version“; ein Tipper aktiviert sie und lädt neu.
 // - Beim Aktivieren werden alte Caches gelöscht.
-// - index.html wird zuerst im Netz versucht (mit Zeitlimit), offline kommt sie aus dem Cache.
+// - Alles kommt aus dem Cache, auch index.html: sofortiger Start, auch offline.
+//   Ob es ein Update gibt, prüft der Browser selbst anhand von sw.js.
 //
 // Alle Pfade relativ, weil die App unter /kochbuch/ läuft.
 
 const VERSION = '0f4be4c8'; // = Prüfsumme der Dateien unten, siehe tests/pwa.test.js
 const CACHE = `kochbuch-${VERSION}`;
-const ZEITLIMIT_MS = 3000; // so lange wartet der Start höchstens auf das Netz
 
 // Alles, was die App zum Laufen braucht (außer sw.js selbst)
 const DATEIEN = [
@@ -64,14 +64,8 @@ self.addEventListener('fetch', (ereignis) => {
   ereignis.respondWith(anfrage.mode === 'navigate' ? seite(anfrage) : datei(anfrage));
 });
 
-/** Die Seite selbst: zuerst Netz (mit Zeitlimit), sonst aus dem Cache. */
+/** Die Seite selbst: aus dem Cache dieser Version (sofortiger Start), nur wenn dort nicht vorhanden aus dem Netz. */
 async function seite(anfrage) {
-  try {
-    const antwort = await mitZeitlimit(fetch(anfrage.url, { cache: 'no-cache' }));
-    if (antwort.status < 500) return antwort;
-  } catch {
-    // offline oder zu langsam
-  }
   const gespeichert = await caches.open(CACHE).then((cache) => cache.match('./index.html'));
   return gespeichert ?? fetch(anfrage);
 }
@@ -80,11 +74,4 @@ async function seite(anfrage) {
 async function datei(anfrage) {
   const gespeichert = await caches.open(CACHE).then((cache) => cache.match(anfrage));
   return gespeichert ?? fetch(anfrage);
-}
-
-function mitZeitlimit(versprechen) {
-  return new Promise((erfuellt, abgelehnt) => {
-    const uhr = setTimeout(() => abgelehnt(new Error('Zeitlimit')), ZEITLIMIT_MS);
-    versprechen.then(erfuellt, abgelehnt).finally(() => clearTimeout(uhr));
-  });
 }
