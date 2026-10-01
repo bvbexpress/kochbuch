@@ -9,7 +9,7 @@ Der Nutzer ist Anfänger und arbeitet nur in der Cloud: Erklärungen knapp halte
 
 Reihenfolge der Etappen ist fest. **Nichts aus einer späteren Etappe vorab bauen**, nur die Datenmodelle so wählen, dass sie passen.
 
-### Etappe 1 – Teigrechner abschließen *(Schritte 1–6 und 11 fertig; offen: 7 → 8 → 9 → 10)*
+### Etappe 1 – Teigrechner abschließen *(Schritte 1–8 und 11 fertig; offen: 9 → 10)*
 Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link. Offen, in dieser Reihenfolge:
 
 - **Schritt 7 – Teiglinge-Modus:** Anzahl × Gewicht je Teigling (z. B. 4 Pizzen à 250 g, 8 Buns à 85 g), optionaler

@@ -207,6 +207,16 @@
   color: var(--akzent-text);
 }
 
+/* Schnellwahl mit drei Knöpfen (Starter-Verhältnis) */
+.umschaltgruppe.drei {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.umschaltgruppe + .zutaten,
+.umschaltgruppe + .feld {
+  margin-top: 8px;
+}
+
 /* ---------- Erhaltene Vorlage (Teilen-Link) ---------- */
 .uebernahme .aktionen {
   padding-bottom: 0;
@@ -237,4 +247,11 @@
 
 .hinweis-ok {
   margin: 0;
+}
+
+.feld-name small {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: var(--text-leise);
 }

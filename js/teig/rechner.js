@@ -25,15 +25,28 @@ function anteileProGrammMehl(teig) {
   );
 }
 
+/** Standard für den Verlust-Zuschlag im Teiglinge-Modus (% vom Teig). */
+export const STANDARD_VERLUST = 2;
+
 /**
  * Gesamtmehl aus der Teigmenge: Anzahl × Gewicht der Teiglinge.
  * Der Starter muss hier nicht extra berücksichtigt werden, weil sein Mehl
  * und Wasser schon im Gesamtmehl und in der Hydration stecken.
+ * verlust: Zuschlag in % auf die Teigmenge (Rest an Schüssel und Händen).
  */
-export function mehlAusTeiglingen(teig, anzahl, gewicht) {
-  const teigGesamt = anzahl * gewicht;
+export function mehlAusTeiglingen(teig, anzahl, gewicht, verlust = 0) {
+  const teigGesamt = anzahl * gewicht * (1 + Math.max(verlust, 0) / 100);
   if (teigGesamt <= 0) return 0;
   return teigGesamt / (1 + anteileProGrammMehl(teig));
+}
+
+/**
+ * Zugegebenes Mehl (das, was man abwiegt) für eine Teiglinge-Menge.
+ * Gegenstück zu `gesamtmehlAusMehl`.
+ */
+export function mehlFuerTeiglinge(teig, anzahl, gewicht, verlust = 0) {
+  const gesamt = mehlAusTeiglingen(teig, anzahl, gewicht, verlust);
+  return gesamt * Math.max(1 - teig.starter / 200, 0);
 }
 
 /**
@@ -155,27 +168,32 @@ export function hefeUmrechnen(prozent, vonArt, nachArt) {
 }
 
 /**
- * Starter-Auffrischung.
+ * Starter-Auffrischung, alle Mengen in ganzen Gramm.
  * bedarf: so viel Starter braucht das Rezept (g)
  * rest:   so viel soll zurück in den Kühlschrank (g)
  * verhaeltnis: [Anstellgut, Mehl, Wasser], z. B. [1, 1.5, 1.5]
+ * Anstellgut und Mehl werden gerundet, das Wasser füllt auf die Gesamtmenge auf –
+ * so passen die drei Zahlen immer zur Summe.
  */
 export function auffrischen(bedarf, rest, verhaeltnis) {
   const [a, m, w] = verhaeltnis;
-  const gesamt = bedarf + rest;
+  const ziel = Math.round(Math.max(bedarf, 0) + Math.max(rest, 0));
   const teile = a + m + w;
-  if (gesamt <= 0 || teile <= 0) {
+  if (ziel <= 0 || teile <= 0) {
     return { gesamt: 0, anstellgut: 0, mehl: 0, wasser: 0, hydration: 0 };
   }
-  const teil = gesamt / teile;
+  const teil = ziel / teile;
+  const anstellgut = Math.round(a * teil);
+  const mehl = Math.round(m * teil);
+  const wasser = Math.max(ziel - anstellgut - mehl, 0);
   // Hydration des aufgefrischten Starters: Anstellgut selbst hat 100 %.
-  const mehlGesamt = (a / 2 + m) * teil;
-  const wasserGesamt = (a / 2 + w) * teil;
+  const mehlGesamt = anstellgut / 2 + mehl;
+  const wasserGesamt = anstellgut / 2 + wasser;
   return {
-    gesamt,
-    anstellgut: a * teil,
-    mehl: m * teil,
-    wasser: w * teil,
+    gesamt: anstellgut + mehl + wasser,
+    anstellgut,
+    mehl,
+    wasser,
     hydration: mehlGesamt > 0 ? (wasserGesamt / mehlGesamt) * 100 : 0,
   };
 }
