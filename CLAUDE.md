@@ -10,8 +10,18 @@ Der Nutzer ist Anfänger und arbeitet nur in der Cloud: Erklärungen knapp halte
 Reihenfolge der Etappen ist fest. **Nichts aus einer späteren Etappe vorab bauen**, nur die Datenmodelle so wählen, dass sie passen.
 
 ### Etappe 1 – Teigrechner abschließen *(Schritte 1–6 und 11 fertig; offen: 7 → 8 → 9 → 10)*
-Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link. Die Schritte 7–10 werden vor Etappe 2 abgeschlossen.
-Hinweis: Installierbarkeit (Manifest) und Offline-Betrieb (Service Worker) fehlen im Repo noch – spätestens hier einplanen.
+Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link. Offen, in dieser Reihenfolge:
+
+- **Schritt 7 – Teiglinge-Modus:** Anzahl × Gewicht je Teigling (z. B. 4 Pizzen à 250 g, 8 Buns à 85 g), optionaler
+  **Verlust-Zuschlag in %** (Standard 2 %). Umschalten zwischen Mehl- und Teiglinge-Modus mit **einem Tipper**.
+  Rechnung nur in `rechner.js` (`mehlAusTeiglingen` ist als Grundlage schon da), mit Tests.
+- **Schritt 8 – Starter-Auffrischung:** benötigte Startermenge **plus Rest für den Kühlschrank** (Standard 20 g).
+  Verhältnis Anstellgut:Mehl:Wasser frei einstellbar, Schnellwahl **1:1:1, 1:1,5:1,5, 1:2,5:2,5**.
+  Knopf **„Bedarf aus aktuellem Rezept übernehmen“**. Ergebnis in **ganzen Gramm**. Rechnung in `rechner.js` (`auffrischen`), mit Tests.
+- **Schritt 9 – PWA:** Manifest, App-Icon, Service Worker für Offline-Betrieb. **Neue Versionen müssen zuverlässig auf den
+  iPhones ankommen und dürfen nicht im Cache hängen bleiben** (Cache mit Versionsnummer, alte Caches beim Aktivieren löschen,
+  `index.html` zuerst im Netz versuchen, Update-Hinweis in der App). Alle Pfade relativ wegen `/kochbuch/`.
+- **Schritt 10 – Bildschirm bleibt an**, solange die App offen ist (Wake Lock, nach Rückkehr in die App erneut anfordern).
 
 ### Etappe 2 – Gemeinsame Daten
 - Anmeldung und Sync zwischen zwei iPhones über eine Datenbank (Cloud, von GitHub Pages aus per `fetch` erreichbar).
@@ -20,7 +30,19 @@ Hinweis: Installierbarkeit (Manifest) und Offline-Betrieb (Service Worker) fehle
 - Die eigenen Vorlagen ziehen mit um (Datenmodell mit `id`/`geaendert`/`geloescht` ist dafür schon da).
   Eigene Mehle/Saaten samt Wasserwerten werden hier mit synchronisiert.
 - App bleibt **offline nutzbar** (lokal speichern, später abgleichen). Teilen per Link bleibt als Sicherung.
-- Vor dem Bauen klären: Anbieter der Datenbank, Anmeldeweg, und wie das zu „keine Frameworks/Pakete“ passt (nur `fetch`, kein SDK).
+- **Die Regel „keine Pakete“ darf hier abgewogen werden:** Eine schlanke, verbreitete Bibliothek des Anbieters ist erlaubt,
+  wenn sie Anmeldung und Sync deutlich einfacher und sicherer macht. **In der Planung beide Wege vergleichen**, dann entscheiden:
+  - *Weg A, nur `fetch`:* kleinste App, volle Kontrolle, kein Fremdcode. Dafür selbst bauen und pflegen: Anmeldung,
+    Token-Erneuerung, Fehlerfälle. Das ist der sicherheitskritische Teil.
+  - *Weg B, Bibliothek des Anbieters:* bewährte Anmeldung und Token-Pflege, weniger Eigencode. Dafür größere Dateien
+    (Ladezeit, Offline-Cache), Abhängigkeit vom Anbieter, Fremdcode. Dann: feste Version, als Datei im Repo ablegen
+    (nicht live von einem CDN laden), Updates nur bewusst.
+  - *Tendenz (zu prüfen):* Bibliothek höchstens für die Anmeldung; die eigentliche Sync-Logik (`id`, `geaendert`, `geloescht`) bleibt
+    eigener Code in `kern/` hinter einer kleinen Schnittstelle, damit der Anbieter austauschbar bleibt.
+- **Anmeldung auf dem iPhone:** Links aus E-Mails öffnen in Safari, nicht in der Homescreen-App, und beide haben getrennte
+  Speicher (wie beim Teilen-Link). Ein „Anmelde-Link per E-Mail“ meldet deshalb nur Safari an, nicht die App.
+  Besser: Passwort oder Einmal-Code, der in der App eingetippt wird. Beim Vergleich mitprüfen.
+- Vor dem Bauen klären: Anbieter der Datenbank, Anmeldeweg, Weg A oder B, Kosten (Gratis-Stufe reicht für zwei Nutzer?).
 
 ### Etappe 3 – Rezepte
 - Rezepte mit **Personenanzahl** und automatischer Mengenanpassung.
