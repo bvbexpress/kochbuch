@@ -105,8 +105,9 @@ function ladeKatalog() {
 
 function vorlageZustand(vorlage) {
   const { teig, mehl, teiglinge: angabe } = ladeVorlage(vorlage);
-  // Vorlage mit Teiglinge-Angabe: Modus und Werte übernehmen; ohne Angabe bleibt alles wie es ist
-  if (angabe) setzeTeiglinge({ aktiv: true, ...angabe });
+  // Mit Teiglinge-Angabe: Modus und Werte übernehmen. Ohne: Mehl-Modus mit der gespeicherten
+  // Mehlmenge – die zuletzt genutzten Teiglinge-Werte bleiben fürs nächste Umschalten erhalten.
+  setzeTeiglinge(angabe ? { aktiv: true, ...angabe } : { aktiv: false });
   return { vorlageId: vorlage.id, teig, mehl, geaendert: false, anpassung: neueAnpassung() };
 }
 
