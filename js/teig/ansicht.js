@@ -20,7 +20,11 @@ import {
   loescheEigeneVorlage,
   istGueltigerTeig,
   normalisiereTeig,
+  eigeneVorlagen,
+  pruefeUebernahme,
+  uebernehmeVorlagen,
 } from './vorlagen.js';
+import { erstelleLink, liesLink, hatTeilenCode } from './teilen.js';
 import {
   mehle,
   saaten,
@@ -51,12 +55,16 @@ let wurzel;   // das HTML-Element, in dem der Teigrechner steht
 let zustand;  // { vorlageId, teig, mehl, geaendert, anpassung } – mehl = zugegebenes Mehl
 let katalog;  // { mehle, saaten, wasserVon, verhaeltnisVon, art } – aus den Einstellungen
 const offeneKlappen = new Set(); // welche einklappbaren Bereiche offen sind
+let paket = null;   // erhaltene Vorlagen aus einem Link, wartet auf „Übernehmen“: { vorlagen, verworfen, link }
+let meldung = null; // einmalige Rückmeldung (wird beim nächsten Zeichnen angezeigt und gelöscht)
 
 export function zeigeTeigrechner(ziel) {
   wurzel = ziel;
   ladeKatalog();
   zustand = letzterStand() ?? vorlageZustand(alleVorlagen(speicher)[0]);
   zeichne();
+  pruefeAdresse();
+  window.addEventListener('hashchange', pruefeAdresse);
 
   // Ein Zuhörer für alle Felder statt einer pro Feld ("Event-Delegation")
   wurzel.addEventListener('input', beiEingabe);
@@ -142,7 +150,12 @@ function zeichne() {
   const hefeName = trocken ? 'Trockenhefe' : 'Frischhefe';
   const hefeWechsel = trocken ? '⇄ frisch' : '⇄ trocken';
 
+  const hinweisMeldung = meldung;
+  meldung = null;
+
   wurzel.innerHTML = `
+    ${hinweisMeldung ? `<p class="karte hinweis-ok" role="status">${text(hinweisMeldung)}</p>` : ''}
+    ${paket ? uebernahmeKarte() : ''}
     <section class="vorlagen" aria-label="Vorlagen">${vorlagenKnoepfe}</section>
 
     <section class="karte">
@@ -179,10 +192,13 @@ function zeichne() {
     ${mehlKlappe()}
     ${saatenKlappe()}
     ${einstellungenKlappe()}
+    ${teilenKlappe()}
 
     <section class="aktionen">
       ${eigene
-        ? `<button type="button" class="knopf knopf-voll" data-aktion="aktualisieren" hidden>
+        ? `<button type="button" class="knopf knopf-voll" data-aktion="teilen" ${zustand.geaendert ? 'hidden' : ''}>
+             Vorlage teilen</button>
+           <button type="button" class="knopf knopf-voll" data-aktion="aktualisieren" hidden>
              Änderungen in „${text(vorlage.name)}“ speichern</button>`
         : ''}
       <button type="button" class="knopf" data-aktion="neu">Als neue Vorlage speichern</button>
@@ -385,6 +401,9 @@ function aktualisiere() {
   // "Änderungen speichern" nur zeigen, wenn eine eigene Vorlage verändert wurde
   const aktualisieren = wurzel.querySelector('[data-aktion="aktualisieren"]');
   if (aktualisieren) aktualisieren.hidden = !zustand.geaendert;
+  // Geteilt wird die gespeicherte Vorlage – darum erst nach dem Speichern
+  const teilen = wurzel.querySelector('[data-aktion="teilen"]');
+  if (teilen) teilen.hidden = zustand.geaendert;
 }
 
 /** Kurzer Hinweis, wie viel Wasser die App seit dem Laden automatisch angepasst hat. */
@@ -547,6 +566,13 @@ function beiKlick(ereignis) {
   if (aktion === 'neu') speichereAlsNeu();
   if (aktion === 'aktualisieren') speichereAenderungen();
   if (aktion === 'loeschen') loescheVorlage();
+  if (aktion === 'teilen') teileVorlage();
+  if (aktion === 'sichern') sichereAlle();
+  if (aktion === 'einfuegen') fuegeLinkEin();
+  if (aktion === 'import-ja') uebernehmePaket(false);
+  if (aktion === 'import-kopie') uebernehmePaket(true);
+  if (aktion === 'import-kopieren') kopiereLink(paket?.link);
+  if (aktion === 'import-weg') verwerfePaket();
 }
 
 function entferneMehl(index) {
@@ -585,9 +611,10 @@ function entferneSorte(art, id) {
   zeichne();
 }
 
-function ladeUndZeige(vorlage) {
+function ladeUndZeige(vorlage, rueckmeldung = null) {
   zustand = vorlageZustand(vorlage);
   merkeStand();
+  meldung = rueckmeldung;
   zeichne();
 }
 
@@ -638,6 +665,183 @@ function loescheVorlage() {
   zustand.vorlageId = null;
   merkeStand();
   zeichne();
+}
+
+// ---------- Teilen, Sichern, Link einfügen ----------
+
+/** Adresse der App ohne alles nach dem „#“ – Basis für Teilen-Links. */
+function appAdresse() {
+  return `${location.origin}${location.pathname}`;
+}
+
+/** Läuft die App als Homescreen-Web-App (nicht in einem Safari-Tab)? */
+function imHomescreen() {
+  return window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+}
+
+async function teileVorlage() {
+  const vorlage = aktuelleVorlage();
+  if (!vorlage || vorlage.eingebaut) return;
+  const link = await erstelleLink([vorlage], appAdresse());
+  await teileLink(link, {
+    title: vorlage.name,
+    text: `Teigvorlage „${vorlage.name}“ fürs Kochbuch – zum Übernehmen den Link öffnen:`,
+  });
+}
+
+async function sichereAlle() {
+  const liste = eigeneVorlagen(speicher);
+  if (liste.length === 0) {
+    window.alert('Du hast noch keine eigenen Vorlagen zum Sichern.');
+    return;
+  }
+  const link = await erstelleLink(liste, appAdresse());
+  await teileLink(link, {
+    title: 'Kochbuch-Sicherung',
+    text: `Sicherung meiner ${liste.length} Kochbuch-Vorlagen – der Link enthält alle Vorlagen:`,
+  });
+}
+
+/** Öffnet das Teilen-Menü; ohne Teilen-Menü (oder wenn es scheitert) wird der Link kopiert. */
+async function teileLink(link, inhalt) {
+  if (window.navigator.share) {
+    try {
+      await window.navigator.share({ ...inhalt, url: link });
+      return;
+    } catch (fehler) {
+      if (fehler?.name === 'AbortError') return; // Menü bewusst geschlossen
+    }
+  }
+  await kopiereLink(link);
+}
+
+/** Kopiert den Link; geht das nicht, wird er zum Selbstkopieren angezeigt. */
+async function kopiereLink(link) {
+  if (!link) return;
+  try {
+    await window.navigator.clipboard.writeText(link);
+    meldung = 'Link kopiert. Jetzt in WhatsApp oder Notizen einfügen.';
+    return zeichne();
+  } catch {
+    window.prompt('Link zum Kopieren (lange antippen → Auswählen → Kopieren):', link);
+  }
+}
+
+/** Link aus der Zwischenablage holen; wenn das nicht geht, zum Einfügen nachfragen. */
+async function fuegeLinkEin() {
+  let eingabe = '';
+  try {
+    eingabe = await window.navigator.clipboard.readText();
+  } catch {
+    eingabe = '';
+  }
+  if (!hatTeilenCode(eingabe)) {
+    eingabe = window.prompt('Link der Vorlage hier einfügen:') ?? '';
+    if (!eingabe.trim()) return;
+  }
+  await liesPaket(eingabe);
+}
+
+/** Beim Start und wenn sich die Adresse ändert: steckt ein Teilen-Link in der Adresse? */
+async function pruefeAdresse() {
+  if (!hatTeilenCode(location.hash)) return;
+  await liesPaket(location.href, true);
+}
+
+async function liesPaket(eingabe, ausAdresse = false) {
+  const gelesen = await liesLink(eingabe);
+  if (!gelesen) {
+    meldung = 'In diesem Link habe ich keine Vorlage gefunden. Ist er vollständig kopiert?';
+    if (ausAdresse) adresseSaeubern();
+    return zeichne();
+  }
+  paket = { ...gelesen, link: ausAdresse ? location.href : eingabe.trim() };
+  zeichne();
+  window.scrollTo(0, 0);
+}
+
+function adresseSaeubern() {
+  if (location.hash) history.replaceState(null, '', `${location.pathname}${location.search}`);
+}
+
+const STATUS_TEXT = {
+  neu: 'neu',
+  neuer: 'neuere Version – ersetzt deine',
+  gleich: 'hast du schon',
+  aelter: 'du hast eine neuere Version',
+};
+
+/** Karte oben: Was steckt im Link, und wo lässt es sich übernehmen? */
+function uebernahmeKarte() {
+  const pruefung = pruefeUebernahme(speicher, paket.vorlagen);
+  const anzahl = (...status) => pruefung.filter((p) => status.includes(p.status)).length;
+  const zuUebernehmen = anzahl('neu', 'neuer');
+  const alsKopie = anzahl('neuer', 'aelter');
+  const viele = paket.vorlagen.length > 1;
+
+  const zeilen = pruefung.map(({ vorlage: v, status }) => `
+      <li><strong>${text(v.name)}</strong>
+        <small>${formatGramm(v.mehl)} g Mehl, ${formatProzent(v.teig.hydration)} % Wasser · ${STATUS_TEXT[status]}</small></li>`).join('');
+
+  const verworfen = paket.verworfen > 0
+    ? `<p class="info">${paket.verworfen} Eintrag/Einträge im Link waren unbrauchbar und wurden ausgelassen.</p>` : '';
+
+  const jaText = zuUebernehmen > 1 ? `${zuUebernehmen} Vorlagen übernehmen` : 'Vorlage übernehmen';
+  const ja = zuUebernehmen > 0
+    ? `<button type="button" class="knopf ${imHomescreen() ? 'knopf-voll' : 'knopf-leise'}" data-aktion="import-ja">
+         ${imHomescreen() ? jaText : 'Nur hier im Browser übernehmen'}</button>` : '';
+  const kopie = alsKopie > 0
+    ? `<button type="button" class="knopf" data-aktion="import-kopie">Zusätzlich als Kopie übernehmen</button>` : '';
+
+  // Im Safari-Tab landet eine Übernahme im Browser-Speicher – getrennt von der Homescreen-App
+  const browserHinweis = imHomescreen() ? '' : `
+      <p class="hinweis">Du bist im Browser, nicht in der Kochbuch-App auf dem Homescreen.
+        Beide haben getrennte Speicher. So kommt die Vorlage in die App: Link kopieren →
+        Kochbuch-App vom Homescreen öffnen → unten bei „Teilen und Sichern“ auf „Link einfügen“ tippen.</p>`;
+  const kopieren = imHomescreen() ? ''
+    : '<button type="button" class="knopf knopf-voll" data-aktion="import-kopieren">Link kopieren</button>';
+
+  return `<section class="karte uebernahme" aria-label="Erhaltene Vorlage">
+      <h2 class="karte-titel">${viele ? `${paket.vorlagen.length} Vorlagen erhalten` : 'Vorlage erhalten'}</h2>
+      <ul class="uebernahme-liste">${zeilen}</ul>
+      ${verworfen}
+      ${browserHinweis}
+      <div class="aktionen">
+        ${kopieren}${ja}${kopie}
+        <button type="button" class="knopf knopf-leise" data-aktion="import-weg">Verwerfen</button>
+      </div>
+    </section>`;
+}
+
+function uebernehmePaket(alsKopie) {
+  if (!paket) return;
+  const ergebnis = uebernehmeVorlagen(speicher, paket.vorlagen, { alsKopie });
+  if (ergebnis.fehler > 0) return meldeFehler();
+  const ids = paket.vorlagen.map((v) => v.id);
+  const einzel = paket.vorlagen.length === 1;
+  verwerfePaket(false);
+  const gesamt = ergebnis.neu + ergebnis.aktualisiert;
+  const neueste = einzel && !alsKopie ? alleVorlagen(speicher).find((v) => v.id === ids[0]) : eigeneVorlagen(speicher).at(-1);
+  if (gesamt > 0 && neueste) return ladeUndZeige(neueste, `${gesamt === 1 ? 'Vorlage' : `${gesamt} Vorlagen`} übernommen.`);
+  meldung = 'Nichts zu übernehmen – du hast alles schon.';
+  zeichne();
+}
+
+function verwerfePaket(neuZeichnen = true) {
+  paket = null;
+  adresseSaeubern();
+  if (neuZeichnen) zeichne();
+}
+
+/** Einklappbarer Bereich unten: Link einfügen und alle Vorlagen sichern. */
+function teilenKlappe() {
+  return klappe('teilen', 'Teilen und Sichern', `
+      <button type="button" class="knopf knopf-voll" data-aktion="einfuegen">Link einfügen</button>
+      <p class="info">Hast du einen Vorlagen-Link bekommen (z. B. per WhatsApp)? Link kopieren, hier tippen und einfügen.</p>
+      <button type="button" class="knopf" data-aktion="sichern">Alle meine Vorlagen sichern</button>
+      <p class="info">Erzeugt einen Link mit allen eigenen Vorlagen. Im Teilen-Menü z. B. in Notizen
+        ablegen oder dir selbst schicken. Wer den Link kennt, kann die Vorlagen lesen – nicht öffentlich posten.
+        Eigene Mehl- und Saatensorten und die Wasserwerte in den Einstellungen sind nicht enthalten.</p>`);
 }
 
 function meldeFehler() {

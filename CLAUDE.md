@@ -7,11 +7,11 @@ Der Nutzer ist Anfänger und arbeitet nur in der Cloud: Erklärungen knapp halte
 
 ## Etappen
 
-1. **Teigrechner** – Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen *(in Arbeit, Schritte 1–6 fertig)*
+1. **Teigrechner** – Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen *(in Arbeit, Schritte 1–6 und 11 fertig)*
 2. **Rezeptsammlung** *(später)*
 3. **Vorratsverwaltung** mit Sync zwischen zwei Handys *(später)*
 
-Reihenfolge der restlichen Schritte: **6 → 11 (Link teilen) → 7 → 8 → 9 → 10**.
+Reihenfolge der restlichen Schritte: **7 → 8 → 9 → 10** (Schritt 11, Link teilen, ist fertig).
 
 ## Technik-Vorgaben
 
@@ -31,7 +31,7 @@ Reihenfolge der restlichen Schritte: **6 → 11 (Link teilen) → 7 → 8 → 9 
 | `css/<bereich>.css` | Design eines Bereichs (z. B. `teig.css`) |
 | `js/app.js` | Start und (später) Navigation |
 | `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js` |
-| `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js`, `zutaten.js` (Mehle/Saaten), `ansicht.js` (Oberfläche) |
+| `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js`, `zutaten.js` (Mehle/Saaten), `teilen.js` (Teilen-Link), `ansicht.js` (Oberfläche) |
 | `tests/` | Tests (`*.test.js`) |
 
 `js/rezepte/`, `js/vorrat/` erst anlegen, wenn dort Code entsteht.
@@ -64,6 +64,17 @@ Jeder Datensatz (Vorlagen, Mehle/Saaten – eigene und geänderte Standardwerte 
 
 Geräte-Einstellungen (`speicher.einstellung`) gehören nur zu einem Handy und werden nicht synchronisiert.
 Gespeicherte Daten beim Laden immer auf Gültigkeit prüfen.
+
+## Teilen per Link (Schritt 11)
+
+- Link: `<App-Adresse>#teilen=<Code>`; Code = JSON, `deflate-raw`-gepackt, Base64url (`z.`), sonst ungepackt (`r.`).
+  Alles nach dem `#` geht nie an einen Server. Ein Link enthält eine Vorlage (Teilen) oder alle eigenen (Sichern).
+- Links sind **nicht vertrauenswürdig**: `teilen.js` prüft und bereinigt alles (UUID-id, Zahlenbereiche, Namenslänge,
+  Größenlimit gegen Zip-Bomben, nur bekannte Felder). Namen immer mit `text()` maskieren.
+- Übernahme mit id und `geaendert` des Absenders, **neuere Version gewinnt** (`speicher.uebernimm`); sonst Angebot „als Kopie“.
+- **iOS:** Ein Link öffnet in Safari, nie in der Homescreen-App, und Safari/Homescreen-App haben getrennte Speicher.
+  Darum im Browser nur Vorschau + „Link kopieren“; übernommen wird in der App über „Teilen und Sichern → Link einfügen“.
+- Nicht enthalten: eigene Mehl-/Saatensorten und Wasserwerte (Einstellungen).
 
 ## Bedien-Anforderungen
 

@@ -80,6 +80,35 @@ export function erstelleSpeicher(backend, jetzt = () => Date.now()) {
       return schreib(`daten.${sammlung}`, neu) ? datensatz : null;
     },
 
+    /**
+     * Vergleicht einen Datensatz von außen (z. B. aus einem Link) mit dem Gespeicherten:
+     *   'neu'    – gibt es hier noch nicht (oder wurde gelöscht und ist jetzt neuer)
+     *   'neuer'  – die Version von außen ist neuer als die hier
+     *   'gleich' – gleicher Stand
+     *   'aelter' – hier gibt es eine neuere Version (oder sie wurde danach gelöscht)
+     */
+    vergleiche(sammlung, daten) {
+      const alt = sammlungLesen(sammlung).find((d) => d.id === daten.id);
+      if (!alt) return 'neu';
+      if (daten.geaendert > alt.geaendert) return alt.geloescht ? 'neu' : 'neuer';
+      return daten.geaendert === alt.geaendert && !alt.geloescht ? 'gleich' : 'aelter';
+    },
+
+    /**
+     * Übernimmt einen Datensatz von außen mit seiner id und seinem Änderungszeitpunkt.
+     * Neuere Version gewinnt: bei 'gleich' oder 'aelter' passiert nichts.
+     * Gibt das Ergebnis von `vergleiche` zurück, oder null wenn das Speichern scheitert.
+     */
+    uebernimm(sammlung, daten) {
+      const ergebnis = this.vergleiche(sammlung, daten);
+      if (ergebnis === 'gleich' || ergebnis === 'aelter') return ergebnis;
+      const liste = sammlungLesen(sammlung);
+      const alt = liste.find((d) => d.id === daten.id);
+      const datensatz = { ...daten, erstellt: alt?.erstellt ?? jetzt(), geloescht: false };
+      const neu = alt ? liste.map((d) => (d.id === datensatz.id ? datensatz : d)) : [...liste, datensatz];
+      return schreib(`daten.${sammlung}`, neu) ? ergebnis : null;
+    },
+
     /** Markiert als gelöscht. Die Nutzdaten werden entfernt, nur der "Grabstein" bleibt. */
     loesche(sammlung, id) {
       const liste = sammlungLesen(sammlung).map((d) =>
