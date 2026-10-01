@@ -1,0 +1,68 @@
+// startseite.js – HTML der Vorlagenliste (Startseite).
+// Nur der Aufbau; Ordnen und Filtern macht vorlagen.js (`ordneVorlagen`),
+// die Klicks verarbeitet ansicht.js.
+
+import { ladeVorlage } from './vorlagen.js';
+import { formatGramm, formatProzent } from '../kern/zahlen.js';
+import { text } from '../kern/html.js';
+
+/**
+ * Kurzinfo zu einer Vorlage, mit denselben Werten wie im Rechner:
+ * „300 g Mehl · 76,9 %“ bzw. „4 × 250 g · 65 %“ (Prozent = Hydration).
+ */
+export function zusammenfassung(vorlage) {
+  const { teig, mehl, modus, teiglinge } = ladeVorlage(vorlage);
+  const menge = modus === 'teiglinge' && teiglinge
+    ? `${formatProzent(teiglinge.anzahl)} × ${formatGramm(teiglinge.gewicht)} g`
+    : `${formatGramm(mehl)} g Mehl`;
+  return `${menge} · ${formatProzent(teig.hydration)} %`;
+}
+
+export function suchfeldHtml(suche) {
+  return `<input class="eingabe suche" type="search" data-suche placeholder="Vorlage suchen …"
+            aria-label="Vorlage suchen" autocomplete="off" enterkeyhint="search" value="${text(suche)}">`;
+}
+
+/**
+ * Favoriten, Gruppen und ausgeblendete Vorlagen.
+ * ordnung: Ergebnis von `ordneVorlagen`; sterne: Set der Favoriten-ids;
+ * ausgeblendetOffen: ist die Klappe „Ausgeblendet“ offen?
+ */
+export function vorlagenListeHtml(ordnung, { sterne, suche, ausgeblendetOffen }) {
+  const zeile = (v) => {
+    const stern = sterne.has(v.id);
+    return `<li class="vorlage-zeile">
+        <button type="button" class="vorlage-oeffnen" data-oeffnen="${text(v.id)}">
+          <span class="vorlage-name">${text(v.name)}</span>
+          <small class="zahl">${text(zusammenfassung(v))}</small>
+        </button>
+        <button type="button" class="stern" data-stern="${text(v.id)}" aria-pressed="${stern}"
+                aria-label="${text(v.name)} ${stern ? 'aus den Favoriten nehmen' : 'als Favorit markieren'}">${stern ? '★' : '☆'}</button>
+      </li>`;
+  };
+  const gruppe = (titel, vorlagen) => `
+      <section class="gruppe">
+        <h2 class="gruppe-titel">${titel}</h2>
+        <ul class="vorlagen-liste">${vorlagen.map(zeile).join('')}</ul>
+      </section>`;
+
+  const teile = [];
+  if (ordnung.favoriten.length) teile.push(gruppe('★ Favoriten', ordnung.favoriten));
+  for (const g of ordnung.gruppen) teile.push(gruppe(text(g.name), g.vorlagen));
+  if (teile.length === 0) {
+    teile.push(`<p class="info">${suche.trim() ? 'Keine Vorlage gefunden.' : 'Keine Vorlagen sichtbar.'}</p>`);
+  }
+
+  if (ordnung.ausgeblendet.length) {
+    const zeilen = ordnung.ausgeblendet.map((v) => `
+        <li class="zeile zeile-einblenden">
+          <span class="zeile-name">${text(v.name)}</span>
+          <button type="button" class="knopf knopf-leise" data-einblenden="${text(v.id)}">Einblenden</button>
+        </li>`).join('');
+    teile.push(`<details class="klappe" data-klappe="ausgeblendet" ${ausgeblendetOffen ? 'open' : ''}>
+        <summary>Ausgeblendet (${ordnung.ausgeblendet.length})</summary>
+        <div class="klappe-inhalt"><ul class="zutaten">${zeilen}</ul></div>
+      </details>`);
+  }
+  return teile.join('');
+}

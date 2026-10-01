@@ -4,8 +4,13 @@
 // und werden beim Laden in Prozent umgerechnet.
 // Eigene Vorlagen liegen NICHT hier im Code, sondern im Speicher auf dem Handy
 // (Sammlung "teigvorlagen") – in Prozent, zusammen mit der Mehlmenge.
+//
+// Jede Vorlage hat eine Kategorie (oder keine – ältere Vorlagen) und einen Modus:
+//   'mehl'      – man gibt die Mehlmenge ein
+//   'teiglinge' – man gibt Anzahl × Gewicht ein, das Mehl wird errechnet
+// Favoriten und ausgeblendete Vorlagen sind Geräte-Einstellungen (jedes Handy hat eigene).
 
-import { teigAusGramm } from './rechner.js';
+import { teigAusGramm, STANDARD_VERLUST } from './rechner.js';
 import { MEHLE, SAATEN, idNachName } from './zutaten.js';
 
 // Version des Teig-Formats. 2 = Mehle/Saaten mit id, Quellwasser in % vom Gesamtmehl.
@@ -13,10 +18,31 @@ const FORMAT = 2;
 
 const SAMMLUNG = 'teigvorlagen';
 
+/** Kategorien in der Reihenfolge der Vorlagenliste. */
+export const KATEGORIEN = [
+  { id: 'brot', name: 'Brot' },
+  { id: 'broetchen', name: 'Brötchen' },
+  { id: 'pizza', name: 'Pizza' },
+  { id: 'focaccia', name: 'Focaccia' },
+  { id: 'gebaeck', name: 'Gebäck' },
+];
+export const OHNE_KATEGORIE = 'Ohne Kategorie';
+export const MODI = ['mehl', 'teiglinge'];
+export const SUCHE_AB = 10; // ab so vielen sichtbaren Vorlagen gibt es eine Suche
+
+/** Startwerte im Teiglinge-Modus, wenn noch nichts eingestellt ist. */
+export const STANDARD_TEIGLINGE = { anzahl: 4, gewicht: 250, verlust: STANDARD_VERLUST };
+
+// Geräte-Einstellungen
+const FAVORITEN = 'teig.favoriten';
+const AUSGEBLENDET = 'teig.ausgeblendet';
+
 export const VORLAGEN = [
   {
     id: 'focaccia',
-    name: 'Sauerteig-Focaccia',
+    name: 'Focaccia',
+    kategorie: 'focaccia',
+    modus: 'mehl',
     rezept: {
       mehlsorten: [{ id: 'tipo00', name: 'Tipo 00', gramm: 300 }],
       starter: 50,
@@ -27,7 +53,9 @@ export const VORLAGEN = [
   },
   {
     id: 'weizenvollkorn',
-    name: 'Weizenvollkorn-Sauerteigbrot',
+    name: 'Weizenvollkornbrot',
+    kategorie: 'brot',
+    modus: 'mehl',
     rezept: {
       mehlsorten: [{ id: 'weizenvollkorn', name: 'Weizenvollkorn', gramm: 500 }],
       starter: 100,
@@ -47,8 +75,83 @@ export function alleVorlagen(speicher) {
   const eigene = speicher.alle(SAMMLUNG).filter((v) => istGueltigerTeig(v.teig));
   return [
     ...VORLAGEN.map((v) => ({ ...v, eingebaut: true })),
-    ...eigene.map((v) => ({ ...v, teig: normalisiereTeig(v.teig), teiglinge: bereinigeTeiglinge(v.teiglinge), eingebaut: false })),
+    ...eigene.map((v) => ({
+      ...v,
+      teig: normalisiereTeig(v.teig),
+      teiglinge: bereinigeTeiglinge(v.teiglinge),
+      kategorie: bereinigeKategorie(v.kategorie),
+      modus: modusVon(v),
+      eingebaut: false,
+    })),
   ];
+}
+
+/** Gültige Kategorie-id oder null („Ohne Kategorie“). */
+export function bereinigeKategorie(kategorie) {
+  return KATEGORIEN.some((k) => k.id === kategorie) ? kategorie : null;
+}
+
+/**
+ * Modus einer Vorlage. Ältere Vorlagen haben keinen: Dann gilt wie bisher
+ * „mit Teiglinge-Angabe = Teiglinge-Modus“.
+ */
+export function modusVon(vorlage) {
+  if (MODI.includes(vorlage?.modus)) return vorlage.modus;
+  return bereinigeTeiglinge(vorlage?.teiglinge) ? 'teiglinge' : 'mehl';
+}
+
+// ---------- Vorlagenliste (Startseite) ----------
+
+/** Liste von ids aus den Einstellungen, geprüft. */
+function idListe(speicher, name) {
+  const liste = speicher.einstellung(name, []);
+  return Array.isArray(liste) ? liste.filter((id) => typeof id === 'string') : [];
+}
+
+export const favoriten = (speicher) => idListe(speicher, FAVORITEN);
+export const ausgeblendet = (speicher) => idListe(speicher, AUSGEBLENDET);
+
+/** Stern an/aus. */
+export function schalteFavorit(speicher, id) {
+  const liste = favoriten(speicher);
+  return speicher.setzeEinstellung(FAVORITEN, liste.includes(id) ? liste.filter((x) => x !== id) : [...liste, id]);
+}
+
+/** Eingebaute Vorlage aus- bzw. wieder einblenden. Eigene werden stattdessen gelöscht. */
+export function blendeAus(speicher, id, aus = true) {
+  const liste = ausgeblendet(speicher).filter((x) => x !== id);
+  return speicher.setzeEinstellung(AUSGEBLENDET, aus ? [...liste, id] : liste);
+}
+
+/**
+ * Ordnet die Vorlagen für die Startseite:
+ *   favoriten   – mit Stern, ganz oben (erscheinen nicht noch einmal in ihrer Kategorie)
+ *   gruppen     – [{ id, name, vorlagen }] in der Reihenfolge von KATEGORIEN,
+ *                 leere Gruppen fehlen, „Ohne Kategorie“ (id null) am Ende
+ *   ausgeblendet – ausgeblendete eingebaute Vorlagen
+ *   anzahl      – sichtbare Vorlagen ohne Suche (für „Suche ab 10“)
+ * Die Suche filtert nach dem Namen, ohne Rücksicht auf Groß-/Kleinschreibung.
+ */
+export function ordneVorlagen(vorlagen, { favoriten: sterne = [], ausgeblendet: aus = [], suche = '' } = {}) {
+  const versteckt = new Set(aus);
+  const istVersteckt = (v) => v.eingebaut && versteckt.has(v.id);
+  const sichtbar = vorlagen.filter((v) => !istVersteckt(v));
+  const nachName = (a, b) => a.name.localeCompare(b.name, 'de');
+  const wort = suche.trim().toLocaleLowerCase('de');
+  const treffer = sichtbar.filter((v) => !wort || v.name.toLocaleLowerCase('de').includes(wort));
+
+  const stern = new Set(sterne);
+  const ohneStern = treffer.filter((v) => !stern.has(v.id));
+  const gruppen = [...KATEGORIEN, { id: null, name: OHNE_KATEGORIE }]
+    .map((k) => ({ ...k, vorlagen: ohneStern.filter((v) => (v.kategorie ?? null) === k.id).sort(nachName) }))
+    .filter((g) => g.vorlagen.length > 0);
+
+  return {
+    favoriten: treffer.filter((v) => stern.has(v.id)).sort(nachName),
+    gruppen,
+    ausgeblendet: vorlagen.filter(istVersteckt).sort(nachName),
+    anzahl: sichtbar.length,
+  };
 }
 
 /** Nur die eigenen (gespeicherten) Vorlagen – z. B. zum Teilen und Sichern. */
@@ -73,7 +176,10 @@ export function uebernehmeVorlagen(speicher, vorlagen, { alsKopie = false } = {}
   const ergebnis = { neu: 0, aktualisiert: 0, uebersprungen: 0, fehler: 0 };
   for (const v of vorlagen) {
     if (alsKopie) {
-      const kopie = speichereEigeneVorlage(speicher, { name: `${v.name} (Kopie)`, teig: v.teig, mehl: v.mehl, teiglinge: v.teiglinge });
+      const kopie = speichereEigeneVorlage(speicher, {
+        name: `${v.name} (Kopie)`, teig: v.teig, mehl: v.mehl, teiglinge: v.teiglinge,
+        modus: modusVon(v), kategorie: v.kategorie,
+      });
       ergebnis[kopie ? 'neu' : 'fehler']++;
       continue;
     }
@@ -87,19 +193,21 @@ export function uebernehmeVorlagen(speicher, vorlagen, { alsKopie = false } = {}
 }
 
 /**
- * Liefert { teig, mehl, teiglinge } als frische Kopie, damit Änderungen die Vorlage nicht verändern.
+ * Liefert { teig, mehl, teiglinge, modus, kategorie } als frische Kopie,
+ * damit Änderungen die Vorlage nicht verändern.
  * teiglinge ist null, wenn die Vorlage keine Teiglinge-Angabe hat.
  */
 export function ladeVorlage(vorlage) {
+  const gemeinsam = {
+    teiglinge: bereinigeTeiglinge(vorlage.teiglinge),
+    modus: modusVon(vorlage),
+    kategorie: bereinigeKategorie(vorlage.kategorie),
+  };
   if (vorlage.rezept) {
     const { teig, mehl } = teigAusGramm(vorlage.rezept);
-    return { teig: { ...teig, format: FORMAT }, mehl, teiglinge: bereinigeTeiglinge(vorlage.teiglinge) };
+    return { teig: { ...teig, zusaetze: [], format: FORMAT }, mehl, ...gemeinsam };
   }
-  return {
-    teig: normalisiereTeig(vorlage.teig),
-    mehl: vorlage.mehl,
-    teiglinge: bereinigeTeiglinge(vorlage.teiglinge),
-  };
+  return { teig: normalisiereTeig(vorlage.teig), mehl: vorlage.mehl, ...gemeinsam };
 }
 
 /**
@@ -117,17 +225,28 @@ export function bereinigeTeiglinge(roh) {
   return { anzahl, gewicht, verlust };
 }
 
-/** Speichert eine eigene Vorlage (neu ohne id, sonst Änderung). Gibt sie zurück oder null. */
-export function speichereEigeneVorlage(speicher, { id, name, teig, mehl, teiglinge = null }) {
+/**
+ * Speichert eine eigene Vorlage (neu ohne id, sonst Änderung). Gibt sie zurück oder null.
+ * Ohne Modus gilt: mit Teiglinge-Angabe Teiglinge-Modus, sonst Mehl-Modus.
+ * Die Teiglinge-Angabe wird nur im Teiglinge-Modus gespeichert – so verstehen auch
+ * ältere App-Stände (ohne Modus) die Vorlage richtig.
+ */
+export function speichereEigeneVorlage(speicher, { id, name, teig, mehl, teiglinge = null, modus, kategorie = null }) {
   const angabe = bereinigeTeiglinge(teiglinge);
+  const art = MODI.includes(modus) ? modus : angabe ? 'teiglinge' : 'mehl';
+  const mitAngabe = art === 'teiglinge' ? angabe ?? { ...STANDARD_TEIGLINGE } : null;
+  const gruppe = bereinigeKategorie(kategorie);
   return speicher.speichere(SAMMLUNG, {
     ...(id ? { id } : {}),
     name: name.trim(),
     teig: structuredClone(teig),
     mehl,
-    ...(angabe ? { teiglinge: angabe } : {}), // ohne Angabe: Feld fehlt, wie bei alten Vorlagen
+    modus: art,
+    ...(gruppe ? { kategorie: gruppe } : {}),
+    ...(mitAngabe ? { teiglinge: mitAngabe } : {}), // ohne Angabe: Feld fehlt, wie bei alten Vorlagen
   });
 }
+
 
 export function loescheEigeneVorlage(speicher, id) {
   return speicher.loesche(SAMMLUNG, id);
@@ -153,6 +272,7 @@ export function istGueltigerTeig(teig) {
 export function normalisiereTeig(teig) {
   const kopie = structuredClone(teig);
   kopie.saaten = Array.isArray(kopie.saaten) ? kopie.saaten : [];
+  kopie.zusaetze = bereinigeZusaetze(kopie.zusaetze);
   if (kopie.format === FORMAT) return kopie;
 
   kopie.mehlsorten = kopie.mehlsorten.map((s) => ({ ...s, id: s.id ?? idNachName(MEHLE, s.name) }));
@@ -161,4 +281,21 @@ export function normalisiereTeig(teig) {
   kopie.quellwasser = (saatenProzent * (kopie.quellwasser || 0)) / 100;
   kopie.format = FORMAT;
   return kopie;
+}
+
+/**
+ * Zusatzzutaten (Milch, Ei …) prüfen: nur Zeilen mit Namen, Prozent ≥ 0 und Wasseranteil 0–100 %.
+ * Ältere Teige haben keine – dann eine leere Liste.
+ */
+export function bereinigeZusaetze(liste) {
+  if (!Array.isArray(liste)) return [];
+  const zahl = (x, max) => (typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= max ? x : null);
+  return liste
+    .filter((z) => z && typeof z.name === 'string' && z.name.trim() && zahl(z.prozent, 100_000) !== null)
+    .map((z) => ({
+      id: typeof z.id === 'string' ? z.id : null,
+      name: z.name,
+      prozent: z.prozent,
+      wasser: zahl(z.wasser, 100) ?? 0,
+    }));
 }

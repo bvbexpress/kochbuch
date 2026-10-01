@@ -1,22 +1,135 @@
 /* teig.css – Design des Teigrechners */
 
-/* ---------- Vorlagen-Knöpfe ---------- */
-.vorlagen {
+/* ---------- Startseite: Vorlagenliste ---------- */
+.gruppe-titel {
+  margin: 8px 0 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-leise);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.vorlagen-gruppen {
+  display: grid;
+  gap: var(--abstand);
+}
+
+.vorlagen-liste {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--flaeche);
+  border: 1px solid var(--linie);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* Zeile: Name und Kurzinfo (antippen = öffnen) | Stern */
+.vorlage-zeile {
+  display: grid;
+  grid-template-columns: 1fr var(--tipp-hoehe);
+  align-items: stretch;
+}
+
+.vorlage-zeile + .vorlage-zeile {
+  border-top: 1px solid var(--linie);
+}
+
+.vorlage-oeffnen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 64px;
+  padding: 8px var(--abstand);
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.vorlage-oeffnen:active {
+  background: color-mix(in srgb, var(--akzent) 10%, transparent);
+}
+
+.vorlage-name {
+  font-weight: 600;
+}
+
+.vorlage-oeffnen small {
+  font-size: 0.85rem;
+  color: var(--text-leise);
+}
+
+.stern {
+  border: 0;
+  background: none;
+  color: var(--akzent);
+  font-size: 1.6rem;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.suche {
+  font-size: 1.1rem;
+  text-align: left;
+}
+
+.zeile.zeile-einblenden {
+  grid-template-columns: 1fr auto;
+}
+
+/* ---------- Rechner ---------- */
+.geaendert {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--akzent);
+}
+
+.geaendert[hidden],
+.knopf[hidden] {
+  display: none;
+}
+
+/* Teiglinge-Modus: Anzahl und Gewicht nebeneinander */
+.teiglinge-felder {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
-.vorlage {
-  padding: 8px 12px;
-  line-height: 1.2;
-  font-size: 1rem;
-  hyphens: auto;
+/* Karte „Vorlage speichern“ */
+.speichern {
+  display: grid;
+  gap: 12px;
+  border: 2px solid var(--akzent);
 }
 
-.vorlage[aria-pressed="true"] {
-  background: var(--akzent);
-  color: var(--akzent-text);
+.speichern .karte-titel,
+.speichern .aktionen {
+  margin: 0;
+  padding: 0;
+}
+
+.speichern .umschaltgruppe {
+  margin: 0;
+}
+
+.speichern p.feld-name {
+  margin: 0 0 -8px;
+}
+
+.eingabe-text {
+  font-size: 1.1rem;
+}
+
+.klappe-inhalt > .aktionen {
+  margin-top: 12px;
+  padding-bottom: 0;
 }
 
 /* ---------- Eingabe mit Einheit dahinter ("g", "%") ---------- */

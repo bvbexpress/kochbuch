@@ -7,7 +7,8 @@ Homescreen hinzufügen kann und die auch offline funktioniert.
 
 ## Etappen
 
-1. **Teigrechner** – Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, offline nutzbar
+1. **Teigrechner** – Bäckerprozente, Mehlmischungen, Starter, Quellstück, Zusatzzutaten,
+   Vorlagenliste mit Kategorien und Favoriten, offline nutzbar
 2. **Rezeptsammlung** *(später)*
 3. **Vorratsverwaltung** mit Sync zwischen zwei Handys *(später)*
 

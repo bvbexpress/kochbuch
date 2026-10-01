@@ -10,7 +10,14 @@
 // WICHTIG: Ein Link kann von jedem stammen. Eingelesen wird darum nur, was wir
 // kennen und prüfen können (`bereinige…`) – alles andere wird verworfen.
 
-import { istGueltigerTeig, normalisiereTeig, bereinigeTeiglinge } from './vorlagen.js';
+import {
+  istGueltigerTeig,
+  normalisiereTeig,
+  bereinigeTeiglinge,
+  bereinigeKategorie,
+  modusVon,
+  MODI,
+} from './vorlagen.js';
 
 const VERSION = 1;
 const MARKE = 'teilen=';
@@ -38,6 +45,8 @@ export async function erstelleLink(vorlagen, basis) {
       mehl: v.mehl,
       teig: normalisiereTeig(v.teig),
       geaendert: v.geaendert,
+      modus: modusVon(v),
+      ...(bereinigeKategorie(v.kategorie) ? { kategorie: v.kategorie } : {}),
       ...(bereinigeTeiglinge(v.teiglinge) ? { teiglinge: bereinigeTeiglinge(v.teiglinge) } : {}),
     })),
   };
@@ -98,7 +107,15 @@ export function bereinigeVorlage(v, jetzt = Date.now()) {
     : 0;
   // Teiglinge-Angabe ist optional: fehlt sie oder ist sie unbrauchbar, bleibt die Vorlage trotzdem gültig
   const teiglinge = bereinigeTeiglinge(v.teiglinge);
-  return { id: v.id.toLowerCase(), name, mehl, teig, geaendert, ...(teiglinge ? { teiglinge } : {}) };
+  // Kategorie und Modus sind optional (ältere Links): Unbekanntes fällt einfach weg
+  const kategorie = bereinigeKategorie(v.kategorie);
+  const modus = MODI.includes(v.modus) ? v.modus : null;
+  return {
+    id: v.id.toLowerCase(), name, mehl, teig, geaendert,
+    ...(teiglinge ? { teiglinge } : {}),
+    ...(kategorie ? { kategorie } : {}),
+    ...(modus ? { modus } : {}),
+  };
 }
 
 function bereinigeTeig(roh) {
@@ -106,9 +123,11 @@ function bereinigeTeig(roh) {
   const teig = normalisiereTeig(roh);
   const mehlsorten = zeilen(teig.mehlsorten, 'anteil');
   const saaten = zeilen(teig.saaten, 'prozent');
+  // Ungeprüft aus dem Link, nicht aus normalisiereTeig (das würde Unsinn still reparieren)
+  const zusaetze = zusatzZeilen(roh.zusaetze ?? []);
   const zahlen = ['hydration', 'starter', 'salz', 'oel', 'hefe'].map((k) => zahl(teig[k]));
   const quellwasser = teig.quellwasser === undefined ? 0 : zahl(teig.quellwasser, -MAX_ZAHL);
-  if (!mehlsorten || !saaten || quellwasser === null || zahlen.includes(null)) return null;
+  if (!mehlsorten || !saaten || !zusaetze || quellwasser === null || zahlen.includes(null)) return null;
   const [hydration, starter, salz, oel, hefe] = zahlen;
   return {
     format: teig.format,
@@ -117,7 +136,17 @@ function bereinigeTeig(roh) {
     mehlsorten,
     saaten,
     quellwasser,
+    zusaetze,
   };
+}
+
+/** Zusatzzutaten: wie Saaten, dazu der Wasseranteil (0–100 %). */
+function zusatzZeilen(liste) {
+  const sauber = zeilen(liste, 'prozent');
+  if (!sauber) return null;
+  const wasser = liste.map((z) => zahl(z?.wasser));
+  if (wasser.some((w) => w === null || w > 100)) return null;
+  return sauber.map((z, i) => ({ ...z, wasser: wasser[i] }));
 }
 
 /** Mehlsorten bzw. Saaten: nur id, Name und ein Zahlenwert; null bei Unsinn. */
