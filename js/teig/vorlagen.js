@@ -18,11 +18,14 @@ const FORMAT = 2;
 
 const SAMMLUNG = 'teigvorlagen';
 
-/** Kategorien in der Reihenfolge der Vorlagenliste. */
+/**
+ * Kategorien in der Reihenfolge der Vorlagenliste.
+ * teiglinge: Vorbelegung für neue Vorlagen – mit Angabe Teiglinge-Modus, ohne Mehl-Modus.
+ */
 export const KATEGORIEN = [
   { id: 'brot', name: 'Brot' },
-  { id: 'broetchen', name: 'Brötchen' },
-  { id: 'pizza', name: 'Pizza' },
+  { id: 'broetchen', name: 'Brötchen', teiglinge: { anzahl: 8, gewicht: 85 } },
+  { id: 'pizza', name: 'Pizza', teiglinge: { anzahl: 4, gewicht: 250 } },
   { id: 'focaccia', name: 'Focaccia' },
   { id: 'gebaeck', name: 'Gebäck' },
 ];
@@ -32,6 +35,14 @@ export const SUCHE_AB = 10; // ab so vielen sichtbaren Vorlagen gibt es eine Suc
 
 /** Startwerte im Teiglinge-Modus, wenn noch nichts eingestellt ist. */
 export const STANDARD_TEIGLINGE = { anzahl: 4, gewicht: 250, verlust: STANDARD_VERLUST };
+
+/** Ausgangsbasis „leer“ für eine neue Vorlage: nur Mehl, Wasser, Salz. */
+export const LEERER_TEIG = {
+  hydration: 65, starter: 0, salz: 2, oel: 0, hefe: 0, hefeArt: 'frisch',
+  mehlsorten: [{ id: 'weizen550', name: 'Weizen 550', anteil: 100 }],
+  saaten: [], quellwasser: 0, zusaetze: [], format: FORMAT,
+};
+export const LEERES_MEHL = 500; // g zugegebenes Mehl
 
 // Geräte-Einstellungen
 const FAVORITEN = 'teig.favoriten';
@@ -98,6 +109,38 @@ export function bereinigeKategorie(kategorie) {
 export function modusVon(vorlage) {
   if (MODI.includes(vorlage?.modus)) return vorlage.modus;
   return bereinigeTeiglinge(vorlage?.teiglinge) ? 'teiglinge' : 'mehl';
+}
+
+// ---------- Neue Vorlage ----------
+
+/**
+ * Vorbelegung je Kategorie: { modus, teiglinge }.
+ * Pizza und Brötchen in Teiglingen (4 × 250 g bzw. 8 × 85 g), alles andere in Mehl.
+ */
+export function vorbelegung(kategorie) {
+  const tl = KATEGORIEN.find((k) => k.id === kategorie)?.teiglinge;
+  return tl
+    ? { modus: 'teiglinge', teiglinge: { ...tl, verlust: STANDARD_VERLUST } }
+    : { modus: 'mehl', teiglinge: null };
+}
+
+/**
+ * Daten für eine neue eigene Vorlage (zum Speichern mit `speichereEigeneVorlage`).
+ * basis: eine bestehende Vorlage als Kopiervorlage, oder null für „leer“.
+ * Die Teiglinge-Werte kommen aus der Basis, wenn sie welche hat, sonst aus der Kategorie.
+ */
+export function neueVorlage({ name, kategorie = null, modus, basis = null }) {
+  const geladen = basis ? ladeVorlage(basis) : null;
+  const gruppe = bereinigeKategorie(kategorie);
+  const vor = vorbelegung(gruppe);
+  return {
+    name: name.trim(),
+    kategorie: gruppe,
+    modus: MODI.includes(modus) ? modus : vor.modus,
+    teig: geladen ? geladen.teig : structuredClone(LEERER_TEIG),
+    mehl: geladen ? geladen.mehl : LEERES_MEHL,
+    teiglinge: geladen?.teiglinge ?? vor.teiglinge ?? { ...STANDARD_TEIGLINGE },
+  };
 }
 
 // ---------- Vorlagenliste (Startseite) ----------
