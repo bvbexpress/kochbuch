@@ -10,8 +10,8 @@ Der Nutzer ist Anfänger und arbeitet nur in der Cloud: Erklärungen knapp halte
 Reihenfolge der Etappen ist fest. **Nichts aus einer späteren Etappe vorab bauen**, nur die Datenmodelle so wählen, dass sie passen.
 
 ### Etappe 1 – Teigrechner abschließen *(Schritte 1–6 und 11 fertig; offen: 7 → 8 → 9 → 10)*
-Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link. Die Schritte 7–10 (u. a. Starter-Auffrischung,
-Teigmenge aus Teiglingen, Installierbarkeit/Offline, Bildschirm-an) werden vor Etappe 2 abgeschlossen.
+Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link. Die Schritte 7–10 werden vor Etappe 2 abgeschlossen.
+Hinweis: Installierbarkeit (Manifest) und Offline-Betrieb (Service Worker) fehlen im Repo noch – spätestens hier einplanen.
 
 ### Etappe 2 – Gemeinsame Daten
 - Anmeldung und Sync zwischen zwei iPhones über eine Datenbank (Cloud, von GitHub Pages aus per `fetch` erreichbar).
