@@ -5,13 +5,44 @@ Nutzer: zwei iPhones mit iOS 26, Nutzung **nur als Homescreen-Web-App**.
 Veröffentlichung über GitHub Pages aus `main`: https://bvbexpress.github.io/kochbuch/ – **das Repo ist öffentlich**.
 Der Nutzer ist Anfänger und arbeitet nur in der Cloud: Erklärungen knapp halten.
 
-## Etappen
+## Fahrplan
 
-1. **Teigrechner** – Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen *(in Arbeit, Schritte 1–6 und 11 fertig)*
-2. **Rezeptsammlung** *(später)*
-3. **Vorratsverwaltung** mit Sync zwischen zwei Handys *(später)*
+Reihenfolge der Etappen ist fest. **Nichts aus einer späteren Etappe vorab bauen**, nur die Datenmodelle so wählen, dass sie passen.
 
-Reihenfolge der restlichen Schritte: **7 → 8 → 9 → 10** (Schritt 11, Link teilen, ist fertig).
+### Etappe 1 – Teigrechner abschließen *(Schritte 1–6 und 11 fertig; offen: 7 → 8 → 9 → 10)*
+Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link. Die Schritte 7–10 (u. a. Starter-Auffrischung,
+Teigmenge aus Teiglingen, Installierbarkeit/Offline, Bildschirm-an) werden vor Etappe 2 abgeschlossen.
+
+### Etappe 2 – Gemeinsame Daten
+- Anmeldung und Sync zwischen zwei iPhones über eine Datenbank (Cloud, von GitHub Pages aus per `fetch` erreichbar).
+- Persönliche Daten liegen **nur dort**, nie im Repo. Im Code stehen höchstens öffentliche Projekt-Schlüssel, der Schutz
+  läuft über Anmeldung und Zugriffsregeln der Datenbank (nur die zwei Konten sehen die Daten).
+- Die eigenen Vorlagen ziehen mit um (Datenmodell mit `id`/`geaendert`/`geloescht` ist dafür schon da).
+  Eigene Mehle/Saaten samt Wasserwerten werden hier mit synchronisiert.
+- App bleibt **offline nutzbar** (lokal speichern, später abgleichen). Teilen per Link bleibt als Sicherung.
+- Vor dem Bauen klären: Anbieter der Datenbank, Anmeldeweg, und wie das zu „keine Frameworks/Pakete“ passt (nur `fetch`, kein SDK).
+
+### Etappe 3 – Rezepte
+- Rezepte mit **Personenanzahl** und automatischer Mengenanpassung.
+- Zutaten strukturiert: **Menge, Einheit, Zutat**, mit **Skalierungsregel je Zutat**: linear, auf ganze Stück runden, nicht skalieren.
+- Anleitung **Schritt für Schritt, kurz und kleinteilig**.
+- Teigrechner-Vorlagen und Rezepte nutzen dieselben Zutaten (siehe Zutatennamen).
+
+### Etappe 4 – Gemeinsamer Vorrat
+- Manuelle Pflege, auch **grobe Zustände** (voll / halb / fast leer) statt nur Mengen.
+- Abzug beim Kochen eines Rezepts.
+- Funktion **„Was kann ich kochen?“** aus den eigenen Rezepten.
+- Knopf **„Vorrat kopieren“** (Text zum Einfügen in Claude).
+
+### Etappe 5 – Foto- und Kassenbon-Erkennung *(optional)*
+Über die Claude-API mit einem **eigenen kleinen Server** (der API-Schlüssel darf nie in die App oder ins Repo).
+Läuft nur bei Bedarf, die App funktioniert auch ohne.
+
+### Zutatennamen einheitlich
+Teigrechner, Rezepte und Vorrat müssen später zusammenpassen. Darum gibt es **einen gemeinsamen Zutatenkatalog**
+(Datensatz mit `id`, Name, Art, ggf. Einheit/Umrechnung), auf den alle Bereiche per `id` verweisen – nicht per Freitext.
+Der Katalog entsteht **in Etappe 2/3**, die Mehle und Saaten in `zutaten.js` (haben schon `id`s) sind der Anfang.
+Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Namen anlegen, Namen nicht doppeln.
 
 ## Technik-Vorgaben
 
