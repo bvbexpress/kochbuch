@@ -39,6 +39,8 @@ import {
   MODI,
   SUCHE_AB,
   STANDARD_TEIGLINGE,
+  vorbelegung,
+  neueVorlage,
 } from './vorlagen.js';
 import { erstelleLink, liesLink, hatTeilenCode } from './teilen.js';
 import {
@@ -85,6 +87,7 @@ let zustand = null;
 let katalog;  // { mehle, saaten, zusaetze, wasserVon, verhaeltnisVon, art } – aus den Einstellungen
 let suche = ''; // Suchtext der Vorlagenliste
 let speicherKarte = null; // offene Karte „Speichern“: { name, kategorie, zurueck }
+let neuKarte = null; // offene Karte „Neue Vorlage“: { name, kategorie, modus, basis } – basis = id oder ''
 const offeneKlappen = new Set(); // welche einklappbaren Bereiche offen sind
 let paket = null;   // erhaltene Vorlagen aus einem Link, wartet auf „Übernehmen“: { vorlagen, verworfen, link }
 let aufHinweis = null; // einmaliger Hinweis in der Starter-Auffrischung
@@ -193,6 +196,7 @@ function aktuelleVorlage() {
 function zeige(neu) {
   ansicht = neu;
   if (neu === 'liste') speicherKarte = null;
+  if (neu === 'rechner') neuKarte = null;
   zeichne();
   window.scrollTo(0, 0);
 }
@@ -217,8 +221,10 @@ function zeichneListe() {
     <header class="seiten-kopf"><h1 class="kopf-titel">Kochbuch</h1></header>
     ${meldungHtml()}
     ${paket ? uebernahmeKarte() : ''}
+    ${neuKarte ? neuKarteHtml() : ''}
     ${ordnung.anzahl >= SUCHE_AB || suche ? suchfeldHtml(suche) : ''}
     <div class="vorlagen-gruppen" data-liste>${listeHtml(ordnung)}</div>
+    ${neuKarte ? '' : '<button type="button" class="knopf knopf-voll" data-aktion="neu-karte">+ Neue Vorlage</button>'}
     ${teilenKlappe()}
     ${einstellungenKlappe()}`;
 }
@@ -243,6 +249,60 @@ function listeHtml(ordnung) {
 function zeichneListeNeu() {
   const ziel = wurzel.querySelector('[data-liste]');
   if (ziel) ziel.innerHTML = listeHtml(ordnungJetzt());
+}
+
+/** Karte „Neue Vorlage“: Name, Kategorie, Modus (vorbelegt nach Kategorie), Ausgangsbasis. */
+function neuKarteHtml() {
+  const k = neuKarte;
+  const kategorien = [...KATEGORIEN, { id: '', name: OHNE_KATEGORIE }]
+    .map((x) => `<option value="${x.id}" ${(k.kategorie ?? '') === x.id ? 'selected' : ''}>${text(x.name)}</option>`)
+    .join('');
+  const basen = alleVorlagen(speicher)
+    .sort((a, b) => a.name.localeCompare(b.name, 'de'))
+    .map((v) => `<option value="${text(v.id)}" ${k.basis === v.id ? 'selected' : ''}>Kopie von „${text(v.name)}“</option>`)
+    .join('');
+  const tl = k.modus === 'teiglinge';
+  return `<section class="karte speichern" aria-label="Neue Vorlage">
+      <h2 class="karte-titel">Neue Vorlage</h2>
+      <label class="feld"><span class="feld-name">Name</span>
+        <input class="eingabe eingabe-text" data-nk="name" autocomplete="off" maxlength="80" value="${text(k.name)}"></label>
+      <label class="feld"><span class="feld-name">Kategorie</span>
+        <select class="eingabe auswahl" data-nk="kategorie">${kategorien}</select></label>
+      <p class="feld-name">Menge angeben als</p>
+      <div class="umschaltgruppe" role="group" aria-label="Menge angeben als">
+        <button type="button" class="knopf" data-aktion="nk-modus" data-modus="mehl" aria-pressed="${!tl}">Mehl</button>
+        <button type="button" class="knopf" data-aktion="nk-modus" data-modus="teiglinge" aria-pressed="${tl}">Teiglinge</button>
+      </div>
+      <label class="feld"><span class="feld-name">Ausgangsbasis</span>
+        <select class="eingabe auswahl" data-nk="basis">
+          <option value="" ${k.basis ? '' : 'selected'}>Leer (Mehl, Wasser, Salz)</option>${basen}
+        </select></label>
+      <div class="aktionen">
+        <button type="button" class="knopf knopf-voll" data-aktion="nk-anlegen">Anlegen und öffnen</button>
+        <button type="button" class="knopf knopf-leise" data-aktion="nk-abbrechen">Abbrechen</button>
+      </div>
+    </section>`;
+}
+
+function oeffneNeuKarte() {
+  neuKarte = { name: '', kategorie: 'brot', modus: vorbelegung('brot').modus, basis: '' };
+  zeichne();
+  window.scrollTo(0, 0);
+  wurzel.querySelector('[data-nk="name"]')?.focus();
+}
+
+/** Neue Vorlage speichern und direkt im Rechner öffnen. */
+function legeNeueVorlageAn() {
+  const name = neuKarte.name.trim();
+  if (!name) {
+    window.alert('Bitte einen Namen für die Vorlage eingeben.');
+    return wurzel.querySelector('[data-nk="name"]')?.focus();
+  }
+  const basis = neuKarte.basis ? alleVorlagen(speicher).find((v) => v.id === neuKarte.basis) ?? null : null;
+  const gespeichert = speichereEigeneVorlage(speicher, neueVorlage({ ...neuKarte, name, basis }));
+  if (!gespeichert) return meldeFehler();
+  const vorlage = alleVorlagen(speicher).find((v) => v.id === gespeichert.id);
+  ladeUndZeige(vorlage, `„${name}“ angelegt.`);
 }
 
 function oeffneVorlage(id) {
@@ -769,6 +829,10 @@ function beiEingabe(ereignis) {
     suche = ziel.value;
     return zeichneListeNeu();
   }
+  if (ziel.dataset.nk === 'name' && neuKarte) {
+    neuKarte.name = ziel.value;
+    return;
+  }
   if (ziel.dataset.sp === 'name' && speicherKarte) {
     speicherKarte.name = ziel.value;
     return;
@@ -856,6 +920,16 @@ function aendereEinstellung(feld) {
 
 function beiAuswahl(ereignis) {
   const ziel = ereignis.target;
+  if (ziel.dataset.nk === 'kategorie' && neuKarte) {
+    // Modus folgt der Kategorie (Pizza/Brötchen: Teiglinge) – danach frei umschaltbar
+    neuKarte.kategorie = bereinigeKategorie(ziel.value);
+    neuKarte.modus = vorbelegung(neuKarte.kategorie).modus;
+    return zeichne();
+  }
+  if (ziel.dataset.nk === 'basis' && neuKarte) {
+    neuKarte.basis = ziel.value;
+    return;
+  }
   if (ziel.dataset.sp === 'kategorie' && speicherKarte) {
     speicherKarte.kategorie = bereinigeKategorie(ziel.value);
     return;
@@ -939,6 +1013,16 @@ function beiKlick(ereignis) {
   const knopf = ziel.closest('[data-aktion]');
   const aktion = knopf?.dataset.aktion;
   if (aktion === 'zurueck') zurueck();
+  if (aktion === 'neu-karte') oeffneNeuKarte();
+  if (aktion === 'nk-modus' && neuKarte && MODI.includes(knopf.dataset.modus)) {
+    neuKarte.modus = knopf.dataset.modus;
+    zeichne();
+  }
+  if (aktion === 'nk-anlegen') legeNeueVorlageAn();
+  if (aktion === 'nk-abbrechen') {
+    neuKarte = null;
+    zeichne();
+  }
   if (aktion === 'mehl-weg') entferneMehl(Number(knopf.dataset.index));
   if (aktion === 'saat-weg') entferneSaat(Number(knopf.dataset.index));
   if (aktion === 'zusatz-weg') entferneZusatz(Number(knopf.dataset.index));

@@ -32,6 +32,10 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   Ohne `modus` (alt): Teiglinge-Angabe vorhanden = Teiglinge-Modus. Teiglinge-Angabe nur im Teiglinge-Modus gespeichert.
 - **Speichern:** Nur echte Rezeptänderungen zählen als „geändert“ (nicht Mehl, Anzahl, Gewicht). Karte mit Name,
   Kategorie, Modus: „Vorlage aktualisieren“ (nur eigene) oder „Als neue speichern“; bei „Zurück“ zusätzlich „Verwerfen“.
+- **„+ Neue Vorlage“** (unter der Liste): Karte mit Name, Kategorie, Modus (vorbelegt nach Kategorie:
+  Pizza 4 × 250 g, Brötchen 8 × 85 g in Teiglingen, sonst Mehl; `vorbelegung`) und Ausgangsbasis
+  (leer = `LEERER_TEIG`: Weizen 550, 65 % Wasser, 2 % Salz, 500 g – oder Kopie einer Vorlage; `neueVorlage`).
+  Wird sofort gespeichert und im Rechner geöffnet.
 - Eingebaute Vorlagen ausblendbar. **Favoriten und Ausgeblendet sind Geräte-Einstellungen** (nicht im Link, nicht im Sync).
 - **Zusatzzutaten** (Milch, Ei, Butter, Zucker, Honig, eigene) in % vom Gesamtmehl, siehe Rechenregeln.
 
