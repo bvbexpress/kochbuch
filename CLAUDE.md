@@ -23,6 +23,18 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   alles inkl. `index.html` aus dem Cache für sofortigen Start, Update-Hinweis in der App). Alle Pfade relativ wegen `/kochbuch/`.
 - **Schritt 10 – Bildschirm bleibt an**, solange die App offen ist (Wake Lock, nach Rückkehr in die App erneut anfordern).
 
+### Schritt 12 – Vorlagen ausbauen *(fertig)*
+- **Startseite = Vorlagenliste**, gruppiert nach Kategorien (Brot, Brötchen, Pizza, Focaccia, Gebäck; alte eigene
+  Vorlagen ohne Kategorie unter „Ohne Kategorie“ am Ende), Favoriten (Stern) oben, Suche ab 10 Vorlagen.
+  Zeile zeigt dieselben Werte wie der Rechner (`zusammenfassung` in `startseite.js`).
+- Ein Tipper öffnet den **Rechner**: Name als Überschrift, Zurück-Pfeil. Beim App-Start direkt die zuletzt benutzte Vorlage.
+- **Modus je Vorlage** (`modus`: `mehl` | `teiglinge`), nur in der Klappe „Vorlage“ bzw. beim Speichern änderbar.
+  Ohne `modus` (alt): Teiglinge-Angabe vorhanden = Teiglinge-Modus. Teiglinge-Angabe nur im Teiglinge-Modus gespeichert.
+- **Speichern:** Nur echte Rezeptänderungen zählen als „geändert“ (nicht Mehl, Anzahl, Gewicht). Karte mit Name,
+  Kategorie, Modus: „Vorlage aktualisieren“ (nur eigene) oder „Als neue speichern“; bei „Zurück“ zusätzlich „Verwerfen“.
+- Eingebaute Vorlagen ausblendbar. **Favoriten und Ausgeblendet sind Geräte-Einstellungen** (nicht im Link, nicht im Sync).
+- **Zusatzzutaten** (Milch, Ei, Butter, Zucker, Honig, eigene) in % vom Gesamtmehl, siehe Rechenregeln.
+
 ## Offline und Updates (Schritt 9/10)
 
 - `sw.js` (Service Worker) cacht alle Dateien aus `DATEIEN`. **Neue Datei der App → dort eintragen.**
@@ -96,8 +108,8 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 | `css/basis.css` | Farben (hell/dunkel), Schrift, Knöpfe, Felder |
 | `css/<bereich>.css` | Design eines Bereichs (z. B. `teig.css`) |
 | `js/app.js` | Start und (später) Navigation |
-| `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock) |
-| `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js`, `zutaten.js` (Mehle/Saaten), `teilen.js` (Teilen-Link), `ansicht.js` (Oberfläche) |
+| `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock) |
+| `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js` (inkl. Kategorien, Ordnen der Liste), `zutaten.js` (Mehle/Saaten/Zusatzzutaten), `teilen.js` (Teilen-Link), `startseite.js` (HTML der Vorlagenliste), `ansicht.js` (Oberfläche, Navigation) |
 | `tests/` | Tests (`*.test.js`) |
 
 `js/rezepte/`, `js/vorrat/` erst anlegen, wenn dort Code entsteht.
@@ -111,6 +123,10 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 - Mehlsorten-Anteile beziehen sich auf das zugegebene Mehl (Summe 100 %).
 - Quellstück: Saaten und Quellwasser in % vom Gesamtmehl; Quellwasser zählt nicht zur Hydration.
 - Hefe mit Umschalter Frisch/Trocken: Trocken = Frisch ÷ 3.
+- Zusatzzutaten: in % vom Gesamtmehl, jede mit Wasseranteil (Milch 87, Ei 75, Butter 16, Honig 17, Zucker 0 %).
+  Ihr Wasser zählt zur Hydration wie das Starter-Wasser: zugegebenes Wasser = Gesamtwasser − Starter-Wasser − Zusatz-Wasser.
+  Der Wasseranteil steht in der Zutat im Teig (`teig.zusaetze`), damit die Vorlage überall gleich rechnet.
+  Keine Korrektur für die festigende Wirkung von Ei/Butter – die Hydration stellt man nach Gefühl ein.
 - Starter-Auffrischung mit frei einstellbarem Verhältnis Anstellgut:Mehl:Wasser (z. B. 1:1,5:1,5 oder 1:2,5:2,5).
 - Anzeige: Gramm auf ganze Gramm gerundet, Prozente mit einer Nachkommastelle.
 - Mehlwasser: Jedes Mehl hat eine Wasseraufnahme (%). Beim Tauschen/Mischen wird die Hydration um den
@@ -140,14 +156,16 @@ Gespeicherte Daten beim Laden immer auf Gültigkeit prüfen.
 - Übernahme mit id und `geaendert` des Absenders, **neuere Version gewinnt** (`speicher.uebernimm`); sonst Angebot „als Kopie“.
 - **iOS:** Ein Link öffnet in Safari, nie in der Homescreen-App, und Safari/Homescreen-App haben getrennte Speicher.
   Darum im Browser nur Vorschau + „Link kopieren“; übernommen wird in der App über „Teilen und Sichern → Link einfügen“.
-- Nicht enthalten: eigene Mehl-/Saatensorten und Wasserwerte (Einstellungen).
+- Enthalten seit Schritt 12: `kategorie`, `modus`, `teig.zusaetze`. Alte Links ohne diese Felder funktionieren weiter.
+- Nicht enthalten: eigene Mehl-/Saatensorten und Wasserwerte (Einstellungen), Favoriten, Ausgeblendet.
 
 ## Bedien-Anforderungen
 
 - **Sehr schnell:** sofortiger Start, offline nutzbar, keine unnötigen Bibliotheken.
 - **Küchentauglich:** große Schaltflächen (mind. **56 px**, `--tipp-hoehe`), mit einer Hand und Teig an den Fingern bedienbar.
 - **Live-Ergebnisse** beim Tippen, kein „Berechnen“-Knopf.
-- Häufigster Weg (Vorlage laden → Mehlmenge ändern → ablesen) in **höchstens zwei Tippern**.
+- Häufigster Weg (Vorlage laden → Mehlmenge ändern → ablesen) in **höchstens zwei Tippern**
+  (Vorlage in der Liste antippen → Menge eintippen; die zuletzt benutzte ist beim Start schon offen).
 - **Bildschirm bleibt an**, solange die App offen ist.
 - **Nur das Nötige sichtbar**, Zusatzoptionen einklappbar (`details.klappe`).
 - Zahlenfelder mit `inputmode="decimal"`, Komma und Punkt erlaubt; beim Antippen wird der Inhalt markiert.

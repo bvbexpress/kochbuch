@@ -1,7 +1,7 @@
-// zutaten.js – Mehlsorten und Saaten mit ihren Wasserwerten.
+// zutaten.js – Mehlsorten, Saaten und Zusatzzutaten mit ihren Wasserwerten.
 //
 // Eingebaute Sorten stehen hier im Code. Geänderte Werte und eigene Sorten
-// liegen im Speicher (Sammlungen "mehle" und "saaten") und werden später
+// liegen im Speicher (Sammlungen "mehle", "saaten", "zusaetze") und werden später
 // zwischen den Handys synchronisiert:
 // - Geänderter Standardwert: Datensatz mit der festen id der eingebauten Sorte
 // - Eigene Sorte: Datensatz mit neuer UUID
@@ -28,8 +28,21 @@ export const SAATEN = [
   { id: 'haferflocken', name: 'Haferflocken', verhaeltnis: 2 },
 ];
 
+/**
+ * Zusatzzutaten für angereicherte Teige. wasser = Wasseranteil in % – so viel
+ * davon zählt zur Hydration (wie das Wasser im Starter). Ei = Vollei ohne Schale.
+ */
+export const ZUSAETZE = [
+  { id: 'milch', name: 'Milch', wasser: 87 },
+  { id: 'ei', name: 'Ei', wasser: 75 },
+  { id: 'butter', name: 'Butter', wasser: 16 },
+  { id: 'zucker', name: 'Zucker', wasser: 0 },
+  { id: 'honig', name: 'Honig', wasser: 17 },
+];
+
 export const STANDARD_WASSER = 65;      // Startwert für eigene Mehle
 export const STANDARD_VERHAELTNIS = 1;  // Startwert für eigene Saaten
+export const STANDARD_ZUSATZ_WASSER = 0; // Startwert für eigene Zusatzzutaten
 
 function katalog(sammlung, eingebaut, wertName, standard) {
   const gueltig = (d) =>
@@ -74,6 +87,7 @@ function katalog(sammlung, eingebaut, wertName, standard) {
 
 export const mehle = katalog('mehle', MEHLE, 'wasser', STANDARD_WASSER);
 export const saaten = katalog('saaten', SAATEN, 'verhaeltnis', STANDARD_VERHAELTNIS);
+export const zusaetze = katalog('zusaetze', ZUSAETZE, 'wasser', STANDARD_ZUSATZ_WASSER);
 
 /** Nachschlage-Funktion id → Wert; Unbekanntes bekommt den Startwert. */
 export function werteVon(liste, wertName, standard) {

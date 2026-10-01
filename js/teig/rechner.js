@@ -13,6 +13,8 @@
 //   mehlsorten: [{ id: 'tipo00', name: 'Tipo 00', anteil: 100 }], // Anteile am zugegebenen Mehl, Summe 100
 //   saaten: [{ id: 'leinsamen', name: 'Leinsamen', prozent: 4.5 }], // Quellstück: Saaten in % vom Gesamtmehl
 //   quellwasser: 14.5,       // Quellwasser in % vom Gesamtmehl
+//   zusaetze: [{ id: 'milch', name: 'Milch', prozent: 20, wasser: 87 }], // in % vom Gesamtmehl,
+//                            // wasser = Wasseranteil in %; dieses Wasser zählt zur Hydration
 // }
 
 const TROCKENHEFE_FAKTOR = 3; // 3 g Frischhefe ≈ 1 g Trockenhefe
@@ -20,9 +22,21 @@ const TROCKENHEFE_FAKTOR = 3; // 3 g Frischhefe ≈ 1 g Trockenhefe
 /** Summe der Zutaten pro 1 g Gesamtmehl (ohne Mehl selbst). */
 function anteileProGrammMehl(teig) {
   const saatenProzent = summe((teig.saaten ?? []).map((s) => s.prozent));
+  // Das Wasser der Zusatzzutaten steckt schon in der Hydration – nur der Rest kommt dazu
+  const zusatzOhneWasser = summe(zusaetzeVon(teig).map((z) => z.prozent * (1 - z.wasser / 100)));
   return (
-    (teig.hydration + teig.salz + teig.oel + teig.hefe + saatenProzent + quellwasserProzent(teig)) / 100
+    (teig.hydration + teig.salz + teig.oel + teig.hefe + saatenProzent + quellwasserProzent(teig) +
+      zusatzOhneWasser) / 100
   );
+}
+
+/** Zusatzzutaten mit gültigem Wasseranteil (0–100 %). */
+function zusaetzeVon(teig) {
+  return (teig.zusaetze ?? []).map((z) => ({
+    ...z,
+    prozent: Math.max(z.prozent || 0, 0),
+    wasser: Math.min(Math.max(z.wasser || 0, 0), 100),
+  }));
 }
 
 /** Standard für den Verlust-Zuschlag im Teiglinge-Modus (% vom Teig). */
@@ -72,9 +86,19 @@ export function berechne(teig, gesamtmehl) {
   const starterMehl = starter / 2;
   const starterWasser = starter / 2;
 
+  const zusaetze = zusaetzeVon(teig).map((z) => ({
+    id: z.id,
+    name: z.name,
+    gramm: p(z.prozent),
+    wasser: (p(z.prozent) * z.wasser) / 100,
+  }));
+  const zusatzGesamt = summe(zusaetze.map((z) => z.gramm));
+  const zusatzWasser = summe(zusaetze.map((z) => z.wasser));
+
   const mehl = gesamtmehl - starterMehl;       // zugegebenes Mehl
   const wasserGesamt = p(teig.hydration);
-  const wasser = wasserGesamt - starterWasser; // zugegebenes Wasser
+  // zugegebenes Wasser: Starter und Zusatzzutaten (Milch, Ei …) bringen schon Wasser mit
+  const wasser = wasserGesamt - starterWasser - zusatzWasser;
 
   const hinweise = [];
   if (mehl < 0 || teig.starter >= 200) hinweise.push('starter-zu-viel');
@@ -90,7 +114,9 @@ export function berechne(teig, gesamtmehl) {
   const oel = p(teig.oel);
   const hefe = p(teig.hefe);
 
-  const teigGesamt = gesamtmehl + wasserGesamt + salz + oel + hefe + saatenGesamt + quellwasser;
+  // Das Wasser der Zusatzzutaten steckt schon in wasserGesamt, darum nicht doppelt zählen
+  const teigGesamt = gesamtmehl + wasserGesamt + salz + oel + hefe + saatenGesamt + quellwasser +
+    zusatzGesamt - zusatzWasser;
 
   return {
     gesamtmehl,
@@ -106,6 +132,8 @@ export function berechne(teig, gesamtmehl) {
     hefe,
     saaten,
     quellwasser,
+    zusaetze,
+    zusatzWasser,
     teigGesamt,
     hinweise,
   };

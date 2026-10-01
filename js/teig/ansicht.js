@@ -1,4 +1,5 @@
 // ansicht.js – Oberfläche des Teigrechners.
+// Zwei Ansichten: die Vorlagenliste (Startseite) und der Rechner für eine Vorlage.
 // Liest Eingaben, ruft den Rechner auf und schreibt die Grammzahlen in die Seite.
 // Gerechnet wird hier nichts – das macht ausschließlich rechner.js.
 // Gespeichert wird hier nichts direkt – das läuft über vorlagen.js bzw. speicher.js.
@@ -12,7 +13,6 @@ import {
   mehlsortenMitAnteil,
   mehlsortenMitGramm,
   mehlFuerTeiglinge,
-  STANDARD_VERLUST,
   quellwasserNachSaatwechsel,
   mehlHinweise,
 } from './rechner.js';
@@ -26,22 +26,40 @@ import {
   eigeneVorlagen,
   pruefeUebernahme,
   uebernehmeVorlagen,
+  bereinigeTeiglinge,
+  bereinigeKategorie,
+  modusVon,
+  ordneVorlagen,
+  favoriten,
+  ausgeblendet,
+  schalteFavorit,
+  blendeAus,
+  KATEGORIEN,
+  OHNE_KATEGORIE,
+  MODI,
+  SUCHE_AB,
+  STANDARD_TEIGLINGE,
 } from './vorlagen.js';
 import { erstelleLink, liesLink, hatTeilenCode } from './teilen.js';
 import {
   mehle,
   saaten,
+  zusaetze,
   werteVon,
   artVon,
   STANDARD_WASSER,
   STANDARD_VERHAELTNIS,
+  STANDARD_ZUSATZ_WASSER,
 } from './zutaten.js';
+import { suchfeldHtml, vorlagenListeHtml, zusammenfassung } from './startseite.js';
 import { speicher } from '../kern/speicher.js';
 import { leseZahl, formatGramm, formatGrammFein, formatProzent } from '../kern/zahlen.js';
+import { text } from '../kern/html.js';
 
 const HINWEISE = {
   'starter-zu-viel': 'Mehr Starter als Mehl – bitte den Starter-Anteil verringern.',
-  'hydration-zu-niedrig': 'Die Hydration ist niedriger als das Wasser im Starter.',
+  'hydration-zu-niedrig':
+    'Die Hydration ist niedriger als das Wasser, das Starter und Zusatzzutaten mitbringen – Hydration erhöhen.',
   'mehlanteile-nicht-100': 'Die Mehlanteile ergeben zusammen nicht 100 %.',
   hafer: 'Hafer nur als Beimischung: Er hat kein Klebereiweiß, der Teig geht damit schlechter auf.',
   'hafer-viel': 'Viel Hafer: Ab 20 % geht der Teig kaum noch auf. Hafer nur als Beimischung verwenden.',
@@ -52,15 +70,21 @@ const HINWEISE = {
 // Geräte-Einstellungen (werden nicht synchronisiert)
 const STAND = 'teig.stand';            // der zuletzt offene Teig
 const MEHL_EINHEIT = 'teig.mehlEinheit'; // Mehlanteile in 'prozent' oder 'gramm'
-const TEIGLINGE = 'teig.teiglinge';    // Teiglinge-Modus: { aktiv, anzahl, gewicht, verlust }
+const TEIGLINGE_ALT = 'teig.teiglinge'; // bis Schritt 11: Teiglinge-Modus fürs ganze Gerät (nur noch gelesen)
 const AUFFRISCHUNG = 'teig.auffrischung'; // Starter-Auffrischung: { bedarf, rest, verhaeltnis }
 const VERHAELTNISSE = [[1, 1, 1], [1, 1.5, 1.5], [1, 2.5, 2.5]]; // Schnellwahl Anstellgut:Mehl:Wasser
 const STANDARD_REST = 20;             // g Starter für den Kühlschrank
+const NEUER_ZUSATZ = 10;              // % vom Mehl für eine neu gewählte Zusatzzutat
 const EIGENE = '__eigene';             // Auswahl-Eintrag „Eigene Sorte …“
 
 let wurzel;   // das HTML-Element, in dem der Teigrechner steht
-let zustand;  // { vorlageId, teig, mehl, geaendert, anpassung } – mehl = zugegebenes Mehl
-let katalog;  // { mehle, saaten, wasserVon, verhaeltnisVon, art } – aus den Einstellungen
+let ansicht = 'liste'; // 'liste' (Startseite) oder 'rechner'
+// { vorlageId, teig, mehl, modus, teiglinge, geaendert, anpassung } – mehl = zugegebenes Mehl.
+// geaendert = die Vorlage selbst wurde verändert (nicht nur die Menge).
+let zustand = null;
+let katalog;  // { mehle, saaten, zusaetze, wasserVon, verhaeltnisVon, art } – aus den Einstellungen
+let suche = ''; // Suchtext der Vorlagenliste
+let speicherKarte = null; // offene Karte „Speichern“: { name, kategorie, zurueck }
 const offeneKlappen = new Set(); // welche einklappbaren Bereiche offen sind
 let paket = null;   // erhaltene Vorlagen aus einem Link, wartet auf „Übernehmen“: { vorlagen, verworfen, link }
 let aufHinweis = null; // einmaliger Hinweis in der Starter-Auffrischung
@@ -69,7 +93,9 @@ let meldung = null; // einmalige Rückmeldung (wird beim nächsten Zeichnen ange
 export function zeigeTeigrechner(ziel) {
   wurzel = ziel;
   ladeKatalog();
-  zustand = letzterStand() ?? vorlageZustand(alleVorlagen(speicher)[0]);
+  // Beim Öffnen direkt die zuletzt benutzte Vorlage, sonst die Liste
+  zustand = letzterStand();
+  ansicht = zustand ? 'rechner' : 'liste';
   zeichne();
   pruefeAdresse();
   window.addEventListener('hashchange', pruefeAdresse);
@@ -97,6 +123,7 @@ function ladeKatalog() {
   katalog = {
     mehle: mehlListe,
     saaten: saatListe,
+    zusaetze: zusaetze.alle(speicher),
     wasserVon: werteVon(mehlListe, 'wasser', STANDARD_WASSER),
     verhaeltnisVon: werteVon(saatListe, 'verhaeltnis', STANDARD_VERHAELTNIS),
     art: artVon(mehlListe),
@@ -104,11 +131,10 @@ function ladeKatalog() {
 }
 
 function vorlageZustand(vorlage) {
-  const { teig, mehl, teiglinge: angabe } = ladeVorlage(vorlage);
-  // Mit Teiglinge-Angabe: Modus und Werte übernehmen. Ohne: Mehl-Modus mit der gespeicherten
-  // Mehlmenge – die zuletzt genutzten Teiglinge-Werte bleiben fürs nächste Umschalten erhalten.
-  setzeTeiglinge(angabe ? { aktiv: true, ...angabe } : { aktiv: false });
-  return { vorlageId: vorlage.id, teig, mehl, geaendert: false, anpassung: neueAnpassung() };
+  const { teig, mehl, teiglinge: angabe, modus } = ladeVorlage(vorlage);
+  // Ohne Teiglinge-Angabe bleiben die zuletzt genutzten Werte fürs Umschalten erhalten
+  const teiglinge = angabe ?? zustand?.teiglinge ?? { ...STANDARD_TEIGLINGE };
+  return { vorlageId: vorlage.id, teig, mehl, modus, teiglinge, geaendert: false, anpassung: neueAnpassung() };
 }
 
 /** Summe der automatischen Anpassungen seit dem Laden (für den Hinweis). */
@@ -119,7 +145,17 @@ function neueAnpassung() {
 function letzterStand() {
   const stand = speicher.einstellung(STAND);
   if (!stand || !istGueltigerTeig(stand.teig) || typeof stand.mehl !== 'number') return null;
-  return { ...stand, teig: normalisiereTeig(stand.teig), anpassung: stand.anpassung ?? neueAnpassung() };
+  // Älterer Stand: Modus und Teiglinge-Werte waren eine Geräte-Einstellung
+  const alt = speicher.einstellung(TEIGLINGE_ALT) ?? {};
+  return {
+    vorlageId: typeof stand.vorlageId === 'string' ? stand.vorlageId : null,
+    teig: normalisiereTeig(stand.teig),
+    mehl: stand.mehl,
+    modus: MODI.includes(stand.modus) ? stand.modus : alt.aktiv === true ? 'teiglinge' : 'mehl',
+    teiglinge: bereinigeTeiglinge(stand.teiglinge) ?? bereinigeTeiglinge(alt) ?? { ...STANDARD_TEIGLINGE },
+    geaendert: stand.geaendert === true,
+    anpassung: stand.anpassung ?? neueAnpassung(),
+  };
 }
 
 function mehlEinheit() {
@@ -131,19 +167,7 @@ function zahlOder(wert, ersatz) {
   return typeof wert === 'number' && Number.isFinite(wert) && wert >= 0 ? wert : ersatz;
 }
 
-function teiglinge() {
-  const t = speicher.einstellung(TEIGLINGE) ?? {};
-  return {
-    aktiv: t.aktiv === true,
-    anzahl: zahlOder(t.anzahl, 4),
-    gewicht: zahlOder(t.gewicht, 250),
-    verlust: zahlOder(t.verlust, STANDARD_VERLUST),
-  };
-}
-
-function setzeTeiglinge(aenderung) {
-  speicher.setzeEinstellung(TEIGLINGE, { ...teiglinge(), ...aenderung });
-}
+const imTeiglingeModus = () => zustand.modus === 'teiglinge';
 
 function auffrischung() {
   const a = speicher.einstellung(AUFFRISCHUNG) ?? {};
@@ -161,20 +185,83 @@ function merkeStand() {
 }
 
 function aktuelleVorlage() {
+  if (!zustand) return null;
   return alleVorlagen(speicher).find((v) => v.id === zustand.vorlageId) ?? null;
 }
 
-// ---------- Aufbau der Seite (beim Start, beim Laden/Speichern einer Vorlage) ----------
+/** Wechselt zwischen Liste und Rechner und springt nach oben. */
+function zeige(neu) {
+  ansicht = neu;
+  if (neu === 'liste') speicherKarte = null;
+  zeichne();
+  window.scrollTo(0, 0);
+}
 
 function zeichne() {
-  const { teig, mehl, vorlageId } = zustand;
-  const vorlage = aktuelleVorlage();
-  const eigene = vorlage && !vorlage.eingebaut;
+  if (ansicht === 'rechner' && zustand) zeichneRechner();
+  else zeichneListe();
+}
 
-  const vorlagenKnoepfe = alleVorlagen(speicher).map(
-    (v) => `<button type="button" class="knopf vorlage" data-vorlage="${text(v.id)}"
-              aria-pressed="${v.id === vorlageId}">${text(v.name)}</button>`,
-  ).join('');
+function meldungHtml() {
+  const hinweis = meldung;
+  meldung = null;
+  return hinweis ? `<p class="karte hinweis-ok" role="status">${text(hinweis)}</p>` : '';
+}
+
+// ---------- Startseite: Vorlagenliste ----------
+
+function zeichneListe() {
+  ansicht = 'liste';
+  const ordnung = ordnungJetzt();
+  wurzel.innerHTML = `
+    <header class="seiten-kopf"><h1 class="kopf-titel">Kochbuch</h1></header>
+    ${meldungHtml()}
+    ${paket ? uebernahmeKarte() : ''}
+    ${ordnung.anzahl >= SUCHE_AB || suche ? suchfeldHtml(suche) : ''}
+    <div class="vorlagen-gruppen" data-liste>${listeHtml(ordnung)}</div>
+    ${teilenKlappe()}
+    ${einstellungenKlappe()}`;
+}
+
+function ordnungJetzt() {
+  return ordneVorlagen(alleVorlagen(speicher), {
+    favoriten: favoriten(speicher),
+    ausgeblendet: ausgeblendet(speicher),
+    suche,
+  });
+}
+
+function listeHtml(ordnung) {
+  return vorlagenListeHtml(ordnung, {
+    sterne: new Set(favoriten(speicher)),
+    suche,
+    ausgeblendetOffen: offeneKlappen.has('ausgeblendet'),
+  });
+}
+
+/** Nur die Liste neu aufbauen (beim Tippen in der Suche bleibt das Suchfeld unberührt). */
+function zeichneListeNeu() {
+  const ziel = wurzel.querySelector('[data-liste]');
+  if (ziel) ziel.innerHTML = listeHtml(ordnungJetzt());
+}
+
+function oeffneVorlage(id) {
+  const vorlage = alleVorlagen(speicher).find((v) => v.id === id);
+  if (!vorlage) return;
+  // Gleiche Vorlage nochmal geöffnet: den aktuellen Stand (z. B. die Menge) behalten
+  if (zustand?.vorlageId !== id) {
+    zustand = vorlageZustand(vorlage);
+    merkeStand();
+  }
+  zeige('rechner');
+}
+
+// ---------- Rechner ----------
+
+function zeichneRechner() {
+  const { teig, mehl } = zustand;
+  const vorlage = aktuelleVorlage();
+  const titel = vorlage ? vorlage.name : 'Eigener Teig';
 
   const mehrereMehle = teig.mehlsorten.length > 1;
   const mehlZeilen = teig.mehlsorten
@@ -187,38 +274,40 @@ function zeichne() {
        ${zeileMitProzent('Quellwasser', 'Vorschlag, änderbar', 'quellwasser', 'quellwasser')}`
     : '';
 
+  const zusatzZeilen = teig.zusaetze.map((z, i) => zeileZusatz(z, i)).join('');
+
   const trocken = teig.hefeArt === 'trocken';
   const hefeName = trocken ? 'Trockenhefe' : 'Frischhefe';
   const hefeWechsel = trocken ? '⇄ frisch' : '⇄ trocken';
 
-  const tl = teiglinge();
-  const hinweisMeldung = meldung;
-  meldung = null;
+  const menge = imTeiglingeModus()
+    ? `<div class="teiglinge-felder">
+         ${grossesFeld('Anzahl', 'tl-anzahl', '×')}
+         ${grossesFeld('Gewicht je Teigling', 'tl-gewicht', 'g')}
+       </div>
+       <p class="info">Mehl zum Abwiegen: <output class="zahl" data-ausgabe="mehl-errechnet"></output>
+         · Gesamtmehl inkl. Starter: <output class="zahl" data-ausgabe="gesamtmehl"></output></p>`
+    : `<label class="feld">
+         <span class="feld-name">Mehl</span>
+         <span class="mit-einheit">
+           <input class="eingabe eingabe-gross" data-feld="mehl"
+                  inputmode="decimal" autocomplete="off" value="${Math.round(mehl)}">
+           <span class="einheit">g</span>
+         </span>
+       </label>
+       <p class="info">Gesamtmehl inkl. Starter:
+         <output class="zahl" data-ausgabe="gesamtmehl"></output></p>`;
 
   wurzel.innerHTML = `
-    ${hinweisMeldung ? `<p class="karte hinweis-ok" role="status">${text(hinweisMeldung)}</p>` : ''}
-    ${paket ? uebernahmeKarte() : ''}
-    <section class="vorlagen" aria-label="Vorlagen">${vorlagenKnoepfe}</section>
+    <header class="seiten-kopf">
+      <button type="button" class="knopf-zurueck" data-aktion="zurueck" aria-label="Zurück zur Vorlagenliste">‹</button>
+      <h1 class="kopf-titel">${text(titel)}
+        <small class="geaendert" data-ausgabe="geaendert" ${zustand.geaendert ? '' : 'hidden'}>geändert</small></h1>
+    </header>
+    ${meldungHtml()}
+    ${speicherKarte ? speicherKarteHtml(vorlage) : ''}
 
-    <section class="karte">
-      <div class="umschaltgruppe" role="group" aria-label="Menge angeben als">
-        <button type="button" class="knopf" data-aktion="modus" data-modus="mehl"
-                aria-pressed="${!tl.aktiv}">Mehl</button>
-        <button type="button" class="knopf" data-aktion="modus" data-modus="teiglinge"
-                aria-pressed="${tl.aktiv}">Teiglinge</button>
-      </div>
-      ${tl.aktiv ? teigeZeilen() : ''}
-      <label class="feld">
-        <span class="feld-name">Mehl${tl.aktiv ? '<small>errechnet</small>' : ''}</span>
-        <span class="mit-einheit">
-          <input class="eingabe eingabe-gross" data-feld="mehl" ${tl.aktiv ? 'readonly' : ''}
-                 inputmode="decimal" autocomplete="off" value="${Math.round(mehl)}">
-          <span class="einheit">g</span>
-        </span>
-      </label>
-      <p class="info">Gesamtmehl inkl. Starter:
-        <output class="zahl" data-ausgabe="gesamtmehl"></output></p>
-    </section>
+    <section class="karte">${menge}</section>
 
     <section class="karte">
       <ul class="zutaten">
@@ -228,55 +317,40 @@ function zeichne() {
         ${zeileMitProzent('Salz', '', 'salz', 'salz')}
         ${zeileMitProzent('Öl', '', 'oel', 'oel')}
         ${zeileMitProzent(hefeName, hefeWechsel, 'hefe', 'hefe', true)}
+        ${zusatzZeilen}
         ${quellstueck}
       </ul>
       <p class="summe">
         <span>Teig gesamt</span>
         <output class="zahl" data-ausgabe="teigGesamt"></output>
       </p>
+      <p class="info" data-ausgabe="zusatzwasser" hidden></p>
       <p class="info" data-ausgabe="anpassung" hidden></p>
       <p class="hinweis" data-ausgabe="hinweise" role="status" hidden></p>
     </section>
 
+    <button type="button" class="knopf knopf-voll" data-aktion="speichern-karte"
+            ${zustand.geaendert && !speicherKarte ? '' : 'hidden'}>Änderungen speichern …</button>
+
     ${mehlKlappe()}
     ${saatenKlappe()}
+    ${zusatzKlappe()}
     ${auffrischKlappe()}
-    ${einstellungenKlappe()}
-    ${teilenKlappe()}
-
-    <section class="aktionen">
-      ${eigene
-        ? `<button type="button" class="knopf knopf-voll" data-aktion="teilen" ${zustand.geaendert ? 'hidden' : ''}>
-             Vorlage teilen</button>
-           <button type="button" class="knopf knopf-voll" data-aktion="aktualisieren" hidden>
-             Änderungen in „${text(vorlage.name)}“ speichern</button>`
-        : ''}
-      <button type="button" class="knopf" data-aktion="neu">Als neue Vorlage speichern</button>
-      ${eigene
-        ? `<button type="button" class="knopf knopf-leise" data-aktion="loeschen">
-             „${text(vorlage.name)}“ löschen</button>`
-        : ''}
-    </section>`;
+    ${vorlageKlappe(vorlage)}`;
 
   aktualisiere();
 }
 
-/** Teiglinge-Modus: Anzahl, Gewicht je Teigling, Verlust-Zuschlag. */
-function teigeZeilen() {
-  const zeile = (name, zusatz, feld, einheit) => `
-      <li class="zeile">
-        <label class="zeile-name" for="feld-${feld}">${name}${zusatz ? `<small>${zusatz}</small>` : ''}</label>
-        <span class="mit-einheit prozent">
-          <input class="eingabe" id="feld-${feld}" data-feld="${feld}" inputmode="decimal"
-                 autocomplete="off" value="${feldWert(feld)}" aria-label="${name} in ${einheit}">
-          <span class="einheit">${einheit}</span>
-        </span>
-      </li>`;
-  return `<ul class="zutaten">
-      ${zeile('Anzahl', 'z. B. 4 Pizzen', 'tl-anzahl', '×')}
-      ${zeile('Gewicht je Teigling', '', 'tl-gewicht', 'g')}
-      ${zeile('Verlust-Zuschlag', 'Rest in der Schüssel', 'tl-verlust', '%')}
-    </ul>`;
+/** Großes Zahlenfeld für den Teiglinge-Modus (Anzahl, Gewicht). */
+function grossesFeld(name, feld, einheit) {
+  return `<label class="feld">
+      <span class="feld-name">${name}</span>
+      <span class="mit-einheit">
+        <input class="eingabe eingabe-gross" data-feld="${feld}" inputmode="decimal"
+               autocomplete="off" value="${feldWert(feld)}">
+        <span class="einheit">${einheit}</span>
+      </span>
+    </label>`;
 }
 
 function zeileNurGramm(name, ausgabe, zusatzAusgabe = '') {
@@ -306,7 +380,22 @@ function zeileMitProzent(name, zusatz, feld, ausgabe, istHefe = false) {
     </li>`;
 }
 
-// ---------- Einklappbare Bereiche: Mehle, Saaten, Einstellungen ----------
+/** Zeile einer Zusatzzutat; darunter klein, wie viel Wasser sie mitbringt. */
+function zeileZusatz(z, i) {
+  return `<li class="zeile">
+      <label class="zeile-name" for="feld-zusatz-${i}">${text(z.name)}
+        <small data-ausgabe="zusatzwasser-${i}"></small></label>
+      <span class="mit-einheit prozent">
+        <input class="eingabe" id="feld-zusatz-${i}" data-feld="zusatz-${i}"
+               inputmode="decimal" autocomplete="off" value="${feldWert(`zusatz-${i}`)}"
+               aria-label="${text(z.name)} in Prozent">
+        <span class="einheit">%</span>
+      </span>
+      <output class="gramm zahl" data-ausgabe="zusatz-${i}"></output>
+    </li>`;
+}
+
+// ---------- Einklappbare Bereiche ----------
 
 function klappe(name, titel, inhalt) {
   return `<details class="klappe" data-klappe="${name}" ${offeneKlappen.has(name) ? 'open' : ''}>
@@ -339,7 +428,7 @@ function mehlKlappe() {
           daten: `data-wahl="mehl" data-index="${i}" aria-label="Mehlsorte ${i + 1}"`,
           eigeneText: 'Eigenes Mehl …' })}
         <span class="mit-einheit prozent">
-          <input class="eingabe" data-feld="mehlanteil" data-index="${i}" inputmode="decimal" ${teiglinge().aktiv && gramm ? 'readonly' : ''}
+          <input class="eingabe" data-feld="mehlanteil" data-index="${i}" inputmode="decimal" ${imTeiglingeModus() && gramm ? 'readonly' : ''}
                  autocomplete="off" value="${feldWert('mehlanteil', i)}"
                  aria-label="${text(s.name)} in ${gramm ? 'Gramm' : 'Prozent'}">
           <span class="einheit">${gramm ? 'g' : '%'}</span>
@@ -362,24 +451,34 @@ function mehlKlappe() {
         der Mehle an. Das ist ein Vorschlag – die Hydration bleibt frei änderbar.</p>`);
 }
 
-function saatenKlappe() {
-  const { saaten: gewaehlt } = zustand.teig;
+/** Saaten und Zusatzzutaten: Zeilen mit Auswahl und ✕, darunter „+ hinzufügen“. */
+function wahlZeilen(liste, gewaehlt, art, beschriftung, eigeneText) {
   const verwendet = new Set(gewaehlt.map((s) => s.id));
   const zeilen = gewaehlt.map((s, i) => `
       <li class="zeile zeile-wahl zeile-wahl-kurz">
-        ${auswahl({ liste: katalog.saaten, gewaehlt: s.id, ausser: verwendet, name: s.name,
-          daten: `data-wahl="saat" data-index="${i}" aria-label="Saat ${i + 1}"`,
-          eigeneText: 'Eigene Saat …' })}
-        <button type="button" class="knopf knopf-leise knopf-weg" data-aktion="saat-weg"
+        ${auswahl({ liste, gewaehlt: s.id, ausser: verwendet, name: s.name,
+          daten: `data-wahl="${art}" data-index="${i}" aria-label="${beschriftung} ${i + 1}"`, eigeneText })}
+        <button type="button" class="knopf knopf-leise knopf-weg" data-aktion="${art}-weg"
                 data-index="${i}" aria-label="${text(s.name)} entfernen">✕</button>
       </li>`).join('');
+  return `<ul class="zutaten">${zeilen}</ul>
+      ${auswahl({ liste, ausser: verwendet, daten: `data-wahl="${art}-neu" aria-label="${beschriftung} hinzufügen"`,
+        leer: `+ ${beschriftung} hinzufügen`, eigeneText })}`;
+}
 
+function saatenKlappe() {
   return klappe('saaten', 'Quellstück: Saaten wählen', `
-      <ul class="zutaten">${zeilen}</ul>
-      ${auswahl({ liste: katalog.saaten, ausser: verwendet, daten: 'data-wahl="saat-neu" aria-label="Saat hinzufügen"',
-        leer: '+ Saat hinzufügen', eigeneText: 'Eigene Saat …' })}
+      ${wahlZeilen(katalog.saaten, zustand.teig.saaten, 'saat', 'Saat', 'Eigene Saat …')}
       <p class="info">Neue Saaten starten mit 5 % vom Mehl. Die Menge stellst du oben im Quellstück ein,
         das Quellwasser rechnet die App dazu.</p>`);
+}
+
+function zusatzKlappe() {
+  return klappe('zusaetze', 'Zusatzzutaten: Milch, Ei, Butter …', `
+      ${wahlZeilen(katalog.zusaetze, zustand.teig.zusaetze, 'zusatz', 'Zutat', 'Eigene Zutat …')}
+      <p class="info">Menge in % vom Mehl, oben in der Zutatenliste einstellbar. Das Wasser in Milch, Ei & Co.
+        zählt zur Hydration – die App zieht es vom Wasser ab. Ei und Butter machen den Teig trotzdem
+        fester, als ihr Wasser vermuten lässt: die Hydration nach Gefühl anpassen.</p>`);
 }
 
 function auffrischKlappe() {
@@ -428,6 +527,76 @@ function auffrischKlappe() {
       <p class="info" data-ausgabe="auf-hydration"></p>`);
 }
 
+/** Umschalter Mehl / Teiglinge (in den Vorlagen-Einstellungen und beim Speichern). */
+function modusKnoepfe(aktion) {
+  const tl = imTeiglingeModus();
+  return `<div class="umschaltgruppe" role="group" aria-label="Menge angeben als">
+      <button type="button" class="knopf" data-aktion="${aktion}" data-modus="mehl"
+              aria-pressed="${!tl}">Mehl</button>
+      <button type="button" class="knopf" data-aktion="${aktion}" data-modus="teiglinge"
+              aria-pressed="${tl}">Teiglinge</button>
+    </div>`;
+}
+
+/** Einstellungen der Vorlage: Modus, Verlust, Speichern, Teilen, Ausblenden/Löschen. */
+function vorlageKlappe(vorlage) {
+  const eigene = vorlage && !vorlage.eingebaut;
+  const verlust = imTeiglingeModus()
+    ? `<ul class="zutaten">
+         <li class="zeile">
+           <label class="zeile-name" for="feld-tl-verlust">Verlust-Zuschlag<small>Rest in der Schüssel</small></label>
+           <span class="mit-einheit prozent">
+             <input class="eingabe" id="feld-tl-verlust" data-feld="tl-verlust" inputmode="decimal"
+                    autocomplete="off" value="${feldWert('tl-verlust')}" aria-label="Verlust-Zuschlag in %">
+             <span class="einheit">%</span>
+           </span>
+         </li>
+       </ul>` : '';
+  const teilen = !eigene ? ''
+    : zustand.geaendert
+      ? '<p class="info">Teilen geht nach dem Speichern.</p>'
+      : '<button type="button" class="knopf" data-aktion="teilen">Vorlage teilen</button>';
+  const weg = !vorlage ? ''
+    : eigene
+      ? `<button type="button" class="knopf knopf-leise" data-aktion="loeschen">„${text(vorlage.name)}“ löschen</button>`
+      : '<button type="button" class="knopf knopf-leise" data-aktion="ausblenden">Vorlage ausblenden</button>';
+
+  return klappe('vorlage', 'Vorlage: Menge, Speichern, Teilen', `
+      <p class="info">Menge angeben als</p>
+      ${modusKnoepfe('modus')}
+      ${verlust}
+      <div class="aktionen">
+        <button type="button" class="knopf" data-aktion="speichern-karte">Speichern, umbenennen …</button>
+        ${teilen}
+        ${weg}
+      </div>`);
+}
+
+/** Karte „Vorlage speichern“: Name, Kategorie, Modus; aktualisieren oder als neue speichern. */
+function speicherKarteHtml(vorlage) {
+  const eigene = vorlage && !vorlage.eingebaut;
+  const k = speicherKarte;
+  const optionen = [...KATEGORIEN, { id: '', name: OHNE_KATEGORIE }]
+    .map((x) => `<option value="${x.id}" ${(k.kategorie ?? '') === x.id ? 'selected' : ''}>${text(x.name)}</option>`)
+    .join('');
+  return `<section class="karte speichern" aria-label="Vorlage speichern">
+      <h2 class="karte-titel">${k.zurueck ? 'Änderungen speichern?' : 'Vorlage speichern'}</h2>
+      <label class="feld"><span class="feld-name">Name</span>
+        <input class="eingabe eingabe-text" data-sp="name" autocomplete="off" maxlength="80" value="${text(k.name)}"></label>
+      <label class="feld"><span class="feld-name">Kategorie</span>
+        <select class="eingabe auswahl" data-sp="kategorie">${optionen}</select></label>
+      <p class="feld-name">Menge angeben als</p>
+      ${modusKnoepfe('sp-modus')}
+      <div class="aktionen">
+        ${eigene ? '<button type="button" class="knopf knopf-voll" data-aktion="sp-aktualisieren">Vorlage aktualisieren</button>' : ''}
+        <button type="button" class="knopf ${eigene ? '' : 'knopf-voll'}" data-aktion="sp-neu">Als neue speichern</button>
+        ${k.zurueck ? '<button type="button" class="knopf knopf-leise" data-aktion="sp-verwerfen">Änderungen verwerfen</button>' : ''}
+        <button type="button" class="knopf knopf-leise" data-aktion="sp-abbrechen">Abbrechen</button>
+      </div>
+      ${eigene ? '' : '<p class="info">Eingebaute Vorlagen bleiben unverändert – Änderungen werden eine neue, eigene Vorlage.</p>'}
+    </section>`;
+}
+
 function einstellungenKlappe() {
   const zeile = (s, art, wertName, einheit) => {
     const knopf = !s.eingebaut
@@ -456,17 +625,19 @@ function einstellungenKlappe() {
       <ul class="zutaten">${katalog.mehle.map((s) => zeile(s, 'mehl', 'wasser', '%')).join('')}</ul>
       <p class="info">Quellverhältnis: Gramm Wasser je Gramm Saat.</p>
       <ul class="zutaten">${katalog.saaten.map((s) => zeile(s, 'saat', 'verhaeltnis', '×')).join('')}</ul>
-      <p class="info">Änderungen gelten ab dem nächsten Tauschen oder Mischen.
-        Gespeicherte Vorlagen behalten ihr Wasser.</p>`);
+      <p class="info">Wasseranteil der Zusatzzutaten: so viel davon zählt zur Hydration.</p>
+      <ul class="zutaten">${katalog.zusaetze.map((s) => zeile(s, 'zusatz', 'wasser', '%')).join('')}</ul>
+      <p class="info">Änderungen gelten ab dem nächsten Tauschen, Mischen oder Hinzufügen.
+        Gespeicherte Vorlagen behalten ihre Werte.</p>`);
 }
 
 /** Text, der in einem Eingabefeld steht. */
 function feldWert(feld, index) {
-  const { teig, mehl } = zustand;
+  const { teig, mehl, teiglinge } = zustand;
   if (feld === 'mehl') return String(Math.round(mehl));
-  if (feld === 'tl-anzahl') return formatProzent(teiglinge().anzahl);
-  if (feld === 'tl-gewicht') return formatProzent(teiglinge().gewicht);
-  if (feld === 'tl-verlust') return formatProzent(teiglinge().verlust);
+  if (feld === 'tl-anzahl') return formatProzent(teiglinge.anzahl);
+  if (feld === 'tl-gewicht') return formatProzent(teiglinge.gewicht);
+  if (feld === 'tl-verlust') return formatProzent(teiglinge.verlust);
   if (feld === 'mehlanteil') {
     if (mehlEinheit() === 'gramm') {
       const e = berechne(teig, gesamtmehlAusMehl(teig, mehl));
@@ -475,6 +646,7 @@ function feldWert(feld, index) {
     return formatProzent(teig.mehlsorten[index]?.anteil ?? 0);
   }
   if (feld.startsWith('saat-')) return formatProzent(teig.saaten[Number(feld.slice(5))]?.prozent ?? 0);
+  if (feld.startsWith('zusatz-')) return formatProzent(teig.zusaetze[Number(feld.slice(7))]?.prozent ?? 0);
   if (feld === 'quellwasser') return formatProzent(Math.max(teig.quellwasser ?? 0, 0));
   return formatProzent(teig[feld] ?? 0);
 }
@@ -482,15 +654,18 @@ function feldWert(feld, index) {
 // ---------- Live-Aktualisierung (bei jedem Tastendruck) ----------
 
 function aktualisiere() {
-  const { teig } = zustand;
+  if (ansicht !== 'rechner') return;
+  const { teig, teiglinge } = zustand;
   // Teiglinge-Modus: Das Mehl folgt aus Anzahl × Gewicht (+ Verlust) und dem Teig
-  const tl = teiglinge();
-  if (tl.aktiv) zustand.mehl = mehlFuerTeiglinge(teig, tl.anzahl, tl.gewicht, tl.verlust);
+  if (imTeiglingeModus()) {
+    zustand.mehl = mehlFuerTeiglinge(teig, teiglinge.anzahl, teiglinge.gewicht, teiglinge.verlust);
+  }
   const mehl = zustand.mehl;
   const e = berechne(teig, gesamtmehlAusMehl(teig, mehl));
 
   const werte = {
     gesamtmehl: e.gesamtmehl,
+    'mehl-errechnet': e.mehl,
     wasser: e.wasser,
     starter: e.starter,
     salz: e.salz,
@@ -500,10 +675,13 @@ function aktualisiere() {
   };
   e.mehlsorten.forEach((s, i) => (werte[`mehlsorte-${i}`] = s.gramm));
   e.saaten.forEach((s, i) => (werte[`saat-${i}`] = s.gramm));
+  e.zusaetze.forEach((z, i) => (werte[`zusatz-${i}`] = z.gramm));
 
   for (const [name, gramm] of Object.entries(werte)) {
     setzeAusgabe(name, `${formatGramm(gramm)} g`);
   }
+  e.zusaetze.forEach((z, i) =>
+    setzeAusgabe(`zusatzwasser-${i}`, z.wasser > 0 ? `davon ${formatGramm(z.wasser)} g Wasser` : ''));
   const anteile = teig.mehlsorten.reduce((a, s) => a + s.anteil, 0);
   teig.mehlsorten.forEach((s, i) =>
     setzeAusgabe(`mehlanteil-${i}`, `${formatProzent(anteile > 0 ? (s.anteil / anteile) * 100 : 0)} %`));
@@ -516,16 +694,26 @@ function aktualisiere() {
   hinweis.textContent = e.hinweise.map((h) => HINWEISE[h]).join(' ');
   hinweis.hidden = e.hinweise.length === 0;
 
+  // Mit Zusatzzutaten: erklären, warum weniger Wasser dazukommt
+  const zusatzInfo = wurzel.querySelector('[data-ausgabe="zusatzwasser"]');
+  zusatzInfo.textContent = e.zusatzWasser > 0
+    ? `Wasser gesamt ${formatGramm(e.wasserGesamt)} g – davon ${formatGramm(e.zusatzWasser)} g aus den Zusatzzutaten, ` +
+      `${formatGramm(e.starterWasser)} g aus dem Starter.`
+    : '';
+  zusatzInfo.hidden = e.zusatzWasser <= 0;
+
   zeigeAnpassung(e);
   zeigeAuffrischung();
   synchronisiereFelder();
+  zeigeGeaendert();
+}
 
-  // "Änderungen speichern" nur zeigen, wenn eine eigene Vorlage verändert wurde
-  const aktualisieren = wurzel.querySelector('[data-aktion="aktualisieren"]');
-  if (aktualisieren) aktualisieren.hidden = !zustand.geaendert;
-  // Geteilt wird die gespeicherte Vorlage – darum erst nach dem Speichern
-  const teilen = wurzel.querySelector('[data-aktion="teilen"]');
-  if (teilen) teilen.hidden = zustand.geaendert;
+/** Markierung „geändert“ und Knopf „Änderungen speichern“ ein-/ausblenden. */
+function zeigeGeaendert() {
+  const marke = wurzel.querySelector('[data-ausgabe="geaendert"]');
+  if (marke) marke.hidden = !zustand.geaendert;
+  const knopf = wurzel.querySelector('.knopf[data-aktion="speichern-karte"]');
+  if (knopf) knopf.hidden = !zustand.geaendert || speicherKarte !== null;
 }
 
 /** Ergebnis der Starter-Auffrischung in die Seite schreiben. */
@@ -572,8 +760,19 @@ function setzeAusgabe(name, wert) {
 
 // ---------- Eingaben ----------
 
+// Diese Felder ändern nur die Menge, nicht die Vorlage – dafür fragt die App nicht nach dem Speichern
+const NUR_MENGE = new Set(['mehl', 'tl-anzahl', 'tl-gewicht']);
+
 function beiEingabe(ereignis) {
   const ziel = ereignis.target;
+  if (ziel.dataset.suche !== undefined) {
+    suche = ziel.value;
+    return zeichneListeNeu();
+  }
+  if (ziel.dataset.sp === 'name' && speicherKarte) {
+    speicherKarte.name = ziel.value;
+    return;
+  }
   if (ziel.dataset.einstellung) return aendereEinstellung(ziel);
   if (ziel.dataset.auf) return aendereAuffrischung(ziel);
   const feld = ziel.dataset.feld;
@@ -584,7 +783,7 @@ function beiEingabe(ereignis) {
   if (feld === 'mehl') {
     zustand.mehl = wert;
   } else if (feld.startsWith('tl-')) {
-    setzeTeiglinge({ [feld.slice(3)]: wert });
+    zustand.teiglinge = { ...zustand.teiglinge, [feld.slice(3)]: wert };
   } else if (feld === 'mehlanteil') {
     const index = Number(ziel.dataset.index);
     if (mehlEinheit() === 'gramm') {
@@ -597,13 +796,16 @@ function beiEingabe(ereignis) {
   } else if (feld.startsWith('saat-')) {
     const index = Number(feld.slice(5));
     setzeSaaten(teig.saaten.map((s, i) => (i === index ? { ...s, prozent: wert } : s)));
+  } else if (feld.startsWith('zusatz-')) {
+    const index = Number(feld.slice(7));
+    teig.zusaetze = teig.zusaetze.map((z, i) => (i === index ? { ...z, prozent: wert } : z));
   } else {
     teig[feld] = wert;
     // Selbst eingetippt: ab hier ist das der neue Ausgangswert
     if (feld === 'hydration') zustand.anpassung.wasser = 0;
     if (feld === 'quellwasser') zustand.anpassung.quellwasser = 0;
   }
-  zustand.geaendert = true;
+  if (!NUR_MENGE.has(feld)) zustand.geaendert = true;
   aktualisiere();
   merkeStand();
 }
@@ -640,55 +842,77 @@ function aendereAuffrischung(feld) {
   zeigeAuffrischung();
 }
 
+// Kataloge je Art: Mehl, Saat, Zusatzzutat
+const KATALOGE = { mehl: mehle, saat: saaten, zusatz: zusaetze };
+const katalogListe = (art) => ({ mehl: katalog.mehle, saat: katalog.saaten, zusatz: katalog.zusaetze })[art];
+
 function aendereEinstellung(feld) {
-  const liste = feld.dataset.einstellung === 'mehl' ? mehle : saaten;
-  liste.setzeWert(speicher, feld.dataset.id, leseZahl(feld.value));
+  KATALOGE[feld.dataset.einstellung].setzeWert(speicher, feld.dataset.id, leseZahl(feld.value));
   ladeKatalog();
   aktualisiere();
 }
 
-// ---------- Auswahllisten (Mehl/Saat tauschen oder hinzufügen) ----------
+// ---------- Auswahllisten (Mehl/Saat/Zusatzzutat tauschen oder hinzufügen) ----------
 
 function beiAuswahl(ereignis) {
   const ziel = ereignis.target;
+  if (ziel.dataset.sp === 'kategorie' && speicherKarte) {
+    speicherKarte.kategorie = bereinigeKategorie(ziel.value);
+    return;
+  }
   const wahl = ziel.dataset.wahl;
   if (!wahl) return;
-  const istMehl = wahl.startsWith('mehl');
-  const id = ziel.value === EIGENE ? legeEigeneSorteAn(istMehl) : ziel.value;
+  const art = wahl.replace('-neu', '');
+  const id = ziel.value === EIGENE ? legeEigeneSorteAn(art) : ziel.value;
   if (!id) return zeichne(); // abgebrochen: Auswahl zurücksetzen
 
-  const liste = istMehl ? katalog.mehle : katalog.saaten;
-  const sorte = liste.find((s) => s.id === id);
+  const sorte = katalogListe(art).find((s) => s.id === id);
   if (!sorte) return zeichne();
   const { teig } = zustand;
   const index = Number(ziel.dataset.index);
+  const tausche = (liste, neu) => liste.map((s, i) => (i === index ? { ...s, ...neu } : s));
 
   if (wahl === 'mehl') {
-    setzeMehlsorten(teig.mehlsorten.map((s, i) => (i === index ? { ...s, id, name: sorte.name } : s)));
+    setzeMehlsorten(tausche(teig.mehlsorten, { id, name: sorte.name }));
   } else if (wahl === 'mehl-neu') {
     const anteil = teig.mehlsorten.length === 0 ? 100 : 0;
     setzeMehlsorten([...teig.mehlsorten, { id, name: sorte.name, anteil }]);
   } else if (wahl === 'saat') {
-    setzeSaaten(teig.saaten.map((s, i) => (i === index ? { ...s, id, name: sorte.name } : s)));
+    setzeSaaten(tausche(teig.saaten, { id, name: sorte.name }));
   } else if (wahl === 'saat-neu') {
     setzeSaaten([...teig.saaten, { id, name: sorte.name, prozent: 5 }]);
+  } else if (wahl === 'zusatz') {
+    // Der Wasseranteil kommt mit in den Teig – so rechnet die Vorlage auch auf dem anderen Handy gleich
+    teig.zusaetze = tausche(teig.zusaetze, { id, name: sorte.name, wasser: sorte.wasser });
+  } else if (wahl === 'zusatz-neu') {
+    teig.zusaetze = [...teig.zusaetze, { id, name: sorte.name, prozent: NEUER_ZUSATZ, wasser: sorte.wasser }];
   }
   zustand.geaendert = true;
   merkeStand();
   zeichne();
 }
 
+const EIGENE_FRAGEN = {
+  mehl: { name: 'Name des Mehls:', wert: 'Wasseraufnahme in % (typische Hydration, z. B. 65):', start: STANDARD_WASSER },
+  saat: { name: 'Name der Saat:', wert: 'Gramm Wasser je Gramm Saat (z. B. 1):', start: STANDARD_VERHAELTNIS },
+  zusatz: {
+    name: 'Name der Zutat (z. B. Sahne, Quark):',
+    wert: 'Wasseranteil in % (z. B. Sahne 60, Quark 80, Schokolade 0):',
+    start: STANDARD_ZUSATZ_WASSER,
+  },
+};
+
 /** Fragt Namen (und Wert) für eine eigene Sorte ab. Gibt die neue id zurück oder null. */
-function legeEigeneSorteAn(istMehl) {
-  const name = window.prompt(istMehl ? 'Name des Mehls:' : 'Name der Saat:')?.trim();
+function legeEigeneSorteAn(art) {
+  const frage = EIGENE_FRAGEN[art];
+  const name = window.prompt(frage.name)?.trim();
   if (!name) return null;
-  const frage = istMehl
-    ? 'Wasseraufnahme in % (typische Hydration, z. B. 65):'
-    : 'Gramm Wasser je Gramm Saat (z. B. 1):';
-  const start = istMehl ? STANDARD_WASSER : STANDARD_VERHAELTNIS;
-  const eingabe = window.prompt(frage, formatProzent(start));
-  const wert = eingabe === null || leseZahl(eingabe) === 0 ? start : leseZahl(eingabe);
-  const neu = (istMehl ? mehle : saaten).neu(speicher, name, wert);
+  const eingabe = window.prompt(frage.wert, formatProzent(frage.start));
+  const gelesen = eingabe === null ? frage.start : leseZahl(eingabe);
+  // Mehl und Saat ohne Wert ergeben keinen Sinn; beim Wasseranteil ist 0 möglich (z. B. Zucker)
+  let wert = art !== 'zusatz' && gelesen === 0 ? frage.start : gelesen;
+  if (art === 'zusatz') wert = Math.min(wert, 100);
+  const neu = KATALOGE[art].neu(speicher, name, wert);
   if (!neu) {
     meldeFehler();
     return null;
@@ -698,26 +922,39 @@ function legeEigeneSorteAn(istMehl) {
 }
 
 function beiKlick(ereignis) {
-  const vorlageKnopf = ereignis.target.closest('[data-vorlage]');
-  if (vorlageKnopf) {
-    const vorlage = alleVorlagen(speicher).find((v) => v.id === vorlageKnopf.dataset.vorlage);
-    if (vorlage) ladeUndZeige(vorlage);
-    return;
+  const ziel = ereignis.target;
+  const oeffnen = ziel.closest('[data-oeffnen]');
+  if (oeffnen) return oeffneVorlage(oeffnen.dataset.oeffnen);
+  const stern = ziel.closest('[data-stern]');
+  if (stern) {
+    schalteFavorit(speicher, stern.dataset.stern);
+    return zeichneListeNeu();
+  }
+  const einblenden = ziel.closest('[data-einblenden]');
+  if (einblenden) {
+    blendeAus(speicher, einblenden.dataset.einblenden, false);
+    return zeichneListeNeu();
   }
 
-  const knopf = ereignis.target.closest('[data-aktion]');
+  const knopf = ziel.closest('[data-aktion]');
   const aktion = knopf?.dataset.aktion;
+  if (aktion === 'zurueck') zurueck();
   if (aktion === 'mehl-weg') entferneMehl(Number(knopf.dataset.index));
   if (aktion === 'saat-weg') entferneSaat(Number(knopf.dataset.index));
+  if (aktion === 'zusatz-weg') entferneZusatz(Number(knopf.dataset.index));
   if (aktion === 'einheit') wechsleEinheit(knopf.dataset.einheit);
-  if (aktion === 'modus') wechsleModus(knopf.dataset.modus === 'teiglinge');
+  if (aktion === 'modus' || aktion === 'sp-modus') wechsleModus(knopf.dataset.modus);
   if (aktion === 'verhaeltnis') waehleVerhaeltnis(knopf.dataset.wert);
   if (aktion === 'bedarf-uebernehmen') uebernimmBedarf();
   if (aktion === 'sorte-weg') entferneSorte(knopf.dataset.art, knopf.dataset.id);
   if (aktion === 'hefeart') wechsleHefeart();
-  if (aktion === 'neu') speichereAlsNeu();
-  if (aktion === 'aktualisieren') speichereAenderungen();
+  if (aktion === 'speichern-karte') oeffneSpeicherKarte(false);
+  if (aktion === 'sp-aktualisieren') speichereAenderungen();
+  if (aktion === 'sp-neu') speichereAlsNeu();
+  if (aktion === 'sp-verwerfen') verwerfeAenderungen();
+  if (aktion === 'sp-abbrechen') schliesseSpeicherKarte();
   if (aktion === 'loeschen') loescheVorlage();
+  if (aktion === 'ausblenden') blendeVorlageAus();
   if (aktion === 'teilen') teileVorlage();
   if (aktion === 'sichern') sichereAlle();
   if (aktion === 'einfuegen') fuegeLinkEin();
@@ -725,6 +962,12 @@ function beiKlick(ereignis) {
   if (aktion === 'import-kopie') uebernehmePaket(true);
   if (aktion === 'import-kopieren') kopiereLink(paket?.link);
   if (aktion === 'import-weg') verwerfePaket();
+}
+
+/** Zurück zur Liste – mit ungespeicherten Änderungen erst fragen. */
+function zurueck() {
+  if (zustand.geaendert) return oeffneSpeicherKarte(true);
+  zeige('liste');
 }
 
 function entferneMehl(index) {
@@ -735,13 +978,20 @@ function entferneMehl(index) {
     ...s,
     anteil: summe > 0 ? (s.anteil / summe) * 100 : 100 / rest.length,
   })));
-  zustand.geaendert = true;
-  merkeStand();
-  zeichne();
+  geaendertUndNeu();
 }
 
 function entferneSaat(index) {
   setzeSaaten(zustand.teig.saaten.filter((_, i) => i !== index));
+  geaendertUndNeu();
+}
+
+function entferneZusatz(index) {
+  zustand.teig.zusaetze = zustand.teig.zusaetze.filter((_, i) => i !== index);
+  geaendertUndNeu();
+}
+
+function geaendertUndNeu() {
   zustand.geaendert = true;
   merkeStand();
   zeichne();
@@ -752,12 +1002,11 @@ function wechsleEinheit(einheit) {
   zeichne();
 }
 
-/** Ein Tipper: zwischen Mehl- und Teiglinge-Modus umschalten. */
-function wechsleModus(aktiv) {
-  setzeTeiglinge({ aktiv });
-  zustand.geaendert = true;
-  merkeStand();
-  zeichne();
+/** Mehl- oder Teiglinge-Modus – gehört zur Vorlage, darum eine Änderung. */
+function wechsleModus(modus) {
+  if (!MODI.includes(modus) || modus === zustand.modus) return;
+  zustand.modus = modus;
+  geaendertUndNeu();
 }
 
 function waehleVerhaeltnis(wert) {
@@ -776,11 +1025,10 @@ function uebernimmBedarf() {
 
 /** Eigene Sorte löschen oder eingebaute auf den Standardwert zurücksetzen. */
 function entferneSorte(art, id) {
-  const liste = art === 'mehl' ? mehle : saaten;
-  const sorte = (art === 'mehl' ? katalog.mehle : katalog.saaten).find((s) => s.id === id);
+  const sorte = katalogListe(art)?.find((s) => s.id === id);
   if (!sorte) return;
   if (!sorte.eingebaut && !window.confirm(`„${sorte.name}“ löschen?`)) return;
-  liste.entferne(speicher, id);
+  KATALOGE[art].entferne(speicher, id);
   ladeKatalog();
   zeichne();
 }
@@ -789,7 +1037,7 @@ function ladeUndZeige(vorlage, rueckmeldung = null) {
   zustand = vorlageZustand(vorlage);
   merkeStand();
   meldung = rueckmeldung;
-  zeichne();
+  zeige('rechner');
 }
 
 function wechsleHefeart() {
@@ -797,44 +1045,90 @@ function wechsleHefeart() {
   const neu = teig.hefeArt === 'trocken' ? 'frisch' : 'trocken';
   teig.hefe = hefeUmrechnen(teig.hefe, teig.hefeArt, neu);
   teig.hefeArt = neu;
-  zustand.geaendert = true;
-  merkeStand();
+  geaendertUndNeu();
+}
+
+// ---------- Eigene Vorlagen: speichern, löschen, ausblenden ----------
+
+function oeffneSpeicherKarte(zurueckDanach) {
+  const vorlage = aktuelleVorlage();
+  speicherKarte = {
+    name: !vorlage ? '' : vorlage.eingebaut ? `${vorlage.name} (eigene)` : vorlage.name,
+    kategorie: vorlage?.kategorie ?? null,
+    zurueck: zurueckDanach,
+  };
+  zeichne();
+  window.scrollTo(0, 0);
+}
+
+function schliesseSpeicherKarte() {
+  speicherKarte = null;
   zeichne();
 }
 
-// ---------- Eigene Vorlagen ----------
+/** Name aus der Karte; leer → Hinweis und kein Speichern. */
+function nameAusKarte() {
+  const name = speicherKarte.name.trim();
+  if (!name) {
+    window.alert('Bitte einen Namen für die Vorlage eingeben.');
+    wurzel.querySelector('[data-sp="name"]')?.focus();
+  }
+  return name;
+}
 
-/** Teiglinge-Angabe für die Vorlage: nur im Teiglinge-Modus, sonst keine. */
-function teigeFuerVorlage() {
-  const { aktiv, anzahl, gewicht, verlust } = teiglinge();
-  return aktiv ? { anzahl, gewicht, verlust } : null;
+function vorlagenDaten(name) {
+  return {
+    name,
+    kategorie: speicherKarte.kategorie,
+    teig: zustand.teig,
+    mehl: zustand.mehl,
+    modus: zustand.modus,
+    teiglinge: zustand.teiglinge,
+  };
+}
+
+function nachDemSpeichern(gespeichert, rueckmeldung) {
+  if (!gespeichert) return meldeFehler();
+  const zurueckDanach = speicherKarte.zurueck;
+  speicherKarte = null;
+  zustand.vorlageId = gespeichert.id;
+  zustand.geaendert = false;
+  merkeStand();
+  meldung = rueckmeldung;
+  zeige(zurueckDanach ? 'liste' : 'rechner');
 }
 
 function speichereAlsNeu() {
-  const aktuell = aktuelleVorlage();
-  const vorschlag = !aktuell ? '' : aktuell.eingebaut ? `${aktuell.name} (eigene)` : aktuell.name;
-  const name = window.prompt('Name der neuen Vorlage:', vorschlag)?.trim();
-  if (!name) return; // abgebrochen oder leer
-
-  const neu = speichereEigeneVorlage(speicher, { name, teig: zustand.teig, mehl: zustand.mehl, teiglinge: teigeFuerVorlage() });
-  if (!neu) return meldeFehler();
-  ladeUndZeige(neu);
+  const name = nameAusKarte();
+  if (!name) return;
+  nachDemSpeichern(speichereEigeneVorlage(speicher, vorlagenDaten(name)), `„${name}“ gespeichert.`);
 }
 
 function speichereAenderungen() {
   const vorlage = aktuelleVorlage();
   if (!vorlage || vorlage.eingebaut) return;
-  const gespeichert = speichereEigeneVorlage(speicher, {
-    id: vorlage.id,
-    name: vorlage.name,
-    teig: zustand.teig,
-    mehl: zustand.mehl,
-    teiglinge: teigeFuerVorlage(),
-  });
-  if (!gespeichert) return meldeFehler();
-  zustand.geaendert = false;
-  merkeStand();
-  zeichne();
+  const name = nameAusKarte();
+  if (!name) return;
+  nachDemSpeichern(speichereEigeneVorlage(speicher, { id: vorlage.id, ...vorlagenDaten(name) }),
+    `„${name}“ aktualisiert.`);
+}
+
+/** Änderungen verwerfen: Die Vorlage gilt wieder wie gespeichert. */
+function verwerfeAenderungen() {
+  const vorlage = aktuelleVorlage();
+  if (vorlage) {
+    zustand = vorlageZustand(vorlage);
+    merkeStand();
+  } else {
+    vergissStand();
+  }
+  zeige('liste');
+}
+
+/** Kein „zuletzt benutzt“ mehr – die App startet dann mit der Liste. */
+function vergissStand() {
+  zustand = null;
+  speicher.setzeEinstellung(STAND, null);
 }
 
 function loescheVorlage() {
@@ -842,10 +1136,18 @@ function loescheVorlage() {
   if (!vorlage || vorlage.eingebaut) return;
   if (!window.confirm(`Vorlage „${vorlage.name}“ wirklich löschen?`)) return;
   loescheEigeneVorlage(speicher, vorlage.id);
-  // Die Zahlen bleiben stehen, sie gehören nur zu keiner Vorlage mehr
-  zustand.vorlageId = null;
-  merkeStand();
-  zeichne();
+  vergissStand();
+  meldung = `„${vorlage.name}“ gelöscht.`;
+  zeige('liste');
+}
+
+function blendeVorlageAus() {
+  const vorlage = aktuelleVorlage();
+  if (!vorlage || !vorlage.eingebaut) return;
+  blendeAus(speicher, vorlage.id);
+  vergissStand();
+  meldung = `„${vorlage.name}“ ausgeblendet. Unten bei „Ausgeblendet“ wieder einblenden.`;
+  zeige('liste');
 }
 
 // ---------- Teilen, Sichern, Link einfügen ----------
@@ -929,16 +1231,16 @@ async function pruefeAdresse() {
   await liesPaket(location.href, true);
 }
 
+/** Erhaltene Vorlagen werden auf der Startseite angezeigt. */
 async function liesPaket(eingabe, ausAdresse = false) {
   const gelesen = await liesLink(eingabe);
   if (!gelesen) {
     meldung = 'In diesem Link habe ich keine Vorlage gefunden. Ist er vollständig kopiert?';
     if (ausAdresse) adresseSaeubern();
-    return zeichne();
+    return zeige('liste');
   }
   paket = { ...gelesen, link: ausAdresse ? location.href : eingabe.trim() };
-  zeichne();
-  window.scrollTo(0, 0);
+  zeige('liste');
 }
 
 function adresseSaeubern() {
@@ -962,7 +1264,7 @@ function uebernahmeKarte() {
 
   const zeilen = pruefung.map(({ vorlage: v, status }) => `
       <li><strong>${text(v.name)}</strong>
-        <small>${v.teiglinge ? `${formatProzent(v.teiglinge.anzahl)} × ${formatGramm(v.teiglinge.gewicht)} g, ` : ''}${formatGramm(v.mehl)} g Mehl, ${formatProzent(v.teig.hydration)} % Wasser · ${STATUS_TEXT[status]}</small></li>`).join('');
+        <small>${text(zusammenfassung(v))} · ${STATUS_TEXT[status]}</small></li>`).join('');
 
   const verworfen = paket.verworfen > 0
     ? `<p class="info">${paket.verworfen} Eintrag/Einträge im Link waren unbrauchbar und wurden ausgelassen.</p>` : '';
@@ -1014,7 +1316,7 @@ function verwerfePaket(neuZeichnen = true) {
   if (neuZeichnen) zeichne();
 }
 
-/** Einklappbarer Bereich unten: Link einfügen und alle Vorlagen sichern. */
+/** Einklappbarer Bereich auf der Startseite: Link einfügen und alle Vorlagen sichern. */
 function teilenKlappe() {
   return klappe('teilen', 'Teilen und Sichern', `
       <button type="button" class="knopf knopf-voll" data-aktion="einfuegen">Link einfügen</button>
@@ -1022,18 +1324,10 @@ function teilenKlappe() {
       <button type="button" class="knopf" data-aktion="sichern">Alle meine Vorlagen sichern</button>
       <p class="info">Erzeugt einen Link mit allen eigenen Vorlagen. Im Teilen-Menü z. B. in Notizen
         ablegen oder dir selbst schicken. Wer den Link kennt, kann die Vorlagen lesen – nicht öffentlich posten.
-        Eigene Mehl- und Saatensorten und die Wasserwerte in den Einstellungen sind nicht enthalten.</p>`);
+        Eigene Mehl- und Saatensorten, die Wasserwerte in den Einstellungen sowie Favoriten und
+        ausgeblendete Vorlagen sind nicht enthalten.</p>`);
 }
 
 function meldeFehler() {
   window.alert('Speichern hat nicht geklappt. Ist der Speicher des Handys voll?');
-}
-
-// Schützt vor HTML in Namen (wichtig bei eigenen Vorlagen)
-function text(wert) {
-  return String(wert)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
 }
