@@ -9,8 +9,8 @@ Der Nutzer ist Anfänger und arbeitet nur in der Cloud: Erklärungen knapp halte
 
 Reihenfolge der Etappen ist fest. **Nichts aus einer späteren Etappe vorab bauen**, nur die Datenmodelle so wählen, dass sie passen.
 
-### Etappe 1 – Teigrechner abschließen *(Schritte 1–8 und 11 fertig; offen: 9 → 10)*
-Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link. Offen, in dieser Reihenfolge:
+### Etappe 1 – Teigrechner *(fertig)*
+Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link, Teiglinge, Starter-Auffrischung, PWA, Bildschirm-an.
 
 - **Schritt 7 – Teiglinge-Modus:** Anzahl × Gewicht je Teigling (z. B. 4 Pizzen à 250 g, 8 Buns à 85 g), optionaler
   **Verlust-Zuschlag in %** (Standard 2 %). Umschalten zwischen Mehl- und Teiglinge-Modus mit **einem Tipper**.
@@ -22,6 +22,16 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   iPhones ankommen und dürfen nicht im Cache hängen bleiben** (Cache mit Versionsnummer, alte Caches beim Aktivieren löschen,
   `index.html` zuerst im Netz versuchen, Update-Hinweis in der App). Alle Pfade relativ wegen `/kochbuch/`.
 - **Schritt 10 – Bildschirm bleibt an**, solange die App offen ist (Wake Lock, nach Rückkehr in die App erneut anfordern).
+
+## Offline und Updates (Schritt 9/10)
+
+- `sw.js` (Service Worker) cacht alle Dateien aus `DATEIEN`. **Neue Datei der App → dort eintragen.**
+- **Nach jeder Änderung an einer ausgelieferten Datei `VERSION` in `sw.js` anpassen.** `npm test` schlägt sonst fehl
+  und nennt den neuen Wert (Prüfsumme der Dateien). Ohne neue Version kommt das Update nicht auf die iPhones.
+- Ablauf: neuer Service Worker lädt alles frisch (`cache: 'reload'`) → App zeigt „Neue Version da“ → Tipper aktiviert,
+  alte Caches werden gelöscht. Bei Rückkehr in die App wird nach Updates gesucht. `index.html` zuerst aus dem Netz (3 s Zeitlimit).
+- Versionsanzeige ganz unten in der App (zum Vergleich beider Handys).
+- Icon: Quelle `icons/icon.svg`, daraus die PNGs (180 für iOS, 192/512 fürs Manifest).
 
 ### Etappe 2 – Gemeinsame Daten
 - Anmeldung und Sync zwischen zwei iPhones über eine Datenbank (Cloud, von GitHub Pages aus per `fetch` erreichbar).
@@ -80,10 +90,11 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 | Pfad | Inhalt |
 |---|---|
 | `index.html` | einzige HTML-Seite |
+| `sw.js`, `manifest.webmanifest`, `icons/` | Offline-Betrieb, Homescreen-App, App-Icon |
 | `css/basis.css` | Farben (hell/dunkel), Schrift, Knöpfe, Felder |
 | `css/<bereich>.css` | Design eines Bereichs (z. B. `teig.css`) |
 | `js/app.js` | Start und (später) Navigation |
-| `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js` |
+| `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock) |
 | `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js`, `zutaten.js` (Mehle/Saaten), `teilen.js` (Teilen-Link), `ansicht.js` (Oberfläche) |
 | `tests/` | Tests (`*.test.js`) |
 

@@ -7,7 +7,7 @@ Homescreen hinzufügen kann und die auch offline funktioniert.
 
 ## Etappen
 
-1. **Teigrechner** – Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen *(in Arbeit)*
+1. **Teigrechner** – Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, offline nutzbar
 2. **Rezeptsammlung** *(später)*
 3. **Vorratsverwaltung** mit Sync zwischen zwei Handys *(später)*
 
@@ -23,10 +23,12 @@ Homescreen hinzufügen kann und die auch offline funktioniert.
 | Pfad | Inhalt |
 |---|---|
 | `index.html` | Die einzige HTML-Seite |
+| `sw.js` | Service Worker: offline nutzbar, Updates |
+| `manifest.webmanifest`, `icons/` | Homescreen-App: Name und Icon |
 | `css/basis.css` | Farben (hell/dunkel), Schrift, Knöpfe, Felder |
 | `css/<bereich>.css` | Design eines einzelnen Bereichs |
 | `js/app.js` | Start und Navigation |
-| `js/kern/` | Gemeinsames: Speicher, Bildschirm-an |
+| `js/kern/` | Gemeinsames: Speicher, Zahlen, Updates, Bildschirm-an |
 | `js/teig/` | Teigrechner (Rechenlogik, Vorlagen, Mehle & Saaten, Teilen-Link, Oberfläche) |
 | `tests/` | Tests der Rechenlogik |
 
