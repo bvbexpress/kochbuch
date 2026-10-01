@@ -47,7 +47,7 @@ export function alleVorlagen(speicher) {
   const eigene = speicher.alle(SAMMLUNG).filter((v) => istGueltigerTeig(v.teig));
   return [
     ...VORLAGEN.map((v) => ({ ...v, eingebaut: true })),
-    ...eigene.map((v) => ({ ...v, teig: normalisiereTeig(v.teig), eingebaut: false })),
+    ...eigene.map((v) => ({ ...v, teig: normalisiereTeig(v.teig), teiglinge: bereinigeTeiglinge(v.teiglinge), eingebaut: false })),
   ];
 }
 
@@ -73,7 +73,7 @@ export function uebernehmeVorlagen(speicher, vorlagen, { alsKopie = false } = {}
   const ergebnis = { neu: 0, aktualisiert: 0, uebersprungen: 0, fehler: 0 };
   for (const v of vorlagen) {
     if (alsKopie) {
-      const kopie = speichereEigeneVorlage(speicher, { name: `${v.name} (Kopie)`, teig: v.teig, mehl: v.mehl });
+      const kopie = speichereEigeneVorlage(speicher, { name: `${v.name} (Kopie)`, teig: v.teig, mehl: v.mehl, teiglinge: v.teiglinge });
       ergebnis[kopie ? 'neu' : 'fehler']++;
       continue;
     }
@@ -86,22 +86,46 @@ export function uebernehmeVorlagen(speicher, vorlagen, { alsKopie = false } = {}
   return ergebnis;
 }
 
-/** Liefert { teig, mehl } als frische Kopie, damit Änderungen die Vorlage nicht verändern. */
+/**
+ * Liefert { teig, mehl, teiglinge } als frische Kopie, damit Änderungen die Vorlage nicht verändern.
+ * teiglinge ist null, wenn die Vorlage keine Teiglinge-Angabe hat.
+ */
 export function ladeVorlage(vorlage) {
   if (vorlage.rezept) {
     const { teig, mehl } = teigAusGramm(vorlage.rezept);
-    return { teig: { ...teig, format: FORMAT }, mehl };
+    return { teig: { ...teig, format: FORMAT }, mehl, teiglinge: bereinigeTeiglinge(vorlage.teiglinge) };
   }
-  return { teig: normalisiereTeig(vorlage.teig), mehl: vorlage.mehl };
+  return {
+    teig: normalisiereTeig(vorlage.teig),
+    mehl: vorlage.mehl,
+    teiglinge: bereinigeTeiglinge(vorlage.teiglinge),
+  };
+}
+
+/**
+ * Optionale Teiglinge-Angabe einer Vorlage: { anzahl, gewicht, verlust } (Verlust in %).
+ * Ihr Vorhandensein bedeutet „Teiglinge-Modus“. Liefert eine saubere Kopie oder null
+ * (fehlt, unvollständig oder unsinnig → die Vorlage gilt als ohne Angabe).
+ */
+export function bereinigeTeiglinge(roh) {
+  if (!roh || typeof roh !== 'object') return null;
+  const grenze = (x, max) => (typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= max ? x : null);
+  const anzahl = grenze(roh.anzahl, 10_000);
+  const gewicht = grenze(roh.gewicht, 100_000);
+  const verlust = grenze(roh.verlust, 100);
+  if (anzahl === null || gewicht === null || verlust === null) return null;
+  return { anzahl, gewicht, verlust };
 }
 
 /** Speichert eine eigene Vorlage (neu ohne id, sonst Änderung). Gibt sie zurück oder null. */
-export function speichereEigeneVorlage(speicher, { id, name, teig, mehl }) {
+export function speichereEigeneVorlage(speicher, { id, name, teig, mehl, teiglinge = null }) {
+  const angabe = bereinigeTeiglinge(teiglinge);
   return speicher.speichere(SAMMLUNG, {
     ...(id ? { id } : {}),
     name: name.trim(),
     teig: structuredClone(teig),
     mehl,
+    ...(angabe ? { teiglinge: angabe } : {}), // ohne Angabe: Feld fehlt, wie bei alten Vorlagen
   });
 }
 

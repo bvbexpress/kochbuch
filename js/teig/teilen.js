@@ -10,7 +10,7 @@
 // WICHTIG: Ein Link kann von jedem stammen. Eingelesen wird darum nur, was wir
 // kennen und prüfen können (`bereinige…`) – alles andere wird verworfen.
 
-import { istGueltigerTeig, normalisiereTeig } from './vorlagen.js';
+import { istGueltigerTeig, normalisiereTeig, bereinigeTeiglinge } from './vorlagen.js';
 
 const VERSION = 1;
 const MARKE = 'teilen=';
@@ -38,6 +38,7 @@ export async function erstelleLink(vorlagen, basis) {
       mehl: v.mehl,
       teig: normalisiereTeig(v.teig),
       geaendert: v.geaendert,
+      ...(bereinigeTeiglinge(v.teiglinge) ? { teiglinge: bereinigeTeiglinge(v.teiglinge) } : {}),
     })),
   };
   return `${basis}#${MARKE}${await verpacke(JSON.stringify(paket))}`;
@@ -95,7 +96,9 @@ export function bereinigeVorlage(v, jetzt = Date.now()) {
   const geaendert = typeof v.geaendert === 'number' && Number.isFinite(v.geaendert) && v.geaendert > 0
     ? Math.min(v.geaendert, jetzt + EIN_TAG)
     : 0;
-  return { id: v.id.toLowerCase(), name, mehl, teig, geaendert };
+  // Teiglinge-Angabe ist optional: fehlt sie oder ist sie unbrauchbar, bleibt die Vorlage trotzdem gültig
+  const teiglinge = bereinigeTeiglinge(v.teiglinge);
+  return { id: v.id.toLowerCase(), name, mehl, teig, geaendert, ...(teiglinge ? { teiglinge } : {}) };
 }
 
 function bereinigeTeig(roh) {

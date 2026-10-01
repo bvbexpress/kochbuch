@@ -104,7 +104,9 @@ function ladeKatalog() {
 }
 
 function vorlageZustand(vorlage) {
-  const { teig, mehl } = ladeVorlage(vorlage);
+  const { teig, mehl, teiglinge: angabe } = ladeVorlage(vorlage);
+  // Vorlage mit Teiglinge-Angabe: Modus und Werte übernehmen; ohne Angabe bleibt alles wie es ist
+  if (angabe) setzeTeiglinge({ aktiv: true, ...angabe });
   return { vorlageId: vorlage.id, teig, mehl, geaendert: false, anpassung: neueAnpassung() };
 }
 
@@ -752,6 +754,8 @@ function wechsleEinheit(einheit) {
 /** Ein Tipper: zwischen Mehl- und Teiglinge-Modus umschalten. */
 function wechsleModus(aktiv) {
   setzeTeiglinge({ aktiv });
+  zustand.geaendert = true;
+  merkeStand();
   zeichne();
 }
 
@@ -799,13 +803,19 @@ function wechsleHefeart() {
 
 // ---------- Eigene Vorlagen ----------
 
+/** Teiglinge-Angabe für die Vorlage: nur im Teiglinge-Modus, sonst keine. */
+function teigeFuerVorlage() {
+  const { aktiv, anzahl, gewicht, verlust } = teiglinge();
+  return aktiv ? { anzahl, gewicht, verlust } : null;
+}
+
 function speichereAlsNeu() {
   const aktuell = aktuelleVorlage();
   const vorschlag = !aktuell ? '' : aktuell.eingebaut ? `${aktuell.name} (eigene)` : aktuell.name;
   const name = window.prompt('Name der neuen Vorlage:', vorschlag)?.trim();
   if (!name) return; // abgebrochen oder leer
 
-  const neu = speichereEigeneVorlage(speicher, { name, teig: zustand.teig, mehl: zustand.mehl });
+  const neu = speichereEigeneVorlage(speicher, { name, teig: zustand.teig, mehl: zustand.mehl, teiglinge: teigeFuerVorlage() });
   if (!neu) return meldeFehler();
   ladeUndZeige(neu);
 }
@@ -818,6 +828,7 @@ function speichereAenderungen() {
     name: vorlage.name,
     teig: zustand.teig,
     mehl: zustand.mehl,
+    teiglinge: teigeFuerVorlage(),
   });
   if (!gespeichert) return meldeFehler();
   zustand.geaendert = false;
@@ -950,7 +961,7 @@ function uebernahmeKarte() {
 
   const zeilen = pruefung.map(({ vorlage: v, status }) => `
       <li><strong>${text(v.name)}</strong>
-        <small>${formatGramm(v.mehl)} g Mehl, ${formatProzent(v.teig.hydration)} % Wasser · ${STATUS_TEXT[status]}</small></li>`).join('');
+        <small>${v.teiglinge ? `${formatProzent(v.teiglinge.anzahl)} × ${formatGramm(v.teiglinge.gewicht)} g, ` : ''}${formatGramm(v.mehl)} g Mehl, ${formatProzent(v.teig.hydration)} % Wasser · ${STATUS_TEXT[status]}</small></li>`).join('');
 
   const verworfen = paket.verworfen > 0
     ? `<p class="info">${paket.verworfen} Eintrag/Einträge im Link waren unbrauchbar und wurden ausgelassen.</p>` : '';
