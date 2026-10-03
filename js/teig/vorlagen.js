@@ -327,6 +327,16 @@ export function loescheEigeneVorlage(speicher, id) {
   return speicher.loesche(SAMMLUNG, id);
 }
 
+/** Eine eigene Vorlage genau so, wie sie gespeichert ist (z. B. um das Löschen rückgängig zu machen). */
+export function holeEigeneVorlage(speicher, id) {
+  return speicher.hole(SAMMLUNG, id);
+}
+
+/** Gelöschte eigene Vorlage mit ihrem alten Inhalt zurückholen (gilt als neue Änderung, geht beim Abgleich hoch). */
+export function stelleEigeneVorlageWiederHer(speicher, datensatz) {
+  return speicher.speichere(SAMMLUNG, datensatz);
+}
+
 /**
  * Prüft, ob gespeicherte Daten wie ein Teig aussehen.
  * Schützt vor kaputten oder veralteten Daten im Speicher.

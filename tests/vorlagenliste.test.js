@@ -8,6 +8,9 @@ import {
   ladeVorlage,
   alleVorlagen,
   eigeneVorlagen,
+  holeEigeneVorlage,
+  loescheEigeneVorlage,
+  stelleEigeneVorlageWiederHer,
   speichereEigeneVorlage,
   uebernehmeVorlagen,
   ordneVorlagen,
@@ -21,7 +24,7 @@ import {
   STANDARD_TEIGLINGE,
 } from '../js/teig/vorlagen.js';
 import { erstelleLink, liesLink, bereinigeVorlage } from '../js/teig/teilen.js';
-import { zusammenfassung } from '../js/teig/startseite.js';
+import { zusammenfassung, vorlagenListeHtml } from '../js/teig/startseite.js';
 import { berechne, gesamtmehlAusMehl, mehlFuerTeiglinge, mehlAusTeiglingen } from '../js/teig/rechner.js';
 import { ZUSAETZE } from '../js/teig/zutaten.js';
 
@@ -274,4 +277,47 @@ test('Ältere Teige ohne Zusatzzutaten bekommen eine leere Liste; Unsinniges fli
 test('Katalog der Zusatzzutaten: Milch, Ei, Butter, Zucker, Honig mit Wasseranteil 0–100', () => {
   assert.deepEqual(ZUSAETZE.map((z) => z.name), ['Milch', 'Ei', 'Butter', 'Zucker', 'Honig']);
   for (const z of ZUSAETZE) assert.ok(z.wasser >= 0 && z.wasser <= 100, z.id);
+});
+
+// ---------- Wischen: Löschen/Ausblenden mit „Rückgängig“ ----------
+
+test('Löschen rückgängig: eigene Vorlage kommt mit altem Inhalt und gleicher id zurück', () => {
+  const s = neuerSpeicher();
+  const v = lege(s, 'Mein Brot', { kategorie: 'brot' });
+  const alt = holeEigeneVorlage(s, v.id);
+  assert.ok(loescheEigeneVorlage(s, v.id));
+  assert.equal(holeEigeneVorlage(s, v.id), null);
+  assert.equal(s.offene('teigvorlagen').length, 1, 'der Grabstein geht beim Abgleich hoch');
+
+  assert.ok(stelleEigeneVorlageWiederHer(s, alt));
+  const zurueck = holeEigeneVorlage(s, v.id);
+  assert.equal(zurueck.name, 'Mein Brot');
+  assert.equal(zurueck.kategorie, 'brot');
+  assert.equal(zurueck.mehl, 400);
+  assert.equal(zurueck.erstellt, alt.erstellt);
+  assert.ok(alleVorlagen(s).some((x) => x.id === v.id));
+  assert.equal(s.offene('teigvorlagen').length, 1, 'wiederhergestellt = offene Änderung');
+});
+
+test('Ausblenden rückgängig: eingebaute Vorlage ist wieder sichtbar', () => {
+  const s = neuerSpeicher();
+  const id = VORLAGEN[0].id;
+  blendeAus(s, id);
+  assert.ok(ordneVorlagen(alleVorlagen(s), { ausgeblendet: ausgeblendet(s) }).ausgeblendet.some((x) => x.id === id));
+  blendeAus(s, id, false);
+  assert.deepEqual(ausgeblendet(s), []);
+});
+
+test('Vorlagenliste: roter Knopf heißt „Löschen“ (eigene) bzw. „Ausblenden“ (eingebaute)', () => {
+  const s = neuerSpeicher();
+  lege(s, 'Mein Brot');
+  const html = vorlagenListeHtml(
+    ordneVorlagen(alleVorlagen(s), {}),
+    { sterne: new Set(), suche: '', ausgeblendetOffen: false },
+  );
+  const knoepfe = [...html.matchAll(/class="vorlage-weg"[^>]*>([^<]*)</g)].map((m) => m[1]);
+  assert.equal(knoepfe.length, alleVorlagen(s).length);
+  assert.equal(knoepfe.filter((t) => t === 'Löschen').length, 1);
+  assert.equal(knoepfe.filter((t) => t === 'Ausblenden').length, VORLAGEN.length);
+  assert.ok(!html.includes('vorlage-weg" data-weg="" '), 'jede Zeile hat eine id');
 });

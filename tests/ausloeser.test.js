@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { erstelleAusloeser, NACH_DEM_SPEICHERN } from '../js/kern/ausloeser.js';
+import { erstelleAusloeser, NACH_DEM_SPEICHERN, TAKT } from '../js/kern/ausloeser.js';
 import { erstelleSpeicher, speicherImArbeitsspeicher } from '../js/kern/speicher.js';
 import { erstelleSync } from '../js/kern/sync.js';
 
@@ -109,7 +109,7 @@ test('Kurz nach dem Speichern: mehrere Änderungen hintereinander → ein Abglei
   assert.equal(sync.aufrufe, 0, 'wartet noch auf weitere Änderungen');
   umgebung.warte(1);
   assert.equal(sync.aufrufe, 1);
-  assert.equal(umgebung.wartend(), 0);
+  assert.equal(umgebung.wartend(), 1, 'nur noch der regelmäßige Abgleich');
 });
 
 test('App wird verlassen, während eine Änderung wartet: sofort hochladen', () => {
@@ -190,7 +190,7 @@ test('Speichern auf Handy 1 → kurz danach hochgeladen; Handy 2 bekommt es bei 
   await warte();
   assert.equal(b.speicher.hole('teigvorlagen', brot.id)?.name, 'Brot');
   assert.equal(b.berichte.at(-1).heruntergeladen, 1);
-  assert.equal(b.umgebung.wartend(), 0, 'Daten vom Server lösen keinen neuen Abgleich aus');
+  assert.equal(b.umgebung.wartend(), 1, 'Daten vom Server lösen keinen Abgleich nach dem Speichern aus (nur der Takt läuft)');
 });
 
 test('Umzug: Datensätze von vor der Anmeldung gehen beim ersten Abgleich hoch', async () => {
@@ -212,4 +212,52 @@ test('Umzug: Datensätze von vor der Anmeldung gehen beim ersten Abgleich hoch',
   assert.equal(bericht.offen, 0);
   assert.equal(server.zeilen.size, 2);
   assert.equal(speicher.hole('teigvorlagen', 'a1b2c3d4-0000-4000-8000-000000000001').name, 'Alt', 'bleibt lokal');
+});
+
+test('Regelmäßig: solange die App sichtbar ist, gleicht sie alle 45 Sekunden ab', () => {
+  const { umgebung, sync, ausloeser } = aufbau();
+  ausloeser.start();
+  assert.equal(sync.aufrufe, 1);
+  umgebung.warte(TAKT - 1);
+  assert.equal(sync.aufrufe, 1);
+  umgebung.warte(1);
+  assert.equal(sync.aufrufe, 2);
+  umgebung.warte(TAKT);
+  assert.equal(sync.aufrufe, 3);
+});
+
+test('Regelmäßig: jeder andere Abgleich setzt den Takt neu (kein Doppelschlag)', () => {
+  const { umgebung, sync, ausloeser } = aufbau();
+  ausloeser.start();
+  umgebung.warte(TAKT - 1000);
+  ausloeser.jetzt();
+  assert.equal(sync.aufrufe, 2);
+  umgebung.warte(TAKT - 1);
+  assert.equal(sync.aufrufe, 2, 'der alte Takt ist weg');
+  umgebung.warte(1);
+  assert.equal(sync.aufrufe, 3);
+  assert.equal(umgebung.wartend(), 1, 'immer nur ein Takt');
+});
+
+test('Regelmäßig: im Hintergrund kein Takt, bei der Rückkehr gleich abgleichen und weiter im Takt', () => {
+  const { umgebung, sync, ausloeser } = aufbau();
+  ausloeser.start();
+  umgebung.sichtbar(false);
+  assert.equal(umgebung.wartend(), 0);
+  umgebung.warte(TAKT * 3);
+  assert.equal(sync.aufrufe, 1);
+  umgebung.sichtbar(true);
+  assert.equal(sync.aufrufe, 2);
+  umgebung.warte(TAKT);
+  assert.equal(sync.aufrufe, 3);
+});
+
+test('Regelmäßig: ohne Anmeldung (nicht bereit) kein Abgleich, der Takt läuft aber weiter', () => {
+  const { umgebung, sync, zustand, ausloeser } = aufbau({ bereit: false });
+  ausloeser.start();
+  umgebung.warte(TAKT);
+  assert.equal(sync.aufrufe, 0);
+  zustand.bereit = true;
+  umgebung.warte(TAKT);
+  assert.equal(sync.aufrufe, 1);
 });
