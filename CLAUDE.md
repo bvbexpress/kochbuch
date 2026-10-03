@@ -5,6 +5,15 @@ Nutzer: zwei iPhones mit iOS 26, Nutzung **nur als Homescreen-Web-App**.
 Veröffentlichung über GitHub Pages aus `main`: https://bvbexpress.github.io/kochbuch/ – **das Repo ist öffentlich**.
 Der Nutzer ist Anfänger und arbeitet nur in der Cloud: Erklärungen knapp halten.
 
+## Grundsatz – gilt für alles
+
+**Die zweite Nutzerin muss die App ohne Erklärung bedienen können.**
+- Keine verschachtelten Menüs, keine zusätzlichen Schritte im Alltag. Alles direkt dort bearbeitbar, wo man es sieht.
+- **Im Zweifel eine Funktion weglassen**, statt die Bedienung komplizierter zu machen.
+- Technische Probleme (kein Netz, Server pausiert, Anmeldung abgelaufen) zeigen sich im Alltag **nie** als Meldung.
+  Die App arbeitet lokal weiter und löst sie möglichst selbst. Falls doch jemand handeln muss, sieht das nur
+  das Verwalter-Handy (Geräte-Einstellung), ruhig und an einer Stelle.
+
 ## Fahrplan
 
 Reihenfolge der Etappen ist fest. **Nichts aus einer späteren Etappe vorab bauen**, nur die Datenmodelle so wählen, dass sie passen.
@@ -50,26 +59,34 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
 - Versionsanzeige ganz unten in der App (zum Vergleich beider Handys).
 - Icon: Quelle `icons/icon.svg`, daraus die PNGs (180 für iOS, 192/512 fürs Manifest).
 
-### Etappe 2 – Gemeinsame Daten
-- Anmeldung und Sync zwischen zwei iPhones über eine Datenbank (Cloud, von GitHub Pages aus per `fetch` erreichbar).
-- Persönliche Daten liegen **nur dort**, nie im Repo. Im Code stehen höchstens öffentliche Projekt-Schlüssel, der Schutz
-  läuft über Anmeldung und Zugriffsregeln der Datenbank (nur die zwei Konten sehen die Daten).
-- Die eigenen Vorlagen ziehen mit um (Datenmodell mit `id`/`geaendert`/`geloescht` ist dafür schon da).
-  Eigene Mehle/Saaten samt Wasserwerten werden hier mit synchronisiert.
-- App bleibt **offline nutzbar** (lokal speichern, später abgleichen). Teilen per Link bleibt als Sicherung.
-- **Die Regel „keine Pakete“ darf hier abgewogen werden:** Eine schlanke, verbreitete Bibliothek des Anbieters ist erlaubt,
-  wenn sie Anmeldung und Sync deutlich einfacher und sicherer macht. **In der Planung beide Wege vergleichen**, dann entscheiden:
-  - *Weg A, nur `fetch`:* kleinste App, volle Kontrolle, kein Fremdcode. Dafür selbst bauen und pflegen: Anmeldung,
-    Token-Erneuerung, Fehlerfälle. Das ist der sicherheitskritische Teil.
-  - *Weg B, Bibliothek des Anbieters:* bewährte Anmeldung und Token-Pflege, weniger Eigencode. Dafür größere Dateien
-    (Ladezeit, Offline-Cache), Abhängigkeit vom Anbieter, Fremdcode. Dann: feste Version, als Datei im Repo ablegen
-    (nicht live von einem CDN laden), Updates nur bewusst.
-  - *Tendenz (zu prüfen):* Bibliothek höchstens für die Anmeldung; die eigentliche Sync-Logik (`id`, `geaendert`, `geloescht`) bleibt
-    eigener Code in `kern/` hinter einer kleinen Schnittstelle, damit der Anbieter austauschbar bleibt.
-- **Anmeldung auf dem iPhone:** Links aus E-Mails öffnen in Safari, nicht in der Homescreen-App, und beide haben getrennte
-  Speicher (wie beim Teilen-Link). Ein „Anmelde-Link per E-Mail“ meldet deshalb nur Safari an, nicht die App.
-  Besser: Passwort oder Einmal-Code, der in der App eingetippt wird. Beim Vergleich mitprüfen.
-- Vor dem Bauen klären: Anbieter der Datenbank, Anmeldeweg, Weg A oder B, Kosten (Gratis-Stufe reicht für zwei Nutzer?).
+### Etappe 2 – Gemeinsame Daten *(geplant, Bau ab Schritt A nach Freigabe)*
+**Entschieden:** Supabase, Region Frankfurt, Gratis-Stufe. **Weg A: nur `fetch`, keine Bibliothek.**
+- Persönliche Daten liegen **nur in der Datenbank**, nie im Repo. Im Code stehen nur Projekt-URL und öffentlicher
+  Schlüssel (publishable). Der geheime Schlüssel (secret/`service_role`) kommt nie in App oder Repo.
+- **Zugriffsschutz:** Row Level Security auf jeder Tabelle. Zugriff nur für Konten, die in `mitglieder` dem Haushalt
+  zugeordnet sind. `mitglieder` pflegt nur der Verwalter im Dashboard. Registrieren ist in Supabase abgeschaltet.
+- **Anmeldung:** E-Mail + Passwort, **einmal pro Handy** beim Einrichten (Schlüsselbund füllt aus). Danach nie wieder:
+  Der Erneuerungsschlüssel läuft nicht ab, die App erneuert den Zugangsschlüssel still. Kein Link per E-Mail.
+  Erneuern immer nur einmal gleichzeitig, neuen Schlüssel sofort speichern. Supabase akzeptiert den vorigen Schlüssel
+  erneut (Ausnahme „Elternschlüssel“), ein abgebrochenes Erneuern meldet also nicht ab.
+- **Datenmodell Server:** eine Tabelle `datensaetze` (`haushalt`, `sammlung`, `id`, `daten` JSON, `geloescht`, `version`,
+  `stand`, `geaendert_von`). Neue Bereiche (Rezepte, Vorrat, Zutatenkatalog) = neue `sammlung`, keine neue Tabelle.
+- **Sync** (eigener Code in `kern/`, Anbieter-Teil nur in `kern/server.js` und `kern/anmeldung.js`):
+  lokal zuerst speichern, Datensatz als „offen“ markieren. Hochladen über eine Datenbank-Funktion, die nur schreibt,
+  wenn die Server-`version` noch die ist, auf der die Änderung beruht. Herunterladen „alles seit `stand`“.
+  **Entscheidend ist die Server-Version, nie die Uhr des Handys.** Auslöser: Start, Rückkehr in die App, Netz wieder da,
+  kurz nach dem Speichern.
+- **Konflikte:** Vorlagen/Rezepte → die Server-Fassung bleibt, die eigene wird zur Kopie mit kleinem Vermerk direkt an der
+  Vorlage (kein Dialog). Inhaltlich gleich = kein Konflikt. Löschen gegen Ändern: Ändern gewinnt.
+  Einzelwerte (Wasserwert eines Mehls): zuletzt hochgeladen gewinnt.
+- **Umzug:** Bei der ersten Anmeldung werden alle eigenen Datensätze hochgeladen. Vorher wird automatisch ein Sicherungs-Link
+  angeboten (nur auf dem Verwalter-Handy). Favoriten, Ausgeblendet, zuletzt geöffnet bleiben Geräte-Einstellungen.
+- **Gegen das Pausieren** (Supabase pausiert nach 7 Tagen ohne Anfragen): GitHub Action ruft zweimal pro Woche
+  eine kleine Datenbank-Funktion `ping` auf. Achtung: GitHub schaltet Zeitpläne in öffentlichen Repos nach 60 Tagen
+  ohne Repo-Aktivität ab – die Action hält sich deshalb selbst aktiv. Schlägt sie fehl, mailt GitHub dem Verwalter.
+- **Fehler bleiben unsichtbar** (siehe Grundsatz): Die App arbeitet lokal weiter, offene Änderungen gehen nie verloren.
+  Nur das Verwalter-Handy zeigt den Abgleich-Status, auch „Handy 2 hat seit X Tagen nicht abgeglichen“.
+- Teilen per Link bleibt als Sicherung.
 
 ### Etappe 3 – Rezepte
 - Rezepte mit **Personenanzahl** und automatischer Mengenanpassung.
@@ -144,8 +161,10 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 ## Datenmodell (für späteren Sync)
 
 Jeder Datensatz (Vorlagen, Mehle/Saaten – eigene und geänderte Standardwerte –, später Rezepte, Vorräte) hat:
-- `id` – UUID, auf beiden Handys gleich
-- `geaendert` – Zeitstempel (ms) der letzten Änderung, neuere Version gewinnt
+- `id` – UUID, auf beiden Handys gleich (Ausnahme: geänderte eingebaute Mehle/Saaten/Zusätze behalten deren feste
+  id wie `weizen550`, das ist auf beiden Handys ebenfalls gleich)
+- `geaendert` – Zeitstempel (ms) der letzten Änderung. Für Teilen-Links gewinnt die neuere Version; beim Sync
+  entscheidet die Server-`version` (siehe Etappe 2)
 - `geloescht` – `true` statt echtem Löschen („Grabstein“)
 
 Geräte-Einstellungen (`speicher.einstellung`) gehören nur zu einem Handy und werden nicht synchronisiert.
