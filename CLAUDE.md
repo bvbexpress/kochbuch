@@ -90,8 +90,11 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
 - Erkennung doppelt benutzter Erneuerungsschlüssel in Supabase **nicht** abschalten (die Elternschlüssel-Ausnahme reicht).
   Abschalten nur als Notlösung, falls der Praxistest Abmeldungen zeigt.
 - **Bauplan** (je Schritt ein PR mit Tests; Reihenfolge fest):
-  - **A** `kern/speicher.js`: Markierung „offen“ und Server-Version je Datensatz, „Änderungen seit…“, „vom Server übernehmen“. Ohne Netz.
-  - **B** `datenbank/schema.sql`: Tabellen, RLS, Sync-Funktion, `ping`, letzter Abgleich je Konto. Danach richtet der Nutzer
+  - **A** *(fertig)* `kern/speicher.js`: Markierung „offen“ und Server-Version je Datensatz (internes Feld `sync`,
+    nie nach außen), `offene`, `hochgeladen`, `vomServer` (überschreibt nie offene Änderungen), `syncStand`. Ohne Netz.
+  - **B** *(fertig)* `datenbank/schema.sql`: Tabellen, RLS, `hochladen`/`herunterladen` (Logik in Schema `intern`), `ping`,
+    letzter Abgleich je Konto (`mitglieder.letzter_abgleich`). Getestet gegen echtes PostgreSQL (`tests/datenbank.test.js`,
+    übersprungen ohne PostgreSQL). Danach richtet der Nutzer
     Supabase ein: Projekt (Frankfurt, Free), zwei Konten mit „Auto Confirm“, Registrieren aus, Skript ausführen,
     Haushalt/Mitglieder per Zusatz-SQL (nur im Chat, enthält E-Mails, **nie ins Repo**), URL + publishable key an Claude,
     Security Advisor prüfen.
@@ -145,6 +148,7 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 | `js/app.js` | Start und (später) Navigation |
 | `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock) |
 | `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js` (inkl. Kategorien, Ordnen der Liste), `zutaten.js` (Mehle/Saaten/Zusatzzutaten), `teilen.js` (Teilen-Link), `startseite.js` (HTML der Vorlagenliste), `ansicht.js` (Oberfläche, Navigation) |
+| `datenbank/schema.sql` | Supabase-Datenbank (Tabellen, Zugriffsschutz, Sync-Funktionen); nicht Teil der App |
 | `tests/` | Tests (`*.test.js`) |
 
 `js/rezepte/`, `js/vorrat/` erst anlegen, wenn dort Code entsteht.
