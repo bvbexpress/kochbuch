@@ -2,7 +2,8 @@
 //
 // Startet eine leere Wegwerf-Datenbank und baut die Teile von Supabase nach, die das Skript
 // braucht (Rollen anon/authenticated, auth.users, auth.uid(), Standard-Rechte in public).
-// Ist PostgreSQL nicht installiert, werden die Tests übersprungen (GitHub hat es installiert).
+// Ist PostgreSQL nicht installiert, werden die Tests lokal übersprungen.
+// Bei GitHub (GITHUB_ACTIONS) dürfen sie nie übersprungen werden: Dort wird der Lauf dann rot.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -22,7 +23,8 @@ function postgresOrdner() {
 }
 
 const bin = postgresOrdner();
-const ohne = bin ? false : 'PostgreSQL nicht installiert';
+const beiGitHub = process.env.GITHUB_ACTIONS === 'true';
+const ohne = bin || beiGitHub ? false : 'PostgreSQL nicht installiert';
 const alsRoot = process.getuid?.() === 0; // initdb verweigert root → als Benutzer postgres starten
 let ordner;
 
@@ -69,6 +71,7 @@ const vorlage = (id, name, basis = 0, geloescht = false) =>
 
 before(() => {
   if (ohne) return;
+  if (!bin) throw new Error('PostgreSQL fehlt bei GitHub – die Datenbank-Tests dürfen dort nicht übersprungen werden');
   ordner = mkdtempSync(join(tmpdir(), 'kb-'));
   if (alsRoot) execFileSync('chown', ['postgres', ordner]);
   chmodSync(ordner, 0o700);
