@@ -59,7 +59,7 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
 - Versionsanzeige ganz unten in der App (zum Vergleich beider Handys).
 - Icon: Quelle `icons/icon.svg`, daraus die PNGs (180 für iOS, 192/512 fürs Manifest).
 
-### Etappe 2 – Gemeinsame Daten *(im Bau: A–E und Supabase-Einrichtung fertig, weiter mit F)*
+### Etappe 2 – Gemeinsame Daten *(im Bau: A–F und Supabase-Einrichtung fertig, weiter mit G)*
 **Entschieden:** Supabase, Region Frankfurt, Gratis-Stufe. **Weg A: nur `fetch`, keine Bibliothek.**
 - Persönliche Daten liegen **nur in der Datenbank**, nie im Repo. Im Code stehen nur Projekt-URL und öffentlicher
   Schlüssel (publishable). Der geheime Schlüssel (secret/`service_role`) kommt nie in App oder Repo.
@@ -136,7 +136,22 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
     `SUPABASE_TEST_PASSWORT`. Das Testkonto gehört **bewusst zu keinem Haushalt**: Der Test prüft Anmelden,
     Erneuern, Elternschlüssel und dass das Konto (und anonym) nichts lesen und nichts schreiben kann.
     Abgleich mit Haushalt prüft Schritt H auf den iPhones.
-  - **F** Auslöser und Umzug der bestehenden Daten (vorher Sicherungs-Link auf dem Verwalter-Handy).
+    **Versteckte Verwaltung:** langes Drücken (0,7 s) auf die Versionsnummer ganz unten → Karte „Verwaltung“
+    mit „Verwalter-Handy: an/aus“ und „Abmelden“. Abmelden gleicht vorher noch einmal ab, fragt (nennt noch
+    nicht hochgeladene Änderungen), vergisst die Schlüssel (`anmeldung.abmelden()`, Supabase-Logout nur
+    nebenbei) und setzt `syncStand` auf 0. Daten und offene Änderungen bleiben und gehen nach der nächsten
+    Anmeldung hoch. Eine späte Antwort beim Erneuern meldet nach dem Abmelden nicht wieder an.
+  - **F** *(fertig)* `kern/ausloeser.js`: `erstelleAusloeser({ sync, bereit, nachAbgleich })` → `start()`
+    (App-Start, Rückkehr in die App, Netz wieder da), `nachAenderung()` (2 s nach der letzten lokalen Änderung;
+    beim Verlassen der App sofort), `jetzt()`. Lokale Änderungen meldet `speicher.beiAenderung` (nur
+    `speichere`/`uebernimm`/`loesche`, nie Server-Daten). `bereit()` aus `abgleich.js`: angemeldet und Umzug frei.
+    **Umzug:** Daten von vor Etappe 2 gelten als offen (Version 0) und gehen beim ersten Abgleich hoch.
+    Verwalter-Handy mit eigenen Vorlagen: vorher Karte in der Klappe („Sicherung erstellen“ = Sicherungs-Link,
+    „Abgleich starten“), bis dahin kein Abgleich; „· bitte ansehen“ im Titel. Geräte-Einstellung
+    `abgleich.umzug` = true nach „Abgleich starten“ oder dem ersten erfolgreichen Abgleich (danach nie wieder).
+    Andere Handys gleichen nach der Anmeldung sofort ab. Neue Daten vom Server: `datenAktualisiert()` in
+    `ansicht.js` lädt Liste und Werte neu (nicht während getippt wird); die offene Vorlage im Rechner nur, wenn
+    hier nicht geändert – Mehlmenge und Teiglinge bleiben.
   - **G** GitHub Action `ping` (Mo + Do), hält sich selbst aktiv.
   - **H** Praxistest auf beiden iPhones: Flugmodus, gleichzeitige Änderung, Löschen gegen Ändern, App beim Erneuern schließen.
 
@@ -181,7 +196,7 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 | `css/basis.css` | Farben (hell/dunkel), Schrift, Knöpfe, Felder |
 | `css/<bereich>.css` | Design eines Bereichs (z. B. `teig.css`) |
 | `js/app.js` | Start und (später) Navigation |
-| `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse, öffentlicher Schlüssel, Abfragen), `anmeldung.js` (Anmeldung, stilles Erneuern), `abgleich.js` (Klappe Abgleich: Anmelde-Formular, Status auf dem Verwalter-Handy) |
+| `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse, öffentlicher Schlüssel, Abfragen), `anmeldung.js` (Anmeldung, stilles Erneuern), `abgleich.js` (Klappe Abgleich: Anmelde-Formular, Status auf dem Verwalter-Handy, Umzug, versteckte Verwaltung), `ausloeser.js` (wann abgeglichen wird) |
 | `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js` (inkl. Kategorien, Ordnen der Liste), `zutaten.js` (Mehle/Saaten/Zusatzzutaten), `teilen.js` (Teilen-Link), `startseite.js` (HTML der Vorlagenliste), `ansicht.js` (Oberfläche, Navigation) |
 | `datenbank/schema.sql` | Supabase-Datenbank (Tabellen, Zugriffsschutz, Sync-Funktionen); nicht Teil der App |
 | `tests/` | Tests (`*.test.js`) |

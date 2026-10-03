@@ -67,6 +67,21 @@ export function erstelleSpeicher(backend, jetzt = () => Date.now()) {
   /** Lokale Änderung: auf der bisherigen Server-Version aufbauen, als offen markieren. */
   const alsOffen = (datensatz, alt) => ({ ...datensatz, sync: { version: syncVon(alt).version, offen: true } });
 
+  // Zuhörer für lokale Änderungen (Auslöser für den Abgleich kurz nach dem Speichern)
+  const zuhoerer = new Set();
+  const gemeldet = (ok) => {
+    if (ok) {
+      for (const f of zuhoerer) {
+        try {
+          f();
+        } catch {
+          // ein Zuhörer darf das Speichern nie stören
+        }
+      }
+    }
+    return ok;
+  };
+
   return {
     /** Alle nicht gelöschten Datensätze einer Sammlung, älteste zuerst. */
     alle(sammlung) {
@@ -93,7 +108,7 @@ export function erstelleSpeicher(backend, jetzt = () => Date.now()) {
         geaendert: zeit,
         geloescht: false,
       };
-      return sammlungSchreiben(sammlung, einsetzen(liste, alsOffen(datensatz, alt))) ? datensatz : null;
+      return gemeldet(sammlungSchreiben(sammlung, einsetzen(liste, alsOffen(datensatz, alt)))) ? datensatz : null;
     },
 
     /**
@@ -121,7 +136,7 @@ export function erstelleSpeicher(backend, jetzt = () => Date.now()) {
       const liste = sammlungLesen(sammlung);
       const alt = liste.find((d) => d.id === daten.id);
       const datensatz = { ...ohneSync(daten), erstellt: alt?.erstellt ?? jetzt(), geloescht: false };
-      return sammlungSchreiben(sammlung, einsetzen(liste, alsOffen(datensatz, alt))) ? ergebnis : null;
+      return gemeldet(sammlungSchreiben(sammlung, einsetzen(liste, alsOffen(datensatz, alt)))) ? ergebnis : null;
     },
 
     /** Markiert als gelöscht. Die Nutzdaten werden entfernt, nur der "Grabstein" bleibt. */
@@ -131,7 +146,16 @@ export function erstelleSpeicher(backend, jetzt = () => Date.now()) {
           ? alsOffen({ id: d.id, erstellt: d.erstellt, geaendert: jetzt(), geloescht: true }, d)
           : d,
       );
-      return sammlungSchreiben(sammlung, liste);
+      return gemeldet(sammlungSchreiben(sammlung, liste));
+    },
+
+    /**
+     * `f()` wird nach jeder lokalen Änderung aufgerufen (speichere, uebernimm, loesche) –
+     * nicht bei Daten vom Server. Gibt eine Funktion zum Abmelden zurück.
+     */
+    beiAenderung(f) {
+      zuhoerer.add(f);
+      return () => zuhoerer.delete(f);
     },
 
     // ---- Abgleich mit dem Server (Etappe 2) ----

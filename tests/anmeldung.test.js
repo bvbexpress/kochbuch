@@ -435,3 +435,59 @@ test('Anfragen haben eine Zeitgrenze (hängendes Netz blockiert den Abgleich nic
   assert.equal(signale.length, 2);
   for (const s of signale) assert.ok(s instanceof AbortSignal);
 });
+
+// --- Abmelden (versteckte Verwaltung) ----------------------------------------
+
+test('Abmelden: Schlüssel weg, Supabase entwertet die Sitzung, danach kein Zugang mehr', async () => {
+  const sb = nachgebautesSupabase();
+  const h = handy(sb);
+  await h.anmeldung.anmelden(EMAIL, PASSWORT);
+  const zugang = h.speicher.einstellung('anmeldung').zugang;
+  await h.anmeldung.abmelden();
+  assert.equal(h.anmeldung.zustand(), 'abgemeldet');
+  assert.equal(h.speicher.einstellung('anmeldung'), null);
+  assert.equal(await h.anmeldung.zugangsschluessel(), null);
+  const abmeldung = sb.anfragen.at(-1);
+  assert.equal(abmeldung.pfad, '/auth/v1/logout?scope=local');
+  assert.equal(abmeldung.headers.Authorization, `Bearer ${zugang}`);
+  await assert.rejects(h.server.mitglieder(), /nicht angemeldet/);
+});
+
+test('Abmelden ohne Netz oder mit abgelaufenem Zugang: auf dem Handy trotzdem abgemeldet', async () => {
+  const sb = nachgebautesSupabase();
+  const h = handy(sb);
+  await h.anmeldung.anmelden(EMAIL, PASSWORT);
+  sb.netz = false;
+  await h.anmeldung.abmelden();
+  assert.equal(h.anmeldung.zustand(), 'abgemeldet');
+
+  sb.netz = true;
+  await h.anmeldung.anmelden(EMAIL, PASSWORT);
+  h.uhr.jetzt += 2 * STUNDE;
+  const anfragen = sb.anfragen.length;
+  await h.anmeldung.abmelden();
+  assert.equal(h.anmeldung.zustand(), 'abgemeldet');
+  assert.equal(sb.anfragen.length, anfragen, 'abgelaufener Zugang: Supabase nicht erst fragen');
+});
+
+test('Abmelden, während still erneuert wird: die späte Antwort meldet nicht wieder an', async () => {
+  const sb = nachgebautesSupabase();
+  const h = handy(sb);
+  await h.anmeldung.anmelden(EMAIL, PASSWORT);
+  h.uhr.jetzt += 2 * STUNDE;
+  const erneuern = h.anmeldung.zugangsschluessel();
+  await h.anmeldung.abmelden();
+  assert.equal(await erneuern, null);
+  assert.equal(h.anmeldung.zustand(), 'abgemeldet');
+  assert.equal(h.speicher.einstellung('anmeldung'), null);
+});
+
+test('Nach dem Abmelden wieder anmelden: geht ganz normal', async () => {
+  const sb = nachgebautesSupabase();
+  const h = handy(sb);
+  await h.anmeldung.anmelden(EMAIL, PASSWORT);
+  await h.anmeldung.abmelden();
+  assert.deepEqual(await h.anmeldung.anmelden(EMAIL, PASSWORT), { ok: true });
+  assert.equal(h.anmeldung.zustand(), 'angemeldet');
+  assert.ok(sb.zugangGueltig(await h.anmeldung.zugangsschluessel()));
+});
