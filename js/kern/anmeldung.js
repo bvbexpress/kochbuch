@@ -99,13 +99,14 @@ export function erstelleAnmeldung({
     } catch {
       return null; // kein Netz o. Ä.: alles bleibt, wie es ist
     }
+    // Inzwischen abgemeldet (oder neu angemeldet)? Dann die Antwort nicht mehr speichern.
+    if (gespeichert()?.erneuerung !== alt.erneuerung) return null;
     if (antwort.status === 200) return sichern(antwort.daten, alt.konto)?.zugang ?? null;
 
     const code = antwort.daten?.error_code ?? antwort.daten?.code;
     const endgueltig = (antwort.status === 400 || antwort.status === 401 || antwort.status === 403)
       && (ABGELEHNT.has(code) || antwort.daten?.error === 'invalid_grant');
-    // Nur ablehnen, wenn noch derselbe Schlüssel gespeichert ist (nicht inzwischen neu angemeldet)
-    if (endgueltig && gespeichert()?.erneuerung === alt.erneuerung) {
+    if (endgueltig) {
       speicher.setzeEinstellung(EINSTELLUNG, { ...alt, abgelehnt: true });
     }
     return null;
@@ -150,6 +151,26 @@ export function erstelleAnmeldung({
       if (!a || a.abgelehnt) return null;
       if (!erzwingen && a.zugang && a.ablauf - VORLAUF > jetzt()) return a.zugang;
       return erneuern();
+    },
+
+    /**
+     * Abmelden (versteckte Verwalter-Funktion). Vergisst die Schlüssel auf diesem Handy sofort;
+     * Supabase wird – wenn es gerade geht – gebeten, den Erneuerungsschlüssel zu entwerten.
+     * Daten bleiben unberührt (offene Änderungen gehen nach der nächsten Anmeldung hoch). Wirft nie.
+     */
+    async abmelden() {
+      const a = gespeichert();
+      speicher.setzeEinstellung(EINSTELLUNG, null);
+      if (!a?.zugang || a.abgelehnt || a.ablauf <= jetzt()) return;
+      try {
+        await fetch(`${adresse}/auth/v1/logout?scope=local`, {
+          method: 'POST',
+          headers: { apikey: schluessel, Authorization: `Bearer ${a.zugang}` },
+          signal: zeitgrenze(5000),
+        });
+      } catch {
+        // kein Netz: Auf diesem Handy ist trotzdem abgemeldet
+      }
     },
 
     /** 'abgemeldet' (nie angemeldet) | 'angemeldet' | 'abgelehnt' (neu anmelden nötig) */

@@ -114,7 +114,7 @@ export function zeigeTeigrechner(ziel, { abgleich: bereich = null } = {}) {
   wurzel.addEventListener('click', beiKlick);
   // Der Abgleich-Bereich zeichnet nur die Startseite neu (z. B. wenn der Status geladen ist)
   abgleich?.verbinde(wurzel, () => {
-    if (ansicht === 'liste') zeichne();
+    if (ansicht === 'liste' && !tipptGerade()) zeichne();
   });
   // Offene Klappen merken, damit sie nach dem Neuzeichnen offen bleiben
   wurzel.addEventListener('toggle', (e) => {
@@ -127,6 +127,31 @@ export function zeigeTeigrechner(ziel, { abgleich: bereich = null } = {}) {
   wurzel.addEventListener('focusin', (e) => {
     if (e.target.matches('input')) e.target.select();
   });
+}
+
+/** Steht der Cursor gerade in einem Feld? Dann nicht neu zeichnen (sonst ist das Getippte weg). */
+function tipptGerade() {
+  const feld = document.activeElement;
+  return Boolean(feld && wurzel.contains(feld) && feld.matches('input, textarea, select'));
+}
+
+/**
+ * Nach einem Abgleich mit neuen Daten vom anderen Handy: Liste und Werte neu laden.
+ * Im Rechner wird die offene Vorlage nur aufgefrischt, wenn hier nichts an ihr verändert ist;
+ * Mehlmenge und Teiglinge bleiben, wie sie gerade eingestellt sind.
+ */
+export function datenAktualisiert() {
+  if (!wurzel || tipptGerade()) return;
+  ladeKatalog();
+  if (ansicht === 'rechner' && zustand && !zustand.geaendert && !speicherKarte) {
+    const vorlage = aktuelleVorlage();
+    const neu = vorlage && vorlageZustand(vorlage);
+    if (neu && (neu.modus !== zustand.modus || JSON.stringify(neu.teig) !== JSON.stringify(zustand.teig))) {
+      zustand = { ...neu, mehl: zustand.mehl, teiglinge: zustand.teiglinge };
+      merkeStand();
+    }
+  }
+  zeichne();
 }
 
 function ladeKatalog() {
@@ -1289,7 +1314,7 @@ async function teileVorlage() {
   });
 }
 
-async function sichereAlle() {
+export async function sichereAlle() {
   const liste = eigeneVorlagen(speicher);
   if (liste.length === 0) {
     window.alert('Du hast noch keine eigenen Vorlagen zum Sichern.');

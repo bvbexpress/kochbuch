@@ -236,3 +236,37 @@ test('Neue Basis nach Konflikt: bleibt offen, beruht auf Server-Version; nur fü
   s.hochgeladen('vorlagen', s.offene('vorlagen')[0].datensatz, 1);
   assert.equal(s.neueBasis('vorlagen', d.id, 5), false, 'nicht offen');
 });
+
+// ---- Zuhörer für lokale Änderungen (Auslöser „kurz nach dem Speichern“, Schritt F) ----
+
+test('beiAenderung: nur lokale Änderungen melden, nicht Daten vom Server oder Einstellungen', () => {
+  const s = neuerSpeicher();
+  let meldungen = 0;
+  const abmelden = s.beiAenderung(() => meldungen++);
+
+  const d = s.speichere('vorlagen', { name: 'Pizza' });
+  assert.equal(meldungen, 1);
+  s.uebernimm('vorlagen', { ...d, name: 'Pizza 2', geaendert: d.geaendert + 5000 });
+  assert.equal(meldungen, 2);
+  s.loesche('vorlagen', d.id);
+  assert.equal(meldungen, 3);
+
+  s.hochgeladen('vorlagen', s.offene('vorlagen')[0].datensatz, 1);
+  s.vomServer('vorlagen', { id: crypto.randomUUID(), daten: { name: 'Brot' }, geloescht: false, version: 1 });
+  s.setzeEinstellung('teig.stand', { x: 1 });
+  s.setzeSyncStand(4);
+  assert.equal(meldungen, 3, 'Server-Daten und Einstellungen lösen nichts aus');
+
+  abmelden();
+  s.speichere('vorlagen', { name: 'Focaccia' });
+  assert.equal(meldungen, 3);
+});
+
+test('beiAenderung: ein fehlerhafter Zuhörer stört das Speichern nicht', () => {
+  const s = neuerSpeicher();
+  s.beiAenderung(() => {
+    throw new Error('kaputt');
+  });
+  const d = s.speichere('vorlagen', { name: 'Pizza' });
+  assert.equal(s.hole('vorlagen', d.id).name, 'Pizza');
+});

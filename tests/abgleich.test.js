@@ -113,10 +113,15 @@ function testAnmeldung({ zustand = 'abgemeldet', konto = 'k1', antwort = { ok: t
     versuche: [],
     zustand: () => a.zustandWert,
     konto: () => konto,
+    abmeldungen: 0,
     async anmelden(email, passwort) {
       a.versuche.push({ email, passwort });
       if (antwort.ok) a.zustandWert = 'angemeldet';
       return antwort;
+    },
+    async abmelden() {
+      a.abmeldungen++;
+      a.zustandWert = 'abgemeldet';
     },
   };
   return a;
@@ -150,14 +155,36 @@ function testWurzel() {
   };
 }
 
-function aufbau({ anmeldung = testAnmeldung(), server = testServer(), verwalter = false, uhr = { jetzt: JETZT } } = {}) {
+function aufbau({
+  anmeldung = testAnmeldung(), server = testServer(), verwalter = false, uhr = { jetzt: JETZT }, antworten = [],
+} = {}) {
   const speicher = neuerSpeicher();
   if (verwalter) setzeVerwalter(speicher, true);
-  const bereich = erstelleAbgleichBereich({ speicher, anmeldung, server, jetzt: () => uhr.jetzt });
+  const protokoll = { abgleiche: 0, sicherungen: 0, fragen: [] };
+  const bereich = erstelleAbgleichBereich({
+    speicher,
+    anmeldung,
+    server,
+    jetzt: () => uhr.jetzt,
+    abgleichen: async () => {
+      protokoll.abgleiche++;
+      return null;
+    },
+    sicherung: {
+      anzahl: () => speicher.alle('teigvorlagen').length,
+      erstellen: async () => {
+        protokoll.sicherungen++;
+      },
+    },
+    fragen: (frage) => {
+      protokoll.fragen.push(frage);
+      return antworten.shift() ?? true;
+    },
+  });
   const wurzel = testWurzel();
   let gezeichnet = 0;
   bereich.verbinde(wurzel, () => gezeichnet++);
-  return { speicher, anmeldung, server, bereich, wurzel, uhr, gezeichnet: () => gezeichnet };
+  return { speicher, anmeldung, server, bereich, wurzel, uhr, protokoll, gezeichnet: () => gezeichnet };
 }
 
 /** Absenden des Anmelde-Formulars nachstellen. */
@@ -390,4 +417,172 @@ test('Vermerk geht nicht in Teilen-Links', async () => {
   const v = alleVorlagen(speicher).find((x) => x.id === kopie.id);
   const gelesen = await liesLink(await erstelleLink([v], 'https://beispiel.test/kochbuch/'));
   assert.equal('konflikt' in gelesen.vorlagen[0], false);
+});
+
+// ---------- Versteckte Verwaltung: langes Drücken auf die Versionsnummer ----------
+
+/** Seite mit Versionsnummer und Platz für die Verwaltung. */
+function mitVerwaltung(optionen) {
+  const a = aufbau(optionen);
+  const version = testWurzel();
+  const ziel = { ...testWurzel(), innerHTML: '' };
+  a.bereich.verbindeVerwaltung(version, ziel);
+  const tippe = (aktion) => ziel.loese('click', {
+    target: { closest: (s) => (s === '[data-verwaltung]' ? { dataset: { verwaltung: aktion } } : null) },
+  });
+  return { ...a, version, ziel, tippe };
+}
+
+test('Verwaltung: unsichtbar; kurzes Tippen öffnet nichts, langes Drücken schon', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { version, ziel } = mitVerwaltung({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }) });
+  assert.equal(ziel.innerHTML, '');
+  version.loese('pointerdown');
+  t.mock.timers.tick(300);
+  version.loese('pointerup');
+  t.mock.timers.tick(1000);
+  assert.equal(ziel.innerHTML, '', 'kurzes Tippen');
+  version.loese('pointerdown');
+  t.mock.timers.tick(300);
+  version.loese('pointercancel'); // z. B. Scrollen
+  t.mock.timers.tick(1000);
+  assert.equal(ziel.innerHTML, '', 'Scrollen');
+  version.loese('pointerdown');
+  t.mock.timers.tick(700);
+  assert.match(ziel.innerHTML, /Verwaltung/);
+  assert.match(ziel.innerHTML, /Dieses Handy ist angemeldet/);
+  assert.match(ziel.innerHTML, /Verwalter-Handy: aus/);
+  assert.match(ziel.innerHTML, /data-verwaltung="abmelden"/);
+});
+
+test('Verwaltung: Verwalter-Handy nachträglich ein- und ausschalten', async () => {
+  const server = testServer([{ konto: 'k1', name: 'Handy 1', letzter_abgleich: new Date(JETZT).toISOString() }]);
+  const { bereich, speicher, ziel, tippe, gezeichnet } = mitVerwaltung({
+    anmeldung: testAnmeldung({ zustand: 'angemeldet' }), server,
+  });
+  bereich.oeffneVerwaltung();
+  assert.equal(bereich.html(), '', 'anderes Handy: keine Klappe');
+
+  tippe('verwalter');
+  await warte();
+  assert.equal(istVerwalter(speicher), true);
+  assert.match(ziel.innerHTML, /Verwalter-Handy: an/);
+  assert.match(bereich.html(), /Handy 1 \(dieses Handy\): heute abgeglichen/);
+  assert.ok(gezeichnet() > 0, 'Startseite neu gezeichnet');
+
+  tippe('verwalter');
+  assert.equal(istVerwalter(speicher), false);
+  assert.match(ziel.innerHTML, /Verwalter-Handy: aus/);
+  assert.equal(bereich.html(), '');
+
+  tippe('schliessen');
+  assert.equal(ziel.innerHTML, '');
+});
+
+test('Verwaltung: nicht angemeldet → kein Abmelden-Knopf, Hinweis wo man sich anmeldet', () => {
+  const { bereich, ziel } = mitVerwaltung();
+  bereich.oeffneVerwaltung();
+  assert.doesNotMatch(ziel.innerHTML, /data-verwaltung="abmelden"/);
+  assert.match(ziel.innerHTML, /nicht angemeldet/);
+  assert.match(ziel.innerHTML, /data-verwaltung="verwalter"/);
+});
+
+test('Abmelden: erst abgleichen, dann fragen; Daten und offene Änderungen bleiben', async () => {
+  const { bereich, speicher, anmeldung, ziel, tippe, protokoll } = mitVerwaltung({
+    anmeldung: testAnmeldung({ zustand: 'angemeldet' }),
+  });
+  const brot = speichereEigeneVorlage(speicher, { name: 'Brot', teig: ladeVorlage(VORLAGEN[0]).teig, mehl: 500 });
+  speicher.setzeSyncStand(17);
+  bereich.oeffneVerwaltung();
+  tippe('abmelden');
+  assert.match(ziel.innerHTML, /Wird abgeglichen/);
+  await warte();
+
+  assert.equal(protokoll.abgleiche, 1, 'vorher noch einmal abgeglichen');
+  assert.match(protokoll.fragen[0], /1 Änderung ist noch nicht hochgeladen\. Sie bleiben auf diesem Handy/);
+  assert.equal(anmeldung.abmeldungen, 1);
+  assert.equal(anmeldung.zustand(), 'abgemeldet');
+  assert.equal(speicher.hole('teigvorlagen', brot.id).name, 'Brot', 'Vorlage bleibt');
+  assert.equal(speicher.offene('teigvorlagen').length, 1, 'bleibt offen → geht nach der nächsten Anmeldung hoch');
+  assert.equal(speicher.syncStand(), 0, 'nach der nächsten Anmeldung alles neu herunterladen');
+  assert.equal(ziel.innerHTML, '', 'Verwaltung zu');
+  assert.match(bereich.html(), /data-anmelden/, 'Formular zum Neu-Anmelden ist wieder da');
+});
+
+test('Abmelden: alles hochgeladen → einfache Frage; „Abbrechen“ ändert nichts', async () => {
+  const { bereich, speicher, anmeldung, ziel, tippe, protokoll } = mitVerwaltung({
+    anmeldung: testAnmeldung({ zustand: 'angemeldet' }), antworten: [false],
+  });
+  speicher.setzeSyncStand(17);
+  bereich.oeffneVerwaltung();
+  tippe('abmelden');
+  await warte();
+  assert.match(protokoll.fragen[0], /^Dieses Handy abmelden\?/);
+  assert.equal(anmeldung.abmeldungen, 0);
+  assert.equal(anmeldung.zustand(), 'angemeldet');
+  assert.equal(speicher.syncStand(), 17);
+  assert.match(ziel.innerHTML, /data-verwaltung="abmelden"/, 'Verwaltung bleibt offen');
+});
+
+// ---------- Umzug: Sicherung vor dem ersten Abgleich (nur Verwalter-Handy) ----------
+
+const eigeneVorlage = (speicher) =>
+  speichereEigeneVorlage(speicher, { name: 'Brot', teig: ladeVorlage(VORLAGEN[0]).teig, mehl: 500 });
+
+test('Umzug: Verwalter-Handy mit eigenen Vorlagen gleicht erst nach „Abgleich starten“ ab', async () => {
+  const { bereich, speicher, wurzel, protokoll } = aufbau({
+    anmeldung: testAnmeldung({ zustand: 'angemeldet' }), verwalter: true,
+  });
+  eigeneVorlage(speicher);
+  assert.equal(bereich.bereit(), false);
+  const html = bereich.html();
+  assert.match(html, /bitte ansehen/);
+  assert.match(html, /Vor dem ersten Abgleich: deine Vorlage als Link sichern/);
+
+  const klick = (umzug) => wurzel.loese('click', {
+    target: { closest: (s) => (s === '[data-umzug]' ? { dataset: { umzug } } : null) },
+  });
+  klick('sichern');
+  assert.equal(protokoll.sicherungen, 1);
+  assert.equal(bereich.bereit(), false, 'Sicherung allein startet noch nichts');
+
+  klick('starten');
+  assert.equal(bereich.bereit(), true);
+  assert.equal(protokoll.abgleiche, 1);
+  assert.doesNotMatch(bereich.html(), /Vor dem ersten Abgleich/);
+});
+
+test('Umzug: anderes Handy oder keine eigenen Vorlagen → sofort bereit, keine Karte', () => {
+  const a = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }) });
+  eigeneVorlage(a.speicher);
+  assert.equal(a.bereich.bereit(), true);
+
+  const b = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }), verwalter: true });
+  assert.equal(b.bereich.bereit(), true);
+  assert.doesNotMatch(b.bereich.html(), /Vor dem ersten Abgleich/);
+});
+
+test('Nicht angemeldet: nie bereit', () => {
+  const { bereich } = aufbau();
+  assert.equal(bereich.bereit(), false);
+});
+
+test('Anmelden stößt den ersten Abgleich an', async () => {
+  const { wurzel, protokoll } = aufbau();
+  sendeFormular(wurzel, 'ich@example.org', 'geheim');
+  await warte();
+  assert.equal(protokoll.abgleiche, 1);
+});
+
+test('Nach einem erfolgreichen Abgleich nie mehr Sicherung vorab – auch nicht nach dem Umschalten', () => {
+  const { bereich, speicher, protokoll } = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }) });
+  eigeneVorlage(speicher);
+  bereich.nachAbgleich({ ok: false });
+  setzeVerwalter(speicher, true);
+  assert.equal(bereich.bereit(), false, 'gescheiterter Abgleich zählt nicht');
+  setzeVerwalter(speicher, false);
+  bereich.nachAbgleich({ ok: true });
+  setzeVerwalter(speicher, true);
+  assert.equal(bereich.bereit(), true);
+  assert.equal(protokoll.sicherungen, 0);
 });

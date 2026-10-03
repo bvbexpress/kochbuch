@@ -1,19 +1,26 @@
 // abgleich.js – Bereich „Abgleich“ auf der Startseite (Etappe 2).
 //
 // - Anmeldung einmal pro Handy: E-Mail + Passwort (der Schlüsselbund füllt aus), danach nie wieder.
-// - Verwalter-Handy: Häkchen beim Anmelden (Geräte-Einstellung), sonst nirgends umschaltbar.
+// - Verwalter-Handy: Häkchen beim Anmelden (Geräte-Einstellung). Nachträglich nur über die versteckte
+//   Verwaltung: langes Drücken auf die Versionsnummer ganz unten → „Abmelden“, „Verwalter-Handy an/aus“.
 // - Status nur auf dem Verwalter-Handy: Anmeldung, wartende Änderungen und
 //   wann jedes Handy zuletzt abgeglichen hat („Handy 2: seit 4 Tagen nicht abgeglichen“).
 //   Braucht etwas Aufmerksamkeit, steht das ruhig im Titel der Klappe – nur dort, nur auf diesem Handy.
 // - Auf allen anderen Handys verschwindet die Klappe nach der Anmeldung ganz. Sie kommt nur wieder,
 //   wenn Supabase die Anmeldung ablehnt (dann mit dem Formular, ohne Meldung).
 //
-// Die Oberfläche fragt den Server nur nach den Mitgliedern (Status), sie gleicht selbst nicht ab.
+// - Umzug (erste Anmeldung): Auf dem Verwalter-Handy wird vor dem ersten Hochladen ein Sicherungs-Link
+//   angeboten; bis „Abgleich starten“ getippt ist, gleicht dieses Handy nicht ab (`bereit()`).
+//
+// Abgeglichen wird über kern/ausloeser.js; die Oberfläche stößt es nur nach der Anmeldung,
+// nach „Abgleich starten“ und vor dem Abmelden an.
 
 import { SAMMLUNGEN } from './sync.js';
 import { text } from './html.js';
 
 const VERWALTER = 'abgleich.verwalter'; // Geräte-Einstellung: true = dieses Handy zeigt den Status
+const UMZUG = 'abgleich.umzug';         // Geräte-Einstellung: true = erster Abgleich ist erlaubt/erfolgt
+const LANG_DRUECKEN = 700;              // ms bis die Verwaltung aufgeht
 export const WARNEN_AB_TAGEN = 3;      // so lange ohne Abgleich → „bitte ansehen“
 const NEU_LADEN_NACH = 60_000;          // Mitglieder höchstens einmal pro Minute abfragen (ms)
 const TAG = 24 * 60 * 60 * 1000;
@@ -105,12 +112,27 @@ export function statusZeilen({ zustand, offen, mitglieder, konto, jetzt }) {
 }
 
 /**
- * Bereich „Abgleich“ für die Startseite.
+ * Bereich „Abgleich“ für die Startseite und die versteckte Verwaltung.
+ *   abgleichen – () => Promise: jetzt abgleichen (kern/ausloeser.js, prüft selbst `bereit()`)
+ *   sicherung  – { anzahl(), erstellen() }: eigene Vorlagen zählen, Sicherungs-Link anbieten (Umzug)
+ *   fragen     – Ja/Nein-Frage (window.confirm)
+ * Ergebnis:
  *   html()                    – HTML der Klappe (zu Beginn zugeklappt; '' auf angemeldeten Nicht-Verwalter-Handys)
  *   verbinde(wurzel, zeichne) – Tipper, Formular und Aufklappen verarbeiten; `zeichne` baut die Seite neu
+ *   verbindeVerwaltung(version, ziel) – langes Drücken auf `version` öffnet die Verwaltung in `ziel`
+ *   bereit()                  – darf jetzt abgeglichen werden?
+ *   nachAbgleich(bericht)     – nach jedem Abgleich: Status auffrischen
  *   start()                   – beim App-Start: Status des Verwalter-Handys im Hintergrund laden
  */
-export function erstelleAbgleichBereich({ speicher, anmeldung, server, jetzt = () => Date.now() }) {
+export function erstelleAbgleichBereich({
+  speicher,
+  anmeldung,
+  server,
+  abgleichen = () => Promise.resolve(null),
+  sicherung = null,
+  fragen = (frage) => globalThis.confirm?.(frage) === true,
+  jetzt = () => Date.now(),
+}) {
   let mitglieder;       // undefined = noch nicht geladen, null = nicht erreichbar, sonst Liste
   let geladenUm = 0;
   let laden = null;
@@ -118,6 +140,12 @@ export function erstelleAbgleichBereich({ speicher, anmeldung, server, jetzt = (
   let fehler = '';      // Rückmeldung unter dem Anmelde-Formular
   let email = '';       // bleibt nach einem Fehlversuch im Feld (nur im Arbeitsspeicher)
   let zeichne = () => {};
+  let verwaltung = null; // { ziel, offen, laeuft } – versteckte Verwaltung unter der Versionsnummer
+
+  /** Verwalter-Handy, noch nie abgeglichen, eigene Vorlagen da: erst Sicherung anbieten. */
+  const umzugOffen = () => istVerwalter(speicher) && speicher.einstellung(UMZUG) !== true
+    && (sicherung?.anzahl() ?? 0) > 0;
+  const bereit = () => anmeldung.zustand() === 'angemeldet' && !umzugOffen();
 
   const anzahlOffen = () => Object.keys(SAMMLUNGEN).reduce((n, s) => n + speicher.offene(s).length, 0);
 
@@ -177,9 +205,96 @@ export function erstelleAbgleichBereich({ speicher, anmeldung, server, jetzt = (
       email = '';
       mitglieder = undefined;
       ladeMitglieder({ erzwingen: true });
+      abgleichen(); // Umzug: eigene Datensätze hoch, die des anderen Handys herunter
     } else {
       fehler = ANMELDE_FEHLER[ergebnis.grund] ?? ANMELDE_FEHLER.server;
     }
+    zeichne();
+  }
+
+  function umzugHtml() {
+    const n = sicherung.anzahl();
+    return `<div class="umzug">
+        <p class="info">Vor dem ersten Abgleich: ${n === 1 ? 'deine Vorlage' : `deine ${n} Vorlagen`} als Link sichern
+          (z. B. in Notizen ablegen). Danach „Abgleich starten“.</p>
+        <div class="aktionen">
+          <button type="button" class="knopf knopf-voll" data-umzug="sichern">Sicherung erstellen</button>
+          <button type="button" class="knopf" data-umzug="starten">Abgleich starten</button>
+        </div>
+      </div>`;
+  }
+
+  function starteUmzug() {
+    speicher.setzeEinstellung(UMZUG, true);
+    zeichne();
+    abgleichen();
+  }
+
+  // ---------- versteckte Verwaltung (langes Drücken auf die Versionsnummer) ----------
+
+  const ZUSTAND_TEXT = {
+    angemeldet: 'Dieses Handy ist angemeldet.',
+    abgemeldet: 'Dieses Handy ist nicht angemeldet. Anmelden: Startseite → „Abgleich zwischen den Handys“.',
+    abgelehnt: 'Die Anmeldung gilt nicht mehr. Neu anmelden: Startseite → „Abgleich zwischen den Handys“.',
+  };
+
+  function verwaltungHtml() {
+    if (!verwaltung?.offen) return '';
+    const zustand = anmeldung.zustand();
+    const verwalter = istVerwalter(speicher);
+    const laeuft = verwaltung.laeuft;
+    const abmelden = zustand === 'abgemeldet' ? ''
+      : `<button type="button" class="knopf" data-verwaltung="abmelden" ${laeuft ? 'disabled' : ''}>
+          ${laeuft ? 'Wird abgeglichen …' : 'Abmelden'}</button>`;
+    return `<section class="karte verwaltung" aria-label="Verwaltung">
+        <h2 class="karte-titel">Verwaltung</h2>
+        <p class="info">${text(ZUSTAND_TEXT[zustand] ?? '')}</p>
+        <button type="button" class="knopf" data-verwaltung="verwalter" aria-pressed="${verwalter}">
+          Verwalter-Handy: ${verwalter ? 'an' : 'aus'}</button>
+        <p class="info">Das Verwalter-Handy zeigt unten auf der Startseite, ob beide Handys abgleichen.</p>
+        ${abmelden}
+        <button type="button" class="knopf knopf-leise" data-verwaltung="schliessen">Schließen</button>
+      </section>`;
+  }
+
+  function zeichneVerwaltung() {
+    if (verwaltung?.ziel) verwaltung.ziel.innerHTML = verwaltungHtml();
+  }
+
+  function schalteVerwalter() {
+    setzeVerwalter(speicher, !istVerwalter(speicher));
+    mitglieder = undefined;
+    ladeMitglieder({ erzwingen: true });
+    zeichneVerwaltung();
+    zeichne();
+  }
+
+  /**
+   * Abmelden ohne Datenverlust: erst noch einmal abgleichen; was dann noch offen ist,
+   * bleibt auf dem Handy und geht nach der nächsten Anmeldung hoch.
+   */
+  async function abmelden() {
+    if (verwaltung.laeuft) return;
+    verwaltung.laeuft = true;
+    zeichneVerwaltung();
+    try {
+      await abgleichen();
+    } catch {
+      // abgleichen wirft nie – und wenn doch, bleibt alles offen
+    }
+    const n = anzahlOffen();
+    const frage = n === 0
+      ? 'Dieses Handy abmelden? Alle Vorlagen bleiben auf dem Handy.'
+      : `${n === 1 ? '1 Änderung ist' : `${n} Änderungen sind`} noch nicht hochgeladen. `
+        + 'Sie bleiben auf diesem Handy und gehen nach der nächsten Anmeldung hoch. Jetzt abmelden?';
+    if (fragen(frage)) {
+      await anmeldung.abmelden();
+      speicher.setzeSyncStand(0); // nach der nächsten Anmeldung alles noch einmal herunterladen
+      mitglieder = undefined;
+      verwaltung.offen = false;
+    }
+    verwaltung.laeuft = false;
+    zeichneVerwaltung();
     zeichne();
   }
 
@@ -190,6 +305,7 @@ export function erstelleAbgleichBereich({ speicher, anmeldung, server, jetzt = (
       let inhalt;
       let achtung = false;
       if (verwalter) {
+        const umzug = zustand === 'angemeldet' && umzugOffen();
         const zeilen = statusZeilen({
           zustand,
           offen: anzahlOffen(),
@@ -197,8 +313,8 @@ export function erstelleAbgleichBereich({ speicher, anmeldung, server, jetzt = (
           konto: anmeldung.konto(),
           jetzt: jetzt(),
         });
-        achtung = zeilen.some((z) => z.achtung);
-        inhalt = `${statusHtml(zeilen)}${zustand === 'angemeldet' ? '' : formular(true)}`;
+        achtung = umzug || zeilen.some((z) => z.achtung);
+        inhalt = `${umzug ? umzugHtml() : ''}${statusHtml(zeilen)}${zustand === 'angemeldet' ? '' : formular(true)}`;
       } else if (zustand === 'angemeldet') {
         return ''; // anderes Handy: nichts zu sehen, nichts zu tun
       } else {
@@ -222,10 +338,59 @@ export function erstelleAbgleichBereich({ speicher, anmeldung, server, jetzt = (
         e.preventDefault();
         anmelden(e.target);
       });
+      wurzel.addEventListener('click', (e) => {
+        const knopf = e.target.closest?.('[data-umzug]');
+        if (!knopf || !umzugOffen()) return;
+        if (knopf.dataset.umzug === 'sichern') sicherung.erstellen();
+        if (knopf.dataset.umzug === 'starten') starteUmzug();
+      });
+    },
+
+    verbindeVerwaltung(version, ziel) {
+      verwaltung = { ziel, offen: false, laeuft: false };
+      let zeitgeber = null;
+      const abbrechen = () => {
+        clearTimeout(zeitgeber);
+        zeitgeber = null;
+      };
+      version.addEventListener('pointerdown', () => {
+        abbrechen();
+        zeitgeber = setTimeout(() => {
+          verwaltung.offen = true;
+          zeichneVerwaltung();
+          ziel.scrollIntoView?.({ block: 'nearest' });
+        }, LANG_DRUECKEN);
+      });
+      for (const art of ['pointerup', 'pointercancel', 'pointerleave']) version.addEventListener(art, abbrechen);
+      version.addEventListener('contextmenu', (e) => e.preventDefault());
+      ziel.addEventListener('click', (e) => {
+        const aktion = e.target.closest?.('[data-verwaltung]')?.dataset.verwaltung;
+        if (aktion === 'verwalter') schalteVerwalter();
+        if (aktion === 'abmelden') abmelden();
+        if (aktion === 'schliessen') {
+          verwaltung.offen = false;
+          zeichneVerwaltung();
+        }
+      });
+    },
+
+    bereit,
+
+    nachAbgleich(bericht) {
+      if (bericht?.ok) speicher.setzeEinstellung(UMZUG, true); // ab jetzt nie mehr Sicherung vorab
+      geladenUm = 0; // „heute abgeglichen“ beim nächsten Aufklappen frisch
+      if (offen) ladeMitglieder();
+      zeichne();
     },
 
     start() {
       ladeMitglieder();
+    },
+
+    /** Für Tests: Verwaltung öffnen wie nach langem Drücken. */
+    oeffneVerwaltung() {
+      verwaltung.offen = true;
+      zeichneVerwaltung();
     },
 
     /** Für Tests: Mitglieder jetzt laden. */
