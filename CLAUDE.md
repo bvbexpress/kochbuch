@@ -106,7 +106,8 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
     (Registrieren ist aus).
   - **C** *(fertig)* `kern/sync.js`: `erstelleSync({ speicher, server })` → `abgleichen()` (erst hoch, dann runter;
     nie gleichzeitig, wirft nie, Ergebnis mit `ok`/`fehler`/`offen`/`kopien`). Server wird mitgegeben (kommt in D).
-    Sammlungen und Konfliktart in `SAMMLUNGEN`: `teigvorlagen` = `kopie` (Vermerk `konflikt: { von, am }`),
+    Sammlungen und Konfliktart in `SAMMLUNGEN`: `teigvorlagen` = `kopie` (Name „Brot (Änderung vom 3.10.)“ +
+    Vermerk `konflikt: { von, am }`),
     `mehle`/`saaten`/`zusaetze` = `zuletzt`. Inhaltsvergleich ohne Zeitstempel und unabhängig von der
     Feld-Reihenfolge (jsonb sortiert um). Erst Kopie sichern, dann überschreiben (Abbruch verliert nichts,
     keine doppelte Kopie). Unbekannte Sammlungen vom Server werden trotzdem gespeichert.

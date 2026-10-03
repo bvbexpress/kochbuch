@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { erstelleSpeicher, speicherImArbeitsspeicher } from '../js/kern/speicher.js';
-import { erstelleSync } from '../js/kern/sync.js';
+import { erstelleSync, kopieName } from '../js/kern/sync.js';
 
 /** Wie jsonb: Felder nach Länge, dann alphabetisch sortiert. */
 function wieJsonb(x) {
@@ -142,7 +142,7 @@ test('Gleichzeitig geänderte Vorlage: Server-Fassung bleibt, eigene wird Kopie 
   await b.sync.abgleichen();
 
   a.speicher.speichere('teigvorlagen', { ...a.speicher.hole('teigvorlagen', v.id), teig: teig(72) });
-  b.speicher.speichere('teigvorlagen', { ...b.speicher.hole('teigvorlagen', v.id), teig: teig(75) });
+  const eigen = b.speicher.speichere('teigvorlagen', { ...b.speicher.hole('teigvorlagen', v.id), teig: teig(75) });
   await a.sync.abgleichen(); // A war zuerst
   const ergebnis = await b.sync.abgleichen();
   assert.equal(ergebnis.kopien, 1);
@@ -153,7 +153,8 @@ test('Gleichzeitig geänderte Vorlage: Server-Fassung bleibt, eigene wird Kopie 
   assert.equal(b.speicher.hole('teigvorlagen', v.id).teig.wasser, 72, 'Server-Fassung (von A) bleibt');
   const kopie = aufB.find((x) => x.id !== v.id);
   assert.equal(kopie.teig.wasser, 75);
-  assert.equal(kopie.name, 'Brot');
+  assert.equal(kopie.name, kopieName('Brot', eigen.geaendert), 'Name mit Datum der eigenen Änderung');
+  assert.equal(vorlagen(b).filter((x) => x.name === 'Brot').length, 1, 'keine zwei gleichnamigen');
   assert.deepEqual(kopie.konflikt, { von: v.id, am: 42 });
   assert.ok(server.zeile('teigvorlagen', kopie.id), 'Kopie ist auch auf dem Server');
 
@@ -405,8 +406,8 @@ test('Abgebrochen nach dem Anlegen der Kopie: beim nächsten Mal keine zweite Ko
   // B legt die Kopie an, „stirbt“ aber vor dem Übernehmen der Server-Fassung
   const eigen = { ...b.speicher.hole('teigvorlagen', v.id), mehl: 700 };
   b.speicher.speichere('teigvorlagen', eigen);
-  const { id, erstellt, geaendert, geloescht, ...inhalt } = eigen;
-  b.speicher.speichere('teigvorlagen', { ...inhalt, konflikt: { von: id, am: 1 } });
+  const { id, erstellt, geaendert, geloescht, ...inhalt } = b.speicher.hole('teigvorlagen', v.id);
+  b.speicher.speichere('teigvorlagen', { ...inhalt, name: kopieName(inhalt.name, geaendert), konflikt: { von: id, am: 1 } });
 
   const ergebnis = await b.sync.abgleichen();
   assert.equal(ergebnis.kopien, 0);
@@ -423,4 +424,13 @@ test('Server hat den Datensatz nicht mehr: eigener Stand wird neu hochgeladen', 
   const ergebnis = await a.sync.abgleichen();
   assert.equal(ergebnis.offen, 0);
   assert.equal(server.zeile('teigvorlagen', v.id).daten.mehl, 900);
+});
+
+test('Name der Konflikt-Kopie: Datum der Änderung, kein doppelter Zusatz, nicht zu lang', () => {
+  const zeit = new Date(2026, 9, 3, 18, 30).getTime(); // 3. Oktober, Ortszeit
+  assert.equal(kopieName('Brot', zeit), 'Brot (Änderung vom 3.10.)');
+  assert.equal(kopieName('Brot (Änderung vom 1.9.)', zeit), 'Brot (Änderung vom 3.10.)');
+  const lang = kopieName('x'.repeat(80), zeit);
+  assert.equal(lang.length, 80);
+  assert.ok(lang.endsWith(' (Änderung vom 3.10.)'));
 });

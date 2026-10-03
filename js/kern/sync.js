@@ -11,7 +11,8 @@
 //   - inhaltlich gleich                → kein Konflikt, Server-Fassung übernehmen
 //   - Löschen gegen Ändern             → Ändern gewinnt (egal auf welchem Handy)
 //   - Art 'kopie' (Vorlagen, Rezepte)  → Server-Fassung bleibt, die eigene wird zur Kopie mit
-//                                        Vermerk `konflikt: { von, am }` (kein Dialog)
+//                                        Namenszusatz „(Änderung vom 3.10.)“ und Vermerk
+//                                        `konflikt: { von, am }` (kein Dialog)
 //   - Art 'zuletzt' (Einzelwerte)      → zuletzt hochgeladen gewinnt: eigene erneut hochladen
 //
 // Der Server wird von außen mitgegeben (`hochladen`, `herunterladen` wie in datenbank/schema.sql),
@@ -93,7 +94,8 @@ export function erstelleSync({ speicher, server, sammlungen = SAMMLUNGEN, jetzt 
     } else {
       // Erst die Kopie sichern, dann überschreiben – so geht bei einem Abbruch nichts verloren.
       // Gibt es die Kopie schon (abgebrochener Abgleich), keine zweite anlegen.
-      const { id, erstellt, geaendert, geloescht, konflikt, ...inhalt } = eigen;
+      const { id, erstellt, geaendert, geloescht, konflikt, ...rest } = eigen;
+      const inhalt = typeof rest.name === 'string' ? { ...rest, name: kopieName(rest.name, geaendert) } : rest;
       const vorhanden = speicher.alle(sammlung).some((d) => d.konflikt?.von === id && gleich(inhaltVon(d), inhalt));
       if (!vorhanden && !speicher.speichere(sammlung, { ...inhalt, konflikt: { von: id, am: jetzt() } })) return;
       if (serverFassung() === 'uebernommen' && !vorhanden) bericht.kopien++;
@@ -157,6 +159,20 @@ export function erstelleSync({ speicher, server, sammlungen = SAMMLUNGEN, jetzt 
       return laeuft;
     },
   };
+}
+
+const NAME_LAENGE = 80; // wie das Namensfeld in der App
+const ZUSATZ = / \(Änderung vom \d{1,2}\.\d{1,2}\.\)$/;
+
+/**
+ * Name der Konflikt-Kopie: „Brot (Änderung vom 3.10.)“ – Tag der eigenen Änderung (Uhrzeit des Handys,
+ * nur zur Anzeige). Ein älterer Zusatz wird ersetzt, nicht angehängt; zu lange Namen werden gekürzt.
+ */
+export function kopieName(name, zeit) {
+  const tag = new Date(Number.isFinite(zeit) ? zeit : Date.now());
+  const zusatz = ` (Änderung vom ${tag.getDate()}.${tag.getMonth() + 1}.)`;
+  const basis = name.replace(ZUSATZ, '').trim().slice(0, NAME_LAENGE - zusatz.length).trim();
+  return basis + zusatz;
 }
 
 const schluessel = (sammlung, id) => `${sammlung}/${id}`;
