@@ -87,6 +87,20 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
 - **Fehler bleiben unsichtbar** (siehe Grundsatz): Die App arbeitet lokal weiter, offene Änderungen gehen nie verloren.
   Nur das Verwalter-Handy zeigt den Abgleich-Status, auch „Handy 2 hat seit X Tagen nicht abgeglichen“.
 - Teilen per Link bleibt als Sicherung.
+- Erkennung doppelt benutzter Erneuerungsschlüssel in Supabase **nicht** abschalten (die Elternschlüssel-Ausnahme reicht).
+  Abschalten nur als Notlösung, falls der Praxistest Abmeldungen zeigt.
+- **Bauplan** (je Schritt ein PR mit Tests; Reihenfolge fest):
+  - **A** `kern/speicher.js`: Markierung „offen“ und Server-Version je Datensatz, „Änderungen seit…“, „vom Server übernehmen“. Ohne Netz.
+  - **B** `datenbank/schema.sql`: Tabellen, RLS, Sync-Funktion, `ping`, letzter Abgleich je Konto. Danach richtet der Nutzer
+    Supabase ein: Projekt (Frankfurt, Free), zwei Konten mit „Auto Confirm“, Registrieren aus, Skript ausführen,
+    Haushalt/Mitglieder per Zusatz-SQL (nur im Chat, enthält E-Mails, **nie ins Repo**), URL + publishable key an Claude,
+    Security Advisor prüfen.
+  - **C** `kern/sync.js`: Konflikte, Kopien, Ablauf hoch/runter, getestet gegen nachgebauten Server.
+  - **D** `kern/anmeldung.js`, `kern/server.js`: Login, stilles Erneuern, Test für abgebrochenes Erneuern.
+  - **E** Oberfläche: Anmeldung einmal pro Handy, Status nur auf dem Verwalter-Handy, Vermerk an Konflikt-Kopien.
+  - **F** Auslöser und Umzug der bestehenden Daten (vorher Sicherungs-Link auf dem Verwalter-Handy).
+  - **G** GitHub Action `ping` (Mo + Do), hält sich selbst aktiv.
+  - **H** Praxistest auf beiden iPhones: Flugmodus, gleichzeitige Änderung, Löschen gegen Ändern, App beim Erneuern schließen.
 
 ### Etappe 3 – Rezepte
 - Rezepte mit **Personenanzahl** und automatischer Mengenanpassung.
