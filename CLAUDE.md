@@ -59,7 +59,7 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
 - Versionsanzeige ganz unten in der App (zum Vergleich beider Handys).
 - Icon: Quelle `icons/icon.svg`, daraus die PNGs (180 für iOS, 192/512 fürs Manifest).
 
-### Etappe 2 – Gemeinsame Daten *(im Bau: A–F und Supabase-Einrichtung fertig, weiter mit G)*
+### Etappe 2 – Gemeinsame Daten *(im Bau: A–G und Supabase-Einrichtung fertig, weiter mit H)*
 **Entschieden:** Supabase, Region Frankfurt, Gratis-Stufe. **Weg A: nur `fetch`, keine Bibliothek.**
 - Persönliche Daten liegen **nur in der Datenbank**, nie im Repo. Im Code stehen nur Projekt-URL und öffentlicher
   Schlüssel (publishable). Der geheime Schlüssel (secret/`service_role`) kommt nie in App oder Repo.
@@ -152,7 +152,11 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
     Andere Handys gleichen nach der Anmeldung sofort ab. Neue Daten vom Server: `datenAktualisiert()` in
     `ansicht.js` lädt Liste und Werte neu (nicht während getippt wird); die offene Vorlage im Rechner nur, wenn
     hier nicht geändert – Mehlmenge und Teiglinge bleiben.
-  - **G** GitHub Action `ping` (Mo + Do), hält sich selbst aktiv.
+  - **G** *(fertig)* `.github/workflows/ping.yml` („Weckruf“): Mo + Do 06:17 UTC `rpc/ping` per `curl`, Lauf rot bei
+    Fehler oder Antwort ≠ `"ok"` (GitHub mailt). Zweiter Job schaltet den Zeitplan per API wieder ein
+    (`actions: write`, keine Commits), damit er nach 60 Tagen Ruhe nicht abgeschaltet wird. Von Hand startbar
+    (`workflow_dispatch`). Adresse und publishable key stehen auch im Workflow; `tests/ping.test.js` prüft, dass sie zu
+    `server.js` passen. Kein Secret nötig.
   - **H** Praxistest auf beiden iPhones: Flugmodus, gleichzeitige Änderung, Löschen gegen Ändern, App beim Erneuern schließen.
 
 ### Etappe 3 – Rezepte
