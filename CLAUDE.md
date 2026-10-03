@@ -59,7 +59,7 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
 - Versionsanzeige ganz unten in der App (zum Vergleich beider Handys).
 - Icon: Quelle `icons/icon.svg`, daraus die PNGs (180 für iOS, 192/512 fürs Manifest).
 
-### Etappe 2 – Gemeinsame Daten *(im Bau: A, B, C und Supabase-Einrichtung fertig, weiter mit D)*
+### Etappe 2 – Gemeinsame Daten *(im Bau: A–D und Supabase-Einrichtung fertig, weiter mit E)*
 **Entschieden:** Supabase, Region Frankfurt, Gratis-Stufe. **Weg A: nur `fetch`, keine Bibliothek.**
 - Persönliche Daten liegen **nur in der Datenbank**, nie im Repo. Im Code stehen nur Projekt-URL und öffentlicher
   Schlüssel (publishable). Der geheime Schlüssel (secret/`service_role`) kommt nie in App oder Repo.
@@ -113,7 +113,15 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
     keine doppelte Kopie). Unbekannte Sammlungen vom Server werden trotzdem gespeichert.
     Neu in `speicher.js`: `neueBasis` (eigene Änderung gilt, setzt auf Server-Version auf).
     Tests: `tests/sync.test.js` mit nachgebautem Server und zwei Handys. **Neue Sammlung → in `SAMMLUNGEN` eintragen.**
-  - **D** `kern/anmeldung.js`, `kern/server.js`: Login, stilles Erneuern, Test für abgebrochenes Erneuern.
+  - **D** *(fertig)* `kern/anmeldung.js`: `erstelleAnmeldung({ speicher })` → `anmelden(email, passwort)`
+    (wirft nie, `{ ok, grund: falsch|netz|zuoft|server }`), `zugangsschluessel()` (still erneuert, nur einmal
+    gleichzeitig, sofort gespeichert; `null` = gerade keiner), `zustand()` (`abgemeldet`|`angemeldet`|`abgelehnt`),
+    `konto()`. Gespeichert als Geräte-Einstellung `anmeldung` (ohne E-Mail/Passwort). Ablauf aus `expires_in` mit
+    Handy-Uhr. `abgelehnt` nur bei ausdrücklicher Ablehnung durch Supabase, nie bei Netz-/Server-Fehlern.
+    `kern/server.js`: `erstelleServer({ anmeldung })` → `hochladen`, `herunterladen` für `sync.js`
+    (wirft bei Problemen, bei 401 einmal erneuern und wiederholen, Zeitgrenze 20 s).
+    Tests: `tests/anmeldung.test.js` mit nachgebautem Supabase (Schlüssel-Rotation, Elternschlüssel-Regel,
+    abgebrochenes Erneuern, App-Neustart). Noch nicht in der Oberfläche eingebunden (kommt in E/F).
   - **E** Oberfläche: Anmeldung einmal pro Handy, Status nur auf dem Verwalter-Handy, Vermerk an Konflikt-Kopien.
   - **F** Auslöser und Umzug der bestehenden Daten (vorher Sicherungs-Link auf dem Verwalter-Handy).
   - **G** GitHub Action `ping` (Mo + Do), hält sich selbst aktiv.
@@ -160,7 +168,7 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 | `css/basis.css` | Farben (hell/dunkel), Schrift, Knöpfe, Felder |
 | `css/<bereich>.css` | Design eines Bereichs (z. B. `teig.css`) |
 | `js/app.js` | Start und (später) Navigation |
-| `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse und öffentlicher Schlüssel) |
+| `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse, öffentlicher Schlüssel, Abfragen), `anmeldung.js` (Anmeldung, stilles Erneuern) |
 | `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js` (inkl. Kategorien, Ordnen der Liste), `zutaten.js` (Mehle/Saaten/Zusatzzutaten), `teilen.js` (Teilen-Link), `startseite.js` (HTML der Vorlagenliste), `ansicht.js` (Oberfläche, Navigation) |
 | `datenbank/schema.sql` | Supabase-Datenbank (Tabellen, Zugriffsschutz, Sync-Funktionen); nicht Teil der App |
 | `tests/` | Tests (`*.test.js`) |
