@@ -263,6 +263,31 @@ details.klappe > .klappe-inhalt {
   padding: 0 var(--abstand) var(--abstand);
 }
 
+/* ---------- Abgleich zwischen den Handys (kern/abgleich.js) ---------- */
+.abgleich-status {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.abgleich-status li {
+  padding: 8px 0;
+}
+
+.abgleich-status li + li {
+  border-top: 1px solid var(--linie);
+}
+
+/* Ruhig, aber erkennbar: nur auf dem Verwalter-Handy */
+.achtung {
+  color: var(--holz);
+  font-weight: 600;
+}
+
+summary .achtung {
+  margin-left: 0.3em;
+}
+
 /* Weniger Bewegung, falls am Handy so eingestellt */
 @media (prefers-reduced-motion: reduce) {
   * {

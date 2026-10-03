@@ -35,6 +35,7 @@ export function vorlagenListeHtml(ordnung, { sterne, suche, ausgeblendetOffen })
         <button type="button" class="vorlage-oeffnen" data-oeffnen="${text(v.id)}">
           <span class="vorlage-name">${text(v.name)}</span>
           <small class="zahl">${text(zusammenfassung(v))}</small>
+          ${v.konflikt ? '<small class="vermerk">Gleichzeitig geändert – bitte ansehen</small>' : ''}
         </button>
         <button type="button" class="stern" data-stern="${text(v.id)}" aria-pressed="${stern}"
                 aria-label="${text(v.name)} ${stern ? 'aus den Favoriten nehmen' : 'als Favorit markieren'}">${stern ? '★' : '☆'}</button>

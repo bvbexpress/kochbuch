@@ -59,7 +59,7 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
 - Versionsanzeige ganz unten in der App (zum Vergleich beider Handys).
 - Icon: Quelle `icons/icon.svg`, daraus die PNGs (180 für iOS, 192/512 fürs Manifest).
 
-### Etappe 2 – Gemeinsame Daten *(im Bau: A–D und Supabase-Einrichtung fertig, weiter mit E)*
+### Etappe 2 – Gemeinsame Daten *(im Bau: A–E und Supabase-Einrichtung fertig, weiter mit F)*
 **Entschieden:** Supabase, Region Frankfurt, Gratis-Stufe. **Weg A: nur `fetch`, keine Bibliothek.**
 - Persönliche Daten liegen **nur in der Datenbank**, nie im Repo. Im Code stehen nur Projekt-URL und öffentlicher
   Schlüssel (publishable). Der geheime Schlüssel (secret/`service_role`) kommt nie in App oder Repo.
@@ -122,7 +122,16 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
     (wirft bei Problemen, bei 401 einmal erneuern und wiederholen, Zeitgrenze 20 s).
     Tests: `tests/anmeldung.test.js` mit nachgebautem Supabase (Schlüssel-Rotation, Elternschlüssel-Regel,
     abgebrochenes Erneuern, App-Neustart). Noch nicht in der Oberfläche eingebunden (kommt in E/F).
-  - **E** Oberfläche: Anmeldung einmal pro Handy, Status nur auf dem Verwalter-Handy, Vermerk an Konflikt-Kopien.
+  - **E** *(fertig)* `kern/abgleich.js`: Klappe „Abgleich zwischen den Handys“ unten auf der Startseite (zugeklappt).
+    Nicht angemeldet: Formular E-Mail/Passwort (`autocomplete` für den Schlüsselbund), auf jedem Handy.
+    Verwalter-Handy = Geräte-Einstellung `abgleich.verwalter` (Knopf in der Klappe): Status mit wartenden Änderungen
+    und „Handy 2: seit X Tagen nicht abgeglichen“ (aus `mitglieder.letzter_abgleich`, `server.mitglieder()`,
+    höchstens einmal pro Minute); ab `WARNEN_AB_TAGEN` (3) oder bei Abmeldung/kein Haushalt „· bitte ansehen“ im
+    Titel. Andere Handys: nur „Angemeldet“, nie ein Status. Die Oberfläche gleicht selbst nicht ab (Auslöser in F).
+    Konflikt-Kopien: Vermerk in der Liste und als Karte im Rechner („Diese behalten“ entfernt `konflikt`,
+    „Diese löschen“); Speichern der Kopie entfernt ihn ebenfalls. Verdrahtung in `app.js`.
+    Live-Test: `npm run test:live` (`tests/live-supabase.js`, nicht in `npm test`) mit `SUPABASE_TEST_EMAIL`/
+    `SUPABASE_TEST_PASSWORT`; schreibt nie Datensätze. Testkonto muss in `mitglieder` stehen.
   - **F** Auslöser und Umzug der bestehenden Daten (vorher Sicherungs-Link auf dem Verwalter-Handy).
   - **G** GitHub Action `ping` (Mo + Do), hält sich selbst aktiv.
   - **H** Praxistest auf beiden iPhones: Flugmodus, gleichzeitige Änderung, Löschen gegen Ändern, App beim Erneuern schließen.
@@ -168,7 +177,7 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 | `css/basis.css` | Farben (hell/dunkel), Schrift, Knöpfe, Felder |
 | `css/<bereich>.css` | Design eines Bereichs (z. B. `teig.css`) |
 | `js/app.js` | Start und (später) Navigation |
-| `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse, öffentlicher Schlüssel, Abfragen), `anmeldung.js` (Anmeldung, stilles Erneuern) |
+| `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse, öffentlicher Schlüssel, Abfragen), `anmeldung.js` (Anmeldung, stilles Erneuern), `abgleich.js` (Klappe Abgleich: Anmelde-Formular, Status auf dem Verwalter-Handy) |
 | `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js` (inkl. Kategorien, Ordnen der Liste), `zutaten.js` (Mehle/Saaten/Zusatzzutaten), `teilen.js` (Teilen-Link), `startseite.js` (HTML der Vorlagenliste), `ansicht.js` (Oberfläche, Navigation) |
 | `datenbank/schema.sql` | Supabase-Datenbank (Tabellen, Zugriffsschutz, Sync-Funktionen); nicht Teil der App |
 | `tests/` | Tests (`*.test.js`) |

@@ -14,6 +14,8 @@ const WARTEZEIT = 20_000; // längstens auf eine Antwort warten (ms)
  * Server für den Abgleich (kern/sync.js): ruft die Datenbank-Funktionen aus datenbank/schema.sql auf.
  *   hochladen(aenderungen) → Liste der Ergebnisse
  *   herunterladen(seit)    → { datensaetze, stand, mehr }
+ *   mitglieder()           → [{ konto, name, letzter_abgleich }] des eigenen Haushalts
+ *                            (für den Status auf dem Verwalter-Handy; leer = Konto in keinem Haushalt)
  * Wirft bei jedem Problem (nicht angemeldet, kein Netz, Server-Fehler); sync.js fängt das ab.
  * Nimmt der Server den Zugangsschlüssel nicht an (z. B. Handy-Uhr falsch), wird einmal erneuert
  * und noch einmal versucht.
@@ -24,20 +26,20 @@ export function erstelleServer({
   adresse = SERVER_ADRESSE,
   schluessel = OEFFENTLICHER_SCHLUESSEL,
 }) {
-  async function rpc(funktion, inhalt) {
+  /** Anfrage an /rest/v1/…; ohne `inhalt` lesend (GET). */
+  async function anfrage(pfad, inhalt) {
     for (let versuch = 0; versuch < 2; versuch++) {
       const zugang = await anmeldung.zugangsschluessel({ erneuern: versuch > 0 });
       if (!zugang) throw new Error('nicht angemeldet');
-      const antwort = await fetch(`${adresse}/rest/v1/rpc/${funktion}`, {
-        method: 'POST',
-        headers: {
-          apikey: schluessel,
-          Authorization: `Bearer ${zugang}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(inhalt),
-        signal: zeitgrenze(),
-      });
+      const headers = { apikey: schluessel, Authorization: `Bearer ${zugang}` };
+      const antwort = await fetch(`${adresse}/rest/v1/${pfad}`, inhalt === undefined
+        ? { method: 'GET', headers, signal: zeitgrenze() }
+        : {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(inhalt),
+          signal: zeitgrenze(),
+        });
       if (antwort.status === 401 && versuch === 0) continue;
       if (!antwort.ok) throw new Error(`Server antwortet mit ${antwort.status}`);
       return antwort.json();
@@ -46,8 +48,9 @@ export function erstelleServer({
   }
 
   return {
-    hochladen: (aenderungen) => rpc('hochladen', { aenderungen }),
-    herunterladen: (seit) => rpc('herunterladen', { seit }),
+    hochladen: (aenderungen) => anfrage('rpc/hochladen', { aenderungen }),
+    herunterladen: (seit) => anfrage('rpc/herunterladen', { seit }),
+    mitglieder: () => anfrage('mitglieder?select=konto,name,letzter_abgleich&order=name'),
   };
 }
 

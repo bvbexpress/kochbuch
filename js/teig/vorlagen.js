@@ -92,9 +92,40 @@ export function alleVorlagen(speicher) {
       teiglinge: bereinigeTeiglinge(v.teiglinge),
       kategorie: bereinigeKategorie(v.kategorie),
       modus: modusVon(v),
+      konflikt: bereinigeKonflikt(v.konflikt),
       eingebaut: false,
     })),
   ];
+}
+
+/**
+ * Vermerk an einer Konflikt-Kopie (vom Abgleich angelegt, siehe kern/sync.js):
+ * { von: id der anderen Fassung, am: Zeitpunkt (ms) } oder null.
+ */
+export function bereinigeKonflikt(k) {
+  if (!k || typeof k !== 'object' || typeof k.von !== 'string' || !Number.isFinite(k.am)) return null;
+  return { von: k.von, am: k.am };
+}
+
+/**
+ * Text des Vermerks: „Gleichzeitig auf beiden Handys geändert. Die andere Fassung heißt „Brot“.“
+ * Gibt es die andere Fassung nicht mehr, fehlt der zweite Satz. null = kein Vermerk.
+ */
+export function vermerkText(vorlage, vorlagen) {
+  const k = bereinigeKonflikt(vorlage?.konflikt);
+  if (!k) return null;
+  const andere = vorlagen.find((v) => v.id === k.von && v.id !== vorlage.id);
+  return andere
+    ? `Gleichzeitig auf beiden Handys geändert. Die andere Fassung heißt „${andere.name}“.`
+    : 'Gleichzeitig auf beiden Handys geändert.';
+}
+
+/** Vermerk entfernen („Behalten“): Die Kopie wird eine ganz normale Vorlage. */
+export function entferneVermerk(speicher, id) {
+  const gespeichert = speicher.hole(SAMMLUNG, id);
+  if (!gespeichert || !gespeichert.konflikt) return false;
+  const { konflikt, ...rest } = gespeichert;
+  return speicher.speichere(SAMMLUNG, rest) !== null;
 }
 
 /** Gültige Kategorie-id oder null („Ohne Kategorie“). */
@@ -270,6 +301,7 @@ export function bereinigeTeiglinge(roh) {
 
 /**
  * Speichert eine eigene Vorlage (neu ohne id, sonst Änderung). Gibt sie zurück oder null.
+ * Ein Konflikt-Vermerk fällt dabei weg: Wer die Kopie bearbeitet und speichert, hat sie angesehen.
  * Ohne Modus gilt: mit Teiglinge-Angabe Teiglinge-Modus, sonst Mehl-Modus.
  * Die Teiglinge-Angabe wird nur im Teiglinge-Modus gespeichert – so verstehen auch
  * ältere App-Stände (ohne Modus) die Vorlage richtig.
