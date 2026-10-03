@@ -223,3 +223,16 @@ test('Sync-Stand: Startwert 0, merkt sich ganze Zahlen, ignoriert Unsinn', () =>
   assert.equal(s.setzeSyncStand(1.5), false);
   assert.equal(s.syncStand(), 42);
 });
+
+test('Neue Basis nach Konflikt: bleibt offen, beruht auf Server-Version; nur für offene', () => {
+  const s = neuerSpeicher();
+  const d = s.speichere('vorlagen', { name: 'A' });
+  assert.equal(s.neueBasis('vorlagen', d.id, 7), true);
+  assert.deepEqual(s.offene('vorlagen').map((o) => o.version), [7]);
+  assert.equal(s.neueBasis('vorlagen', d.id, 0), true, '0 = gibt es auf dem Server nicht');
+  assert.equal(s.neueBasis('vorlagen', d.id, -1), false);
+  assert.equal(s.neueBasis('vorlagen', d.id, 1.5), false);
+  assert.equal(s.neueBasis('vorlagen', 'fehlt', 1), false);
+  s.hochgeladen('vorlagen', s.offene('vorlagen')[0].datensatz, 1);
+  assert.equal(s.neueBasis('vorlagen', d.id, 5), false, 'nicht offen');
+});
