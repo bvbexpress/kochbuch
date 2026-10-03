@@ -59,7 +59,7 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
 - Versionsanzeige ganz unten in der App (zum Vergleich beider Handys).
 - Icon: Quelle `icons/icon.svg`, daraus die PNGs (180 für iOS, 192/512 fürs Manifest).
 
-### Etappe 2 – Gemeinsame Daten *(geplant, Bau ab Schritt A nach Freigabe)*
+### Etappe 2 – Gemeinsame Daten *(im Bau: A, B und Supabase-Einrichtung fertig, weiter mit C)*
 **Entschieden:** Supabase, Region Frankfurt, Gratis-Stufe. **Weg A: nur `fetch`, keine Bibliothek.**
 - Persönliche Daten liegen **nur in der Datenbank**, nie im Repo. Im Code stehen nur Projekt-URL und öffentlicher
   Schlüssel (publishable). Der geheime Schlüssel (secret/`service_role`) kommt nie in App oder Repo.
@@ -99,6 +99,11 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
     Supabase ein: Projekt (Frankfurt, Free), zwei Konten mit „Auto Confirm“, Registrieren aus, Skript ausführen,
     Haushalt/Mitglieder per Zusatz-SQL (nur im Chat, enthält E-Mails, **nie ins Repo**), URL + publishable key an Claude,
     Security Advisor prüfen.
+    **Einrichtung abgeschlossen:** Projekt in Frankfurt (Free), „Automatically expose new tables“ aus,
+    „Enable automatic RLS“ an, Haushalt mit zwei Mitgliedern. URL und publishable key in `js/kern/server.js`.
+    Das Skript entzieht `public.rls_auto_enable()` (von Supabase angelegt) das Ausführungsrecht; die automatische
+    RLS wirkt weiter. Security Advisor: 0 Fehler; Warnung „Leaked Password Protection Disabled“ bewusst ignoriert
+    (Registrieren ist aus).
   - **C** `kern/sync.js`: Konflikte, Kopien, Ablauf hoch/runter, getestet gegen nachgebauten Server.
   - **D** `kern/anmeldung.js`, `kern/server.js`: Login, stilles Erneuern, Test für abgebrochenes Erneuern.
   - **E** Oberfläche: Anmeldung einmal pro Handy, Status nur auf dem Verwalter-Handy, Vermerk an Konflikt-Kopien.
@@ -147,7 +152,7 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 | `css/basis.css` | Farben (hell/dunkel), Schrift, Knöpfe, Felder |
 | `css/<bereich>.css` | Design eines Bereichs (z. B. `teig.css`) |
 | `js/app.js` | Start und (später) Navigation |
-| `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock) |
+| `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `server.js` (Supabase-Adresse und öffentlicher Schlüssel) |
 | `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js` (inkl. Kategorien, Ordnen der Liste), `zutaten.js` (Mehle/Saaten/Zusatzzutaten), `teilen.js` (Teilen-Link), `startseite.js` (HTML der Vorlagenliste), `ansicht.js` (Oberfläche, Navigation) |
 | `datenbank/schema.sql` | Supabase-Datenbank (Tabellen, Zugriffsschutz, Sync-Funktionen); nicht Teil der App |
 | `tests/` | Tests (`*.test.js`) |

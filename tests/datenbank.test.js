@@ -95,8 +95,9 @@ const MODI = {
   `,
   streng: `
     revoke all on schema public from public;
-    alter default privileges revoke execute on functions from public;
-    create function public.rls_automatisch() returns event_trigger language plpgsql as $$
+    -- so legt Supabase die Funktion für „Enable automatic RLS“ an (für alle ausführbar)
+    create function public.rls_auto_enable() returns event_trigger language plpgsql
+      security definer set search_path = '' as $$
     declare o record;
     begin
       for o in select * from pg_event_trigger_ddl_commands()
@@ -104,8 +105,9 @@ const MODI = {
         execute format('alter table %s enable row level security', o.object_identity);
       end loop;
     end $$;
-    create event trigger rls_automatisch on ddl_command_end when tag in ('CREATE TABLE')
-      execute function public.rls_automatisch();
+    grant execute on function public.rls_auto_enable() to anon, authenticated;
+    create event trigger rls_auto_enable on ddl_command_end when tag in ('CREATE TABLE')
+      execute function public.rls_auto_enable();
   `,
 };
 
@@ -295,5 +297,16 @@ for (const [modus, grundausstattung] of Object.entries(MODI)) describe(`Supabase
     sql(`delete from auth.users where id = '00000000-0000-4000-8000-0000000000c0'`);
     assert.ok(runter(A, 0, 1000).datensaetze.some((x) => x.id === 'v-c'));
     assert.equal(sql(`select count(*) from public.mitglieder where name = 'Alt'`), '0');
+  });
+
+  if (modus === 'streng') test('Automatische RLS: nicht von außen ausführbar, wirkt aber weiter', { skip: ohne }, () => {
+    for (const rolle of ['anon', 'authenticated']) {
+      assert.equal(sql(`select has_function_privilege('${rolle}', 'public.rls_auto_enable()', 'execute')`), 'f', rolle);
+    }
+    // Neue Tabelle von einer Rolle ohne Ausführungsrecht (wie im Dashboard, kein Superuser)
+    sql(`create role tabellenbauer nologin; grant create, usage on schema public to tabellenbauer`);
+    assert.equal(sql(`select has_function_privilege('tabellenbauer', 'public.rls_auto_enable()', 'execute')`), 'f');
+    sql(`set role tabellenbauer; create table public.probe (id int)`);
+    assert.equal(sql(`select relrowsecurity from pg_class where oid = 'public.probe'::regclass`), 't');
   });
 });
