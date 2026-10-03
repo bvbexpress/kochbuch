@@ -3,11 +3,9 @@
 /* ---------- Startseite: Vorlagenliste ---------- */
 .gruppe-titel {
   margin: 8px 0 6px;
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 600;
-  color: var(--text-leise);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  color: var(--holz);
 }
 
 .vorlagen-gruppen {
@@ -22,13 +20,14 @@
   background: var(--flaeche);
   border: 1px solid var(--linie);
   border-radius: var(--radius);
+  box-shadow: var(--schatten);
   overflow: hidden;
 }
 
 /* Zeile: Name und Kurzinfo (antippen = öffnen) | Stern */
 .vorlage-zeile {
   display: grid;
-  grid-template-columns: 1fr var(--tipp-hoehe);
+  grid-template-columns: minmax(0, 1fr) var(--tipp-hoehe);
   align-items: stretch;
 }
 
@@ -49,14 +48,16 @@
   text-align: left;
   cursor: pointer;
   touch-action: manipulation;
+  transition: background-color var(--dauer) ease;
 }
 
 .vorlage-oeffnen:active {
-  background: color-mix(in srgb, var(--akzent) 10%, transparent);
+  background: var(--akzent-weich);
 }
 
 .vorlage-name {
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .vorlage-oeffnen small {
@@ -67,10 +68,15 @@
 .stern {
   border: 0;
   background: none;
-  color: var(--akzent);
+  color: var(--holz);
   font-size: 1.6rem;
   cursor: pointer;
   touch-action: manipulation;
+  transition: transform var(--dauer) var(--kurve);
+}
+
+.stern:active {
+  transform: scale(0.85);
 }
 
 .suche {
@@ -79,7 +85,7 @@
 }
 
 .zeile.zeile-einblenden {
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 /* ---------- Rechner ---------- */
@@ -87,7 +93,7 @@
   display: block;
   font-size: 0.85rem;
   font-weight: 500;
-  color: var(--akzent);
+  color: var(--holz);
 }
 
 .geaendert[hidden],
@@ -153,9 +159,10 @@
 }
 
 .eingabe-gross {
-  font-size: 2rem;
-  font-weight: 600;
+  font-size: 2.2rem;
+  font-weight: 700;
   min-height: 72px;
+  color: var(--zahl);
 }
 
 /* ---------- Zutatenliste: Name | Prozent | Gramm ---------- */
@@ -167,7 +174,8 @@
 
 .zeile {
   display: grid;
-  grid-template-columns: 1fr 6.5rem 5.5rem;
+  /* minmax(0, …): lange Namen umbrechen, statt die Zeile zu verbreitern */
+  grid-template-columns: minmax(0, 1fr) 6.5rem 5.5rem;
   align-items: center;
   gap: 8px;
   min-height: var(--tipp-hoehe);
@@ -183,7 +191,11 @@
 .zeile-name {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   font-weight: 500;
+  overflow-wrap: anywhere;
+  hyphens: auto;            /* „Sonnen-blumenkerne“ (lang="de") */
+  -webkit-hyphens: auto;
 }
 
 .zeile-name small {
@@ -194,23 +206,24 @@
 
 .zeile .eingabe {
   font-size: 1.2rem;
+  font-weight: 600;
   padding-left: 0.5rem;
 }
 
+/* Grammwerte: das, was man abliest – groß und kontrastreich */
 .gramm {
   text-align: right;
-  font-size: 1.35rem;
-  font-weight: 700;
+  font-size: 1.45rem;
+  font-weight: 750;
+  color: var(--zahl);
   white-space: nowrap;
 }
 
 .zeile-titel {
   padding: 16px 0 4px;
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 600;
-  color: var(--text-leise);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  color: var(--holz);
 }
 
 /* Hefe-Umschalter sieht aus wie ein Name, ist aber antippbar */
@@ -230,7 +243,7 @@
 }
 
 .umschalter small {
-  color: var(--akzent);
+  color: var(--holz);
 }
 
 /* ---------- Summe und Hinweise ---------- */
@@ -243,15 +256,16 @@
 }
 
 .summe output {
-  font-size: 1.6rem;
+  font-size: 1.8rem;
   font-weight: 700;
+  color: var(--zahl);
 }
 
 .hinweis {
   margin: 12px 0 0;
   padding: 12px;
   border-radius: var(--radius);
-  background: color-mix(in srgb, var(--akzent) 15%, transparent);
+  background: var(--akzent-weich);
   font-weight: 500;
 }
 
@@ -283,11 +297,11 @@
 /* ---------- Mehle und Saaten wählen (einklappbar) ---------- */
 /* Zeile: Auswahl | Wert | Entfernen */
 .zeile-wahl {
-  grid-template-columns: 1fr 6.5rem var(--tipp-hoehe);
+  grid-template-columns: minmax(0, 1fr) 6.5rem var(--tipp-hoehe);
 }
 
 .zeile-wahl-kurz {
-  grid-template-columns: 1fr var(--tipp-hoehe);
+  grid-template-columns: minmax(0, 1fr) var(--tipp-hoehe);
 }
 
 /* Auswahlliste: gleiche Höhe wie Felder, Schrift ≥ 16px gegen iOS-Zoom */

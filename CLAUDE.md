@@ -196,6 +196,17 @@ Gespeicherte Daten beim Laden immer auf Gültigkeit prüfen.
 - Enthalten seit Schritt 12: `kategorie`, `modus`, `teig.zusaetze`. Alte Links ohne diese Felder funktionieren weiter.
 - Nicht enthalten: eigene Mehl-/Saatensorten und Wasserwerte (Einstellungen), Favoriten, Ausgeblendet.
 
+## Gestaltung „Moos & Holz“
+
+- Warm, ruhig, natürlich: Leinen-Hintergrund, Karten in Mehlweiß, **Moosgrün** (`--akzent`) für Knöpfe und aktive Felder,
+  **Holzbraun** (`--holz`) für Überschriften, Sterne, Zurück-Pfeil. Dunkelmodus: dunkles Nussholz.
+- Farben nur als Variablen in `css/basis.css`; Bereiche nutzen nur diese Variablen, keine festen Farbwerte.
+- Grammwerte und Summen in `--zahl` (höchster Kontrast). Kleine Schrift mindestens 4,5:1 Kontrast.
+- Weiche Formen (`--radius` 22 px), Karten mit Rahmen **und** zartem Schatten (Rahmen bleibt bei grellem Licht sichtbar).
+- Feedback beim Tippen nur sichtbar (kurz nachgeben, `--akzent-weich`), Übergänge mit `--dauer`/`--kurve`, aus bei
+  „Bewegung reduzieren“. Keine Vibration (Safari kann es nicht, der Schalter-Trick ist unzuverlässig).
+- Keine eigenen Schriften: Systemschrift. Grid-Spalten mit Text als `minmax(0, 1fr)`, sonst ragt der Inhalt über den Rand.
+
 ## Bedien-Anforderungen
 
 - **Sehr schnell:** sofortiger Start, offline nutzbar, keine unnötigen Bibliotheken.

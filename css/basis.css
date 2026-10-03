@@ -3,20 +3,26 @@
    Farben stehen als Variablen oben; der dunkle Modus überschreibt nur diese.
    ========================================================================== */
 
-/* ---------- Farben: heller Modus ---------- */
+/* ---------- Farben: heller Modus („Moos & Holz“) ---------- */
 :root {
-  --hintergrund: #faf7f2;   /* warmes Mehl-Weiß */
-  --flaeche: #ffffff;       /* Karten, Eingabefelder */
-  --text: #1f1b16;
-  --text-leise: #6b6258;
-  --linie: #e3dcd2;
-  --akzent: #b5541c;        /* Kruste */
-  --akzent-text: #ffffff;   /* Text auf Akzentfarbe */
-  --fokus: #d9772f;
+  --hintergrund: #eee5d6;   /* warmes Leinen */
+  --flaeche: #fdf8f0;       /* Mehlweiß: Karten, Eingabefelder */
+  --text: #2a2219;
+  --text-leise: #6b5d4c;
+  --linie: #e4d8c4;
+  --akzent: #586a28;        /* Moos: Knöpfe, aktive Felder */
+  --akzent-text: #fdf8f0;   /* Text auf Akzentfarbe */
+  --akzent-weich: #e8ead2;  /* zarte Moos-Tönung: Tippen, Hinweise */
+  --holz: #84572f;          /* Überschriften, Sterne, Zurück-Pfeil */
+  --zahl: #231b12;          /* Grammwerte: maximaler Kontrast */
+  --fokus: #8b9a52;
+  --schatten: 0 1px 2px rgba(90, 60, 30, 0.08), 0 6px 18px rgba(90, 60, 30, 0.07);
 
-  --radius: 14px;
+  --radius: 22px;
   --abstand: 16px;
   --tipp-hoehe: 56px;       /* Mindesthöhe für alles Antippbare */
+  --dauer: 180ms;           /* sanfte, kurze Übergänge */
+  --kurve: cubic-bezier(0.2, 0.7, 0.3, 1);
 
   color-scheme: light dark;
 }
@@ -24,14 +30,18 @@
 /* ---------- Farben: dunkler Modus (folgt der Handy-Einstellung) ---------- */
 @media (prefers-color-scheme: dark) {
   :root {
-    --hintergrund: #1b1814;
-    --flaeche: #26221d;
-    --text: #f3ede5;
-    --text-leise: #a89e92;
-    --linie: #3a342d;
-    --akzent: #e08a4f;
-    --akzent-text: #1b1814;
-    --fokus: #f0a26b;
+    --hintergrund: #1b1712;   /* dunkles Nussholz */
+    --flaeche: #29231b;
+    --text: #f4ecdf;
+    --text-leise: #b6a690;
+    --linie: #3c3327;
+    --akzent: #b9c97c;
+    --akzent-text: #1b1712;
+    --akzent-weich: #34331f;
+    --holz: #d9aa7a;
+    --zahl: #fff8ec;
+    --fokus: #d5e09d;
+    --schatten: 0 1px 2px rgba(0, 0, 0, 0.3);
   }
 }
 
@@ -59,6 +69,14 @@ body {
            env(safe-area-inset-bottom) env(safe-area-inset-left);
   /* Kein versehentliches Markieren von Text beim Tippen mit Teigfingern */
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Sanftes Feedback beim Tippen: alles Antippbare gibt kurz nach */
+.knopf,
+.knopf-zurueck,
+details.klappe > summary {
+  transition: transform var(--dauer) var(--kurve), background-color var(--dauer) ease,
+              color var(--dauer) ease;
 }
 
 h1, h2, h3 {
@@ -94,7 +112,7 @@ p { margin: 0 0 0.75em; }
   margin-left: -12px;
   border: 0;
   background: none;
-  color: var(--akzent);
+  color: var(--holz);
   font: inherit;
   font-size: 2.6rem;
   line-height: 1;
@@ -108,12 +126,15 @@ p { margin: 0 0 0.75em; }
   padding: var(--abstand);
   max-width: 40rem;         /* auf Tablet/PC nicht zu breit */
   margin: 0 auto;
+  /* minmax(0, …): breite Felder dürfen die Spalte nicht über den Bildschirm schieben */
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .karte {
   background: var(--flaeche);
-  border: 1px solid var(--linie);
+  border: 1px solid var(--linie);   /* bleibt sichtbar, wenn grelles Licht den Schatten schluckt */
   border-radius: var(--radius);
+  box-shadow: var(--schatten);
   padding: var(--abstand);
 }
 
@@ -143,10 +164,20 @@ p { margin: 0 0 0.75em; }
 .knopf-voll {
   background: var(--akzent);
   color: var(--akzent-text);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--akzent) 30%, transparent);
 }
 
 .knopf:active {
   transform: scale(0.97);
+  background-color: var(--akzent-weich);
+}
+
+.knopf-voll:active {
+  background-color: color-mix(in srgb, var(--akzent) 86%, var(--text));
+}
+
+.knopf-zurueck:active {
+  transform: scale(0.88);
 }
 
 /* ---------- Eingabefelder ---------- */
@@ -167,16 +198,22 @@ p { margin: 0 0 0.75em; }
   padding: 0 0.75rem;
   border: 2px solid var(--linie);
   border-radius: var(--radius);
-  background: var(--flaeche);
+  background: color-mix(in srgb, var(--hintergrund) 35%, var(--flaeche));
   color: var(--text);
   font: inherit;
   font-size: 1.4rem;
   font-variant-numeric: tabular-nums;
   touch-action: manipulation;
+  transition: border-color var(--dauer) ease, box-shadow var(--dauer) ease;
 }
 
-/* Deutliche Markierung, welches Feld gerade aktiv ist */
-.eingabe:focus,
+/* Deutliche Markierung, welches Feld gerade aktiv ist: Moos-Rahmen mit weichem Lichthof */
+.eingabe:focus {
+  outline: none;
+  border-color: var(--akzent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--akzent) 25%, transparent);
+}
+
 .knopf:focus-visible {
   outline: 3px solid var(--fokus);
   outline-offset: 2px;
@@ -187,6 +224,7 @@ details.klappe {
   background: var(--flaeche);
   border: 1px solid var(--linie);
   border-radius: var(--radius);
+  box-shadow: var(--schatten);
 }
 
 details.klappe > summary {
@@ -198,6 +236,11 @@ details.klappe > summary {
   cursor: pointer;
   list-style: none;
   touch-action: manipulation;
+  border-radius: var(--radius);
+}
+
+details.klappe > summary:active {
+  background: var(--akzent-weich);
 }
 
 details.klappe > summary::-webkit-details-marker {
@@ -209,7 +252,7 @@ details.klappe > summary::after {
   content: "›";
   margin-left: auto;
   font-size: 1.5rem;
-  transition: transform 0.15s;
+  transition: transform 260ms var(--kurve);
 }
 
 details.klappe[open] > summary::after {
