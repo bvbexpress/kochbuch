@@ -26,9 +26,66 @@
 
 /* Zeile: Name und Kurzinfo (antippen = öffnen) | Stern */
 .vorlage-zeile {
+  position: relative;
+  overflow: hidden;
+}
+
+.vorlage-inhalt {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--tipp-hoehe);
   align-items: stretch;
+  background: var(--flaeche);
+  touch-action: pan-y; /* senkrecht scrollen bleibt, waagrecht wischen gehört der Zeile */
+  transition: transform var(--dauer) var(--kurve);
+}
+
+.vorlage-zeile.zieht .vorlage-inhalt {
+  transition: none;
+}
+
+/* Roter Knopf hinter der Zeile; erst sichtbar, wenn gewischt wird */
+.vorlage-weg {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: var(--weg-breite, 128px);
+  border: 0;
+  background: var(--gefahr);
+  color: var(--gefahr-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  visibility: hidden;
+  transition: visibility 0s linear var(--dauer); /* beim Schließen erst nach dem Zurückgleiten verstecken */
+}
+
+.vorlage-zeile.zieht .vorlage-weg,
+.vorlage-zeile.offen .vorlage-weg {
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+/* Rückgängig-Leiste unten, über dem Inhalt */
+.rueckgaengig {
+  position: fixed;
+  inset: auto var(--abstand) calc(var(--abstand) + env(safe-area-inset-bottom)) var(--abstand);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--abstand);
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 6px 6px 6px var(--abstand);
+  background: var(--flaeche);
+  border: 1px solid var(--linie);
+  border-radius: var(--radius);
+  box-shadow: var(--schatten);
+  color: var(--text);
+}
+
+.rueckgaengig[hidden] {
+  display: none;
 }
 
 .vorlage-zeile + .vorlage-zeile {

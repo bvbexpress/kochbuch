@@ -31,14 +31,18 @@ export function suchfeldHtml(suche) {
 export function vorlagenListeHtml(ordnung, { sterne, suche, ausgeblendetOffen }) {
   const zeile = (v) => {
     const stern = sterne.has(v.id);
-    return `<li class="vorlage-zeile">
-        <button type="button" class="vorlage-oeffnen" data-oeffnen="${text(v.id)}">
-          <span class="vorlage-name">${text(v.name)}</span>
-          <small class="zahl">${text(zusammenfassung(v))}</small>
-          ${v.konflikt ? '<small class="vermerk">Gleichzeitig geändert – bitte ansehen</small>' : ''}
-        </button>
-        <button type="button" class="stern" data-stern="${text(v.id)}" aria-pressed="${stern}"
-                aria-label="${text(v.name)} ${stern ? 'aus den Favoriten nehmen' : 'als Favorit markieren'}">${stern ? '★' : '☆'}</button>
+    // Nach links wischen zeigt den roten Knopf hinter der Zeile (siehe `beiWischen` in ansicht.js)
+    return `<li class="vorlage-zeile" data-zeile>
+        <button type="button" class="vorlage-weg" data-weg="${text(v.id)}" tabindex="-1">${v.eingebaut ? 'Ausblenden' : 'Löschen'}</button>
+        <div class="vorlage-inhalt">
+          <button type="button" class="vorlage-oeffnen" data-oeffnen="${text(v.id)}">
+            <span class="vorlage-name">${text(v.name)}</span>
+            <small class="zahl">${text(zusammenfassung(v))}</small>
+            ${v.konflikt ? '<small class="vermerk">Gleichzeitig geändert – bitte ansehen</small>' : ''}
+          </button>
+          <button type="button" class="stern" data-stern="${text(v.id)}" aria-pressed="${stern}"
+                  aria-label="${text(v.name)} ${stern ? 'aus den Favoriten nehmen' : 'als Favorit markieren'}">${stern ? '★' : '☆'}</button>
+        </div>
       </li>`;
   };
   const gruppe = (titel, vorlagen) => `

@@ -59,7 +59,7 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
 - Versionsanzeige ganz unten in der App (zum Vergleich beider Handys).
 - Icon: Quelle `icons/icon.svg`, daraus die PNGs (180 für iOS, 192/512 fürs Manifest).
 
-### Etappe 2 – Gemeinsame Daten *(im Bau: A–G und Supabase-Einrichtung fertig, weiter mit H)*
+### Etappe 2 – Gemeinsame Daten *(fertig)*
 **Entschieden:** Supabase, Region Frankfurt, Gratis-Stufe. **Weg A: nur `fetch`, keine Bibliothek.**
 - Persönliche Daten liegen **nur in der Datenbank**, nie im Repo. Im Code stehen nur Projekt-URL und öffentlicher
   Schlüssel (publishable). Der geheime Schlüssel (secret/`service_role`) kommt nie in App oder Repo.
@@ -157,7 +157,15 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
     (`actions: write`, keine Commits), damit er nach 60 Tagen Ruhe nicht abgeschaltet wird. Von Hand startbar
     (`workflow_dispatch`). Adresse und publishable key stehen auch im Workflow; `tests/ping.test.js` prüft, dass sie zu
     `server.js` passen. Kein Secret nötig.
-  - **H** Praxistest auf beiden iPhones: Flugmodus, gleichzeitige Änderung, Löschen gegen Ändern, App beim Erneuern schließen.
+  - **H** *(fertig)* Praxistest auf beiden iPhones bestanden: Abgleich in beide Richtungen, offline, gleichzeitige Änderung
+    mit Konflikt-Kopie, Löschen kommt am anderen Handy an, keine technischen Meldungen auf dem zweiten Handy, versteckte
+    Verwaltung. „Löschen gegen Ändern“ bewusst nicht von Hand getestet (nur in `tests/sync.test.js`).
+    Danach ergänzt: **Takt** – bei offener, sichtbarer App alle 45 s (`TAKT` in `ausloeser.js`) still abgleichen; jeder andere
+    Abgleich setzt ihn neu, im Hintergrund läuft er nicht.
+- **Nach Etappe 2 ergänzt – Wischen in der Vorlagenliste** (`wischen.js`, Knopf in `startseite.js`): Zeile nach links wischen →
+  roter Knopf „Löschen“ (eigene) bzw. „Ausblenden“ (eingebaute). Keine Nachfrage, dafür 6 s lang „Rückgängig“
+  (`entferneAusListe` in `ansicht.js`; Löschen = Grabstein, Rückgängig stellt den alten Inhalt als neue Änderung wieder her).
+  Während eines Wischens zeichnet `datenAktualisiert()` nicht neu, sondern holt es danach nach.
 
 ### Etappe 3 – Rezepte
 - Rezepte mit **Personenanzahl** und automatischer Mengenanpassung.

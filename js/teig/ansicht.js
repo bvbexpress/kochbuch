@@ -21,6 +21,8 @@ import {
   ladeVorlage,
   speichereEigeneVorlage,
   loescheEigeneVorlage,
+  holeEigeneVorlage,
+  stelleEigeneVorlageWiederHer,
   istGueltigerTeig,
   normalisiereTeig,
   eigeneVorlagen,
@@ -56,6 +58,7 @@ import {
   STANDARD_ZUSATZ_WASSER,
 } from './zutaten.js';
 import { suchfeldHtml, vorlagenListeHtml, zusammenfassung } from './startseite.js';
+import { erstelleWischen } from './wischen.js';
 import { speicher } from '../kern/speicher.js';
 import { leseZahl, formatGramm, formatGrammFein, formatProzent } from '../kern/zahlen.js';
 import { text } from '../kern/html.js';
@@ -94,6 +97,9 @@ const offeneKlappen = new Set(); // welche einklappbaren Bereiche offen sind
 let paket = null;   // erhaltene Vorlagen aus einem Link, wartet auf „Übernehmen“: { vorlagen, verworfen, link }
 let aufHinweis = null; // einmaliger Hinweis in der Starter-Auffrischung
 let meldung = null; // einmalige Rückmeldung (wird beim nächsten Zeichnen angezeigt und gelöscht)
+let wischen = null; // Wisch-Geste der Vorlagenliste (wischen.js)
+let nachholen = false; // Daten vom Server kamen während eines Wischens an
+let rueckgaengig = null; // Leiste „Rückgängig“: { leiste, zeitgeber, f }
 let abgleich = null; // Bereich „Abgleich“ (kern/abgleich.js), unten auf der Startseite
 
 /** abgleich: optional, aus `erstelleAbgleichBereich` (ohne ihn fehlt die Klappe). */
@@ -112,9 +118,14 @@ export function zeigeTeigrechner(ziel, { abgleich: bereich = null } = {}) {
   wurzel.addEventListener('input', beiEingabe);
   wurzel.addEventListener('change', beiAuswahl);
   wurzel.addEventListener('click', beiKlick);
+  wischen = erstelleWischen(wurzel, {
+    beiEnde() {
+      if (nachholen) datenAktualisiert();
+    },
+  });
   // Der Abgleich-Bereich zeichnet nur die Startseite neu (z. B. wenn der Status geladen ist)
   abgleich?.verbinde(wurzel, () => {
-    if (ansicht === 'liste' && !tipptGerade()) zeichne();
+    if (ansicht === 'liste' && !tipptGerade() && !wischen?.zieht()) zeichne();
   });
   // Offene Klappen merken, damit sie nach dem Neuzeichnen offen bleiben
   wurzel.addEventListener('toggle', (e) => {
@@ -142,6 +153,8 @@ function tipptGerade() {
  */
 export function datenAktualisiert() {
   if (!wurzel || tipptGerade()) return;
+  nachholen = Boolean(wischen?.zieht()); // mitten im Wischen nicht neu zeichnen, danach nachholen
+  if (nachholen) return;
   ladeKatalog();
   if (ansicht === 'rechner' && zustand && !zustand.geaendert && !speicherKarte) {
     const vorlage = aktuelleVorlage();
@@ -1053,6 +1066,8 @@ function beiKlick(ereignis) {
     schalteFavorit(speicher, stern.dataset.stern);
     return zeichneListeNeu();
   }
+  const weg = ziel.closest('[data-weg]');
+  if (weg) return entferneAusListe(weg.dataset.weg);
   const einblenden = ziel.closest('[data-einblenden]');
   if (einblenden) {
     blendeAus(speicher, einblenden.dataset.einblenden, false);
@@ -1290,6 +1305,61 @@ function blendeVorlageAus() {
   vergissStand();
   meldung = `„${vorlage.name}“ ausgeblendet. Unten bei „Ausgeblendet“ wieder einblenden.`;
   zeige('liste');
+}
+
+// ---------- Vorlagenliste: wischen → löschen / ausblenden, mit „Rückgängig“ ----------
+
+const RUECKGAENGIG_DAUER = 6000; // so lange bleibt „Rückgängig“ stehen (ms)
+
+/** Eigene Vorlage löschen, eingebaute ausblenden – ohne Nachfrage, dafür mit „Rückgängig“. */
+function entferneAusListe(id) {
+  const vorlage = alleVorlagen(speicher).find((v) => v.id === id);
+  if (!vorlage) return;
+  let zurueckholen;
+  if (vorlage.eingebaut) {
+    blendeAus(speicher, id);
+    zurueckholen = () => blendeAus(speicher, id, false);
+  } else {
+    const alt = holeEigeneVorlage(speicher, id);
+    if (!alt || !loescheEigeneVorlage(speicher, id)) return meldeFehler();
+    zurueckholen = () => stelleEigeneVorlageWiederHer(speicher, alt);
+  }
+  if (zustand?.vorlageId === id) vergissStand();
+  zeichneListeNeu();
+  zeigeRueckgaengig(`„${vorlage.name}“ ${vorlage.eingebaut ? 'ausgeblendet' : 'gelöscht'}`, () => {
+    if (!zurueckholen()) return meldeFehler();
+    if (ansicht === 'liste') zeichneListeNeu();
+  });
+}
+
+/** Kleine Leiste unten mit „Rückgängig“; eine neue ersetzt die alte, nach ein paar Sekunden verschwindet sie. */
+function zeigeRueckgaengig(hinweis, zurueckholen) {
+  if (!rueckgaengig) {
+    const leiste = document.createElement('div');
+    leiste.className = 'rueckgaengig';
+    leiste.setAttribute('role', 'status');
+    leiste.hidden = true;
+    leiste.innerHTML = '<span data-text></span><button type="button" class="knopf knopf-leise">Rückgängig</button>';
+    leiste.querySelector('button').addEventListener('click', () => {
+      const f = rueckgaengig.f;
+      versteckeRueckgaengig();
+      f?.();
+    });
+    document.body.append(leiste);
+    rueckgaengig = { leiste, zeitgeber: null, f: null };
+  }
+  clearTimeout(rueckgaengig.zeitgeber);
+  rueckgaengig.f = zurueckholen;
+  rueckgaengig.leiste.querySelector('[data-text]').textContent = hinweis;
+  rueckgaengig.leiste.hidden = false;
+  rueckgaengig.zeitgeber = setTimeout(versteckeRueckgaengig, RUECKGAENGIG_DAUER);
+}
+
+function versteckeRueckgaengig() {
+  if (!rueckgaengig) return;
+  clearTimeout(rueckgaengig.zeitgeber);
+  rueckgaengig.f = null;
+  rueckgaengig.leiste.hidden = true;
 }
 
 // ---------- Teilen, Sichern, Link einfügen ----------
