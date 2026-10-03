@@ -162,6 +162,19 @@ export function erstelleSpeicher(backend, jetzt = () => Date.now()) {
     },
 
     /**
+     * Nach einem Konflikt, wenn die eigene Änderung trotzdem gelten soll: Sie bleibt offen,
+     * beruht aber ab jetzt auf der Server-Version `version` (0 = gibt es auf dem Server nicht).
+     * Nur für offene Datensätze.
+     */
+    neueBasis(sammlung, id, version) {
+      if (!Number.isSafeInteger(version) || version < 0) return false;
+      const liste = sammlungLesen(sammlung);
+      const alt = liste.find((d) => d.id === id);
+      if (!alt || !syncVon(alt).offen) return false;
+      return sammlungSchreiben(sammlung, einsetzen(liste, { ...alt, sync: { version, offen: true } }));
+    },
+
+    /**
      * Übernimmt einen Datensatz vom Server: { id, daten, geloescht, version }.
      * Ergebnis:
      *   'uebernommen' – gespeichert, nicht offen
