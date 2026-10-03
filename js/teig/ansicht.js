@@ -41,6 +41,8 @@ import {
   STANDARD_TEIGLINGE,
   vorbelegung,
   neueVorlage,
+  vermerkText,
+  entferneVermerk,
 } from './vorlagen.js';
 import { erstelleLink, liesLink, hatTeilenCode } from './teilen.js';
 import {
@@ -92,9 +94,12 @@ const offeneKlappen = new Set(); // welche einklappbaren Bereiche offen sind
 let paket = null;   // erhaltene Vorlagen aus einem Link, wartet auf „Übernehmen“: { vorlagen, verworfen, link }
 let aufHinweis = null; // einmaliger Hinweis in der Starter-Auffrischung
 let meldung = null; // einmalige Rückmeldung (wird beim nächsten Zeichnen angezeigt und gelöscht)
+let abgleich = null; // Bereich „Abgleich“ (kern/abgleich.js), unten auf der Startseite
 
-export function zeigeTeigrechner(ziel) {
+/** abgleich: optional, aus `erstelleAbgleichBereich` (ohne ihn fehlt die Klappe). */
+export function zeigeTeigrechner(ziel, { abgleich: bereich = null } = {}) {
   wurzel = ziel;
+  abgleich = bereich;
   ladeKatalog();
   // Beim Öffnen direkt die zuletzt benutzte Vorlage, sonst die Liste
   zustand = letzterStand();
@@ -107,6 +112,10 @@ export function zeigeTeigrechner(ziel) {
   wurzel.addEventListener('input', beiEingabe);
   wurzel.addEventListener('change', beiAuswahl);
   wurzel.addEventListener('click', beiKlick);
+  // Der Abgleich-Bereich zeichnet nur die Startseite neu (z. B. wenn der Status geladen ist)
+  abgleich?.verbinde(wurzel, () => {
+    if (ansicht === 'liste') zeichne();
+  });
   // Offene Klappen merken, damit sie nach dem Neuzeichnen offen bleiben
   wurzel.addEventListener('toggle', (e) => {
     const name = e.target.dataset?.klappe;
@@ -226,7 +235,8 @@ function zeichneListe() {
     <div class="vorlagen-gruppen" data-liste>${listeHtml(ordnung)}</div>
     ${neuKarte ? '' : '<button type="button" class="knopf knopf-voll" data-aktion="neu-karte">+ Neue Vorlage</button>'}
     ${teilenKlappe()}
-    ${einstellungenKlappe()}`;
+    ${einstellungenKlappe()}
+    ${abgleich ? abgleich.html() : ''}`;
 }
 
 function ordnungJetzt() {
@@ -365,6 +375,7 @@ function zeichneRechner() {
         <small class="geaendert" data-ausgabe="geaendert" ${zustand.geaendert ? '' : 'hidden'}>geändert</small></h1>
     </header>
     ${meldungHtml()}
+    ${vermerkKarte(vorlage)}
     ${speicherKarte ? speicherKarteHtml(vorlage) : ''}
 
     <section class="karte">${menge}</section>
@@ -399,6 +410,19 @@ function zeichneRechner() {
     ${vorlageKlappe(vorlage)}`;
 
   aktualisiere();
+}
+
+/** Vermerk an einer Konflikt-Kopie: direkt an der Vorlage, behalten oder löschen. */
+function vermerkKarte(vorlage) {
+  const hinweis = vorlage && !vorlage.eingebaut ? vermerkText(vorlage, alleVorlagen(speicher)) : null;
+  if (!hinweis) return '';
+  return `<section class="karte vermerk-karte" aria-label="Hinweis zu dieser Vorlage">
+      <p>${text(hinweis)} Welche brauchst du noch?</p>
+      <div class="aktionen">
+        <button type="button" class="knopf" data-aktion="vermerk-weg">Diese behalten</button>
+        <button type="button" class="knopf knopf-leise" data-aktion="loeschen">Diese löschen</button>
+      </div>
+    </section>`;
 }
 
 /** Großes Zahlenfeld für den Teiglinge-Modus (Anzahl, Gewicht). */
@@ -1038,6 +1062,7 @@ function beiKlick(ereignis) {
   if (aktion === 'sp-verwerfen') verwerfeAenderungen();
   if (aktion === 'sp-abbrechen') schliesseSpeicherKarte();
   if (aktion === 'loeschen') loescheVorlage();
+  if (aktion === 'vermerk-weg') behalteVorlage();
   if (aktion === 'ausblenden') blendeVorlageAus();
   if (aktion === 'teilen') teileVorlage();
   if (aktion === 'sichern') sichereAlle();
@@ -1223,6 +1248,14 @@ function loescheVorlage() {
   vergissStand();
   meldung = `„${vorlage.name}“ gelöscht.`;
   zeige('liste');
+}
+
+/** Konflikt-Kopie behalten: Vermerk weg, sie bleibt als ganz normale Vorlage. */
+function behalteVorlage() {
+  const vorlage = aktuelleVorlage();
+  if (!vorlage || vorlage.eingebaut) return;
+  if (!entferneVermerk(speicher, vorlage.id)) return meldeFehler();
+  zeichne();
 }
 
 function blendeVorlageAus() {

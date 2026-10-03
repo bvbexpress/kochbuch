@@ -29,6 +29,7 @@ function nachgebautesSupabase() {
     pausiert: false,      // true: Projekt pausiert (Supabase antwortet mit Fehler)
     anfragen: [],         // { pfad, headers, body }
     rpc: {},              // Funktion → (body) => Ergebnis
+    mitglieder: [],       // Zeilen der Tabelle mitglieder (eigener Haushalt)
 
     neueSitzung(familie = ++zaehler) {
       const zugang = `zugang-${++zaehler}`;
@@ -87,6 +88,11 @@ function nachgebautesSupabase() {
         if (!sb.zugangGueltig(zugang)) return [401, { code: 'PGRST301', message: 'JWT expired' }];
         return [200, sb.rpc[rpc[1]](body)];
       }
+      if (pfad === '/rest/v1/mitglieder?select=konto,name,letzter_abgleich&order=name') {
+        const zugang = headers.Authorization?.replace(/^Bearer /, '');
+        if (!sb.zugangGueltig(zugang)) return [401, { code: 'PGRST301', message: 'JWT expired' }];
+        return [200, sb.mitglieder];
+      }
       return [404, { message: 'not found' }];
     },
 
@@ -94,8 +100,8 @@ function nachgebautesSupabase() {
       await Promise.resolve();
       assert.ok(url.startsWith(SERVER_ADRESSE), url);
       const pfad = url.slice(SERVER_ADRESSE.length);
-      const body = JSON.parse(optionen.body);
-      sb.anfragen.push({ pfad, headers: optionen.headers, body });
+      const body = optionen.body === undefined ? undefined : JSON.parse(optionen.body);
+      sb.anfragen.push({ pfad, methode: optionen.method, headers: optionen.headers, body });
       if (!sb.netz) throw new TypeError('Load failed');
       const [status, daten] = sb.verarbeite(pfad, body, optionen.headers);
       if (sb.antwortVerloren) throw new TypeError('Load failed');
@@ -353,6 +359,22 @@ test('Server ruft die Datenbank-Funktionen mit Schlüssel und Zugangsschlüssel 
   assert.deepEqual(runter.body, { seit: 7 });
   assert.equal(hoch.headers.apikey, OEFFENTLICHER_SCHLUESSEL);
   assert.match(hoch.headers.Authorization, /^Bearer zugang-/);
+});
+
+test('Server liest die Mitglieder des Haushalts (GET, mit Zugangsschlüssel, bei 401 einmal erneuert)', async () => {
+  const sb = nachgebautesSupabase();
+  sb.mitglieder = [{ konto: KONTO, name: 'Handy 1', letzter_abgleich: null }];
+  const h = handy(sb);
+  await assert.rejects(() => h.server.mitglieder(), /nicht angemeldet/);
+  await h.anmeldung.anmelden(EMAIL, PASSWORT);
+  sb.uhr += 2 * STUNDE;
+
+  assert.deepEqual(await h.server.mitglieder(), sb.mitglieder);
+  const [erst, erneuern, wieder] = sb.anfragen.slice(-3);
+  assert.equal(erst.methode, 'GET');
+  assert.equal(erst.body, undefined);
+  assert.equal(erneuern.pfad, '/auth/v1/token?grant_type=refresh_token');
+  assert.match(wieder.headers.Authorization, /^Bearer zugang-/);
 });
 
 test('Server: Zugangsschlüssel abgelehnt (401) → einmal erneuern und wiederholen', async () => {

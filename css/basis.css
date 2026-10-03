@@ -263,6 +263,49 @@ details.klappe > .klappe-inhalt {
   padding: 0 var(--abstand) var(--abstand);
 }
 
+/* ---------- Abgleich zwischen den Handys (kern/abgleich.js) ---------- */
+.abgleich-status {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.abgleich-status li {
+  padding: 8px 0;
+}
+
+.abgleich-status li + li {
+  border-top: 1px solid var(--linie);
+}
+
+/* Häkchen mit Text: die ganze Zeile ist antippbar */
+.haken {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: var(--tipp-hoehe);
+  margin-top: 8px;
+  cursor: pointer;
+}
+
+.haken input {
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  accent-color: var(--akzent);
+}
+
+/* Ruhig, aber erkennbar: nur auf dem Verwalter-Handy */
+.achtung {
+  color: var(--holz);
+  font-weight: 600;
+}
+
+summary .achtung {
+  margin-left: 0.3em;
+}
+
 /* Weniger Bewegung, falls am Handy so eingestellt */
 @media (prefers-reduced-motion: reduce) {
   * {

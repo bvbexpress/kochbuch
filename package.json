@@ -4,6 +4,7 @@
   "type": "module",
   "description": "Nur für die Tests – die App selbst braucht kein Node.js und keine Pakete.",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "test:live": "NODE_USE_ENV_PROXY=1 node --test tests/live-supabase.js"
   }
 }

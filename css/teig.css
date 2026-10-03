@@ -382,3 +382,18 @@
   font-weight: 400;
   color: var(--text-leise);
 }
+
+/* ---------- Vermerk an Konflikt-Kopien (gleichzeitig auf beiden Handys geändert) ---------- */
+.vorlage-oeffnen small.vermerk {
+  color: var(--holz);
+  font-weight: 600;
+}
+
+.vermerk-karte p {
+  margin: 0 0 12px;
+  font-weight: 500;
+}
+
+.vermerk-karte .aktionen {
+  padding-bottom: 0;
+}
