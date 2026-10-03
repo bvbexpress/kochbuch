@@ -58,6 +58,10 @@ create unique index if not exists datensaetze_haushalt_stand on public.datensaet
 -- ---------------------------------------------------------------------------
 -- Rechte: erst alles weg, dann nur das Nötige
 -- ---------------------------------------------------------------------------
+-- Alle Freigaben stehen hier ausdrücklich. Das Skript verlässt sich nicht auf Grundeinstellungen
+-- des Projekts (z. B. „Automatically expose new tables“ aus/an, „Enable automatic RLS“).
+
+grant usage on schema public to anon, authenticated;
 
 alter table public.haushalte   enable row level security;
 alter table public.mitglieder  enable row level security;

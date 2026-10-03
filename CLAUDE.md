@@ -94,7 +94,8 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
     nie nach außen), `offene`, `hochgeladen`, `vomServer` (überschreibt nie offene Änderungen), `syncStand`. Ohne Netz.
   - **B** *(fertig)* `datenbank/schema.sql`: Tabellen, RLS, `hochladen`/`herunterladen` (Logik in Schema `intern`), `ping`,
     letzter Abgleich je Konto (`mitglieder.letzter_abgleich`). Getestet gegen echtes PostgreSQL (`tests/datenbank.test.js`,
-    lokal übersprungen ohne PostgreSQL, bei GitHub Pflicht). Danach richtet der Nutzer
+    lokal übersprungen ohne PostgreSQL, bei GitHub Pflicht). Das Skript setzt alle Freigaben selbst; getestet mit
+    alter Supabase-Grundeinstellung und streng (keine automatischen Freigaben, automatische RLS). Danach richtet der Nutzer
     Supabase ein: Projekt (Frankfurt, Free), zwei Konten mit „Auto Confirm“, Registrieren aus, Skript ausführen,
     Haushalt/Mitglieder per Zusatz-SQL (nur im Chat, enthält E-Mails, **nie ins Repo**), URL + publishable key an Claude,
     Security Advisor prüfen.
