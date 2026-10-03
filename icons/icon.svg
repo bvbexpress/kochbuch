@@ -1,11 +1,18 @@
-<!-- App-Icon: ein Brotlaib mit Einschnitten. Quelle für die PNG-Dateien (icon-180/192/512.png). -->
+<!-- App-Icon „Moos & Holz“: Weizenähre in Leinen und Holz auf Moosgrün. Quelle für die PNG-Dateien (icon-180/192/512.png). -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#b5541c"/>
-  <path d="M70 318 C70 200 160 136 256 136 C352 136 442 200 442 318 C442 352 420 368 386 368 L126 368 C92 368 70 352 70 318 Z"
-        fill="#faf7f2"/>
-  <g fill="none" stroke="#e3a36f" stroke-width="20" stroke-linecap="round">
-    <path d="M150 262 C170 228 196 206 228 194"/>
-    <path d="M222 286 C242 248 270 222 304 208"/>
-    <path d="M296 306 C316 270 340 248 368 238"/>
+  <rect width="512" height="512" fill="#586a28"/>
+  <path d="M256 430 L256 150" stroke="#e9d9bd" stroke-width="16" stroke-linecap="round"/>
+  <g fill="#f4ead8">
+    <ellipse cx="256" cy="118" rx="22" ry="40"/>
+    <g id="paar">
+      <ellipse cx="0" cy="0" rx="22" ry="44" transform="translate(222 190) rotate(-32)"/>
+      <ellipse cx="0" cy="0" rx="22" ry="44" transform="translate(290 190) rotate(32)"/>
+    </g>
+    <use href="#paar" y="62"/>
+    <use href="#paar" y="124"/>
   </g>
+  <g fill="#c99a62"><g id="kern">
+    <ellipse cx="0" cy="0" rx="10" ry="22" transform="translate(222 190) rotate(-32)"/>
+    <ellipse cx="0" cy="0" rx="10" ry="22" transform="translate(290 190) rotate(32)"/>
+  </g><use href="#kern" y="62"/><use href="#kern" y="124"/></g>
 </svg>
