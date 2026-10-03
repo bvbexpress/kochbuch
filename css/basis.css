@@ -278,6 +278,24 @@ details.klappe > .klappe-inhalt {
   border-top: 1px solid var(--linie);
 }
 
+/* Häkchen mit Text: die ganze Zeile ist antippbar */
+.haken {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: var(--tipp-hoehe);
+  margin-top: 8px;
+  cursor: pointer;
+}
+
+.haken input {
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  accent-color: var(--akzent);
+}
+
 /* Ruhig, aber erkennbar: nur auf dem Verwalter-Handy */
 .achtung {
   color: var(--holz);

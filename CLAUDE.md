@@ -124,14 +124,18 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
     abgebrochenes Erneuern, App-Neustart). Noch nicht in der Oberfläche eingebunden (kommt in E/F).
   - **E** *(fertig)* `kern/abgleich.js`: Klappe „Abgleich zwischen den Handys“ unten auf der Startseite (zugeklappt).
     Nicht angemeldet: Formular E-Mail/Passwort (`autocomplete` für den Schlüsselbund), auf jedem Handy.
-    Verwalter-Handy = Geräte-Einstellung `abgleich.verwalter` (Knopf in der Klappe): Status mit wartenden Änderungen
+    Verwalter-Handy = Geräte-Einstellung `abgleich.verwalter`, **nur per Häkchen beim Anmelden** (kein Umschalt-Knopf).
+    Andere Handys: nach der Anmeldung keine Klappe mehr (erst wieder mit Formular, falls Supabase ablehnt).
+    Verwalter: Status mit wartenden Änderungen
     und „Handy 2: seit X Tagen nicht abgeglichen“ (aus `mitglieder.letzter_abgleich`, `server.mitglieder()`,
     höchstens einmal pro Minute); ab `WARNEN_AB_TAGEN` (3) oder bei Abmeldung/kein Haushalt „· bitte ansehen“ im
-    Titel. Andere Handys: nur „Angemeldet“, nie ein Status. Die Oberfläche gleicht selbst nicht ab (Auslöser in F).
+    Titel. Die Oberfläche gleicht selbst nicht ab (Auslöser in F).
     Konflikt-Kopien: Vermerk in der Liste und als Karte im Rechner („Diese behalten“ entfernt `konflikt`,
     „Diese löschen“); Speichern der Kopie entfernt ihn ebenfalls. Verdrahtung in `app.js`.
     Live-Test: `npm run test:live` (`tests/live-supabase.js`, nicht in `npm test`) mit `SUPABASE_TEST_EMAIL`/
-    `SUPABASE_TEST_PASSWORT`; schreibt nie Datensätze. Testkonto muss in `mitglieder` stehen.
+    `SUPABASE_TEST_PASSWORT`. Das Testkonto gehört **bewusst zu keinem Haushalt**: Der Test prüft Anmelden,
+    Erneuern, Elternschlüssel und dass das Konto (und anonym) nichts lesen und nichts schreiben kann.
+    Abgleich mit Haushalt prüft Schritt H auf den iPhones.
   - **F** Auslöser und Umzug der bestehenden Daten (vorher Sicherungs-Link auf dem Verwalter-Handy).
   - **G** GitHub Action `ping` (Mo + Do), hält sich selbst aktiv.
   - **H** Praxistest auf beiden iPhones: Flugmodus, gleichzeitige Änderung, Löschen gegen Ändern, App beim Erneuern schließen.

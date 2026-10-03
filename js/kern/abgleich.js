@@ -1,10 +1,12 @@
 // abgleich.js – Bereich „Abgleich“ auf der Startseite (Etappe 2).
 //
 // - Anmeldung einmal pro Handy: E-Mail + Passwort (der Schlüsselbund füllt aus), danach nie wieder.
-// - Status nur auf dem Verwalter-Handy (Geräte-Einstellung): Anmeldung, wartende Änderungen und
+// - Verwalter-Handy: Häkchen beim Anmelden (Geräte-Einstellung), sonst nirgends umschaltbar.
+// - Status nur auf dem Verwalter-Handy: Anmeldung, wartende Änderungen und
 //   wann jedes Handy zuletzt abgeglichen hat („Handy 2: seit 4 Tagen nicht abgeglichen“).
 //   Braucht etwas Aufmerksamkeit, steht das ruhig im Titel der Klappe – nur dort, nur auf diesem Handy.
-// - Alle anderen Handys zeigen nach der Anmeldung nur einen Satz, nie eine Fehlermeldung.
+// - Auf allen anderen Handys verschwindet die Klappe nach der Anmeldung ganz. Sie kommt nur wieder,
+//   wenn Supabase die Anmeldung ablehnt (dann mit dem Formular, ohne Meldung).
 //
 // Die Oberfläche fragt den Server nur nach den Mitgliedern (Status), sie gleicht selbst nicht ab.
 
@@ -104,7 +106,7 @@ export function statusZeilen({ zustand, offen, mitglieder, konto, jetzt }) {
 
 /**
  * Bereich „Abgleich“ für die Startseite.
- *   html()                    – HTML der Klappe (immer vorhanden, zu Beginn zugeklappt)
+ *   html()                    – HTML der Klappe (zu Beginn zugeklappt; '' auf angemeldeten Nicht-Verwalter-Handys)
  *   verbinde(wurzel, zeichne) – Tipper, Formular und Aufklappen verarbeiten; `zeichne` baut die Seite neu
  *   start()                   – beim App-Start: Status des Verwalter-Handys im Hintergrund laden
  */
@@ -136,7 +138,7 @@ export function erstelleAbgleichBereich({ speicher, anmeldung, server, jetzt = (
     return laden;
   }
 
-  function formular() {
+  function formular(verwalter) {
     return `<form class="anmelden" data-anmelden>
         <p class="info">Einmal pro Handy anmelden. Danach haben beide Handys dieselben Vorlagen und Wasserwerte.</p>
         <label class="feld"><span class="feld-name">E-Mail</span>
@@ -145,6 +147,9 @@ export function erstelleAbgleichBereich({ speicher, anmeldung, server, jetzt = (
         <label class="feld"><span class="feld-name">Passwort</span>
           <input class="eingabe eingabe-text" type="password" name="passwort" autocomplete="current-password"
                  required></label>
+        <label class="haken">
+          <input type="checkbox" name="verwalter" ${verwalter ? 'checked' : ''}>
+          <span>Verwalter-Handy: hier den Abgleich-Status anzeigen</span></label>
         ${fehler ? `<p class="hinweis" role="status">${text(fehler)}</p>` : ''}
         <div class="aktionen">
           <button type="submit" class="knopf knopf-voll">Anmelden</button>
@@ -167,6 +172,7 @@ export function erstelleAbgleichBereich({ speicher, anmeldung, server, jetzt = (
     }
     const ergebnis = await anmeldung.anmelden(email, String(felder.passwort?.value ?? ''));
     if (ergebnis.ok) {
+      setzeVerwalter(speicher, felder.verwalter?.checked === true);
       fehler = '';
       email = '';
       mitglieder = undefined;
@@ -192,18 +198,11 @@ export function erstelleAbgleichBereich({ speicher, anmeldung, server, jetzt = (
           jetzt: jetzt(),
         });
         achtung = zeilen.some((z) => z.achtung);
-        inhalt = `${statusHtml(zeilen)}
-          ${zustand === 'angemeldet' ? '' : formular()}
-          <div class="aktionen">
-            <button type="button" class="knopf knopf-leise" data-abgleich="verwalter-aus">Status hier nicht mehr anzeigen</button>
-          </div>`;
+        inhalt = `${statusHtml(zeilen)}${zustand === 'angemeldet' ? '' : formular(true)}`;
       } else if (zustand === 'angemeldet') {
-        inhalt = `<p class="info">Angemeldet. Die Handys gleichen sich von selbst ab.</p>
-          <div class="aktionen">
-            <button type="button" class="knopf knopf-leise" data-abgleich="verwalter-an">Abgleich-Status hier anzeigen</button>
-          </div>`;
+        return ''; // anderes Handy: nichts zu sehen, nichts zu tun
       } else {
-        inhalt = formular();
+        inhalt = formular(false);
       }
       return `<details class="klappe" data-klappe="abgleich" ${offen ? 'open' : ''}>
           <summary>Abgleich zwischen den Handys${achtung ? ' <span class="achtung">· bitte ansehen</span>' : ''}</summary>
@@ -222,13 +221,6 @@ export function erstelleAbgleichBereich({ speicher, anmeldung, server, jetzt = (
         if (!e.target.matches?.('[data-anmelden]')) return;
         e.preventDefault();
         anmelden(e.target);
-      });
-      wurzel.addEventListener('click', (e) => {
-        const aktion = e.target.closest?.('[data-abgleich]')?.dataset.abgleich;
-        if (aktion !== 'verwalter-an' && aktion !== 'verwalter-aus') return;
-        setzeVerwalter(speicher, aktion === 'verwalter-an');
-        if (aktion === 'verwalter-an') ladeMitglieder({ erzwingen: true });
-        zeichne();
       });
     },
 
