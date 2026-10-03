@@ -63,3 +63,16 @@ test('index.html bindet Manifest, Icon und nur relative Pfade ein', () => {
   assert.match(html, /rel="apple-touch-icon" href="\.\/icons\/icon-180\.png"/);
   for (const [, pfad] of html.matchAll(/(?:href|src)="([^"]+)"/g)) assert.match(pfad, /^\.\//, pfad);
 });
+
+test('Server-Angaben: nur öffentlicher Schlüssel, Adresse per https', async () => {
+  const { SERVER_ADRESSE, OEFFENTLICHER_SCHLUESSEL } = await import('../js/kern/server.js');
+  assert.match(SERVER_ADRESSE, /^https:\/\/[a-z0-9]+\.supabase\.co$/);
+  assert.match(OEFFENTLICHER_SCHLUESSEL, /^sb_publishable_/);
+});
+
+test('Kein geheimer Schlüssel in ausgelieferten Dateien', () => {
+  for (const datei of dateien.filter((d) => /\.(js|html|webmanifest)$/.test(d))) {
+    const inhalt = readFileSync(join(wurzel, datei), 'utf8');
+    assert.doesNotMatch(inhalt, /sb_secret_|service_role/, datei);
+  }
+});

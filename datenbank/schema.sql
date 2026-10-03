@@ -63,6 +63,15 @@ create unique index if not exists datensaetze_haushalt_stand on public.datensaet
 
 grant usage on schema public to anon, authenticated;
 
+-- „Enable automatic RLS“ legt public.rls_auto_enable() an, für alle ausführbar (Security Advisor warnt).
+-- Sie wird nur als Event-Trigger gebraucht, der auch ohne dieses Recht weiter auslöst.
+do $$
+begin
+  if to_regprocedure('public.rls_auto_enable()') is not null then
+    revoke execute on function public.rls_auto_enable() from public, anon, authenticated;
+  end if;
+end $$;
+
 alter table public.haushalte   enable row level security;
 alter table public.mitglieder  enable row level security;
 alter table public.datensaetze enable row level security;
