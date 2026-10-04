@@ -256,9 +256,9 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
   Klärt verbindlich: fester Schlüssel einstellbar? Läuft er im **Projekt** und in der **iPhone-App**? Muss er pro Chat
   eingeschaltet werden? Edge-Function-Limits (Free) nachlesen. Danach Plan B wählen, falls nötig. Nichts davon kommt in die App.
   ***(fertig, bestanden)*** `supabase/functions/hallo/index.ts` (Werkzeug `hallo`, liest/schreibt nichts), Secret
-  `KOCHBUCH_SCHLUESSEL`, Tests `tests/connector-hallo.test.js`. Ergebnis: Header-Weg klappt in Browser, Projekt und iPhone,
+  `KOCHBUCH_SCHLUESSEL`, Tests `tests/connector-hallo.test.js` (beides in Schritt 8 entfernt). Ergebnis: Header-Weg klappt in Browser, Projekt und iPhone,
   ohne Einschalten pro Chat (siehe „Geprüft in Schritt 0“). Panne: Secret-Name zuerst mit Tippfehler → Funktion blieb wie
-  gewollt zu (401). Test-Funktion und Connector „Kochbuch Test“ werden nicht mehr gebraucht (löschen), **Secret bleibt** für den
+  gewollt zu (401). Test-Funktion und Connector „Kochbuch Test“ sind gelöscht (Supabase und claude.ai), **Secret bleibt** für den
   echten Connector. Der Code von `hallo` (MCP-Grundgerüst) ist die Basis für Schritt 8 und wird dort ersetzt (dann ohne
   Pfad-/`x-api-key`-Weg).
 - **1** Datenmodell, Prüfung, Skalierung (`rechner`-Teil, `js/rezepte/`), Zutatenkatalog, `SAMMLUNGEN`. Kein Bildschirm. 3–5 $.
@@ -303,6 +303,20 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
   Supabase-Secret) erst in Schritt 8; die Edge Function verbindet sich direkt per Postgres (Pooler, Benutzer
   `kochbuch_connector.<projekt>`), nicht über PostgREST.
 - **8** Edge Function (Werkzeuge, Schlüsselprüfung, Prüfung von `schrittzutaten` wie in `bereinigeRezept`), Test der Repo-Kopie. Nutzer fügt sie im Dashboard ein. 4–7 $.
+  ***(fertig, Einrichtung in Supabase/claude.ai durch den Nutzer offen)*** `supabase/functions/kochbuch/index.ts` (ersetzt `hallo`, das samt Test entfernt ist).
+  MCP wie bei `hallo`, Zugang **nur** `Authorization: Bearer` (Secret `KOCHBUCH_SCHLUESSEL`, < 32 Zeichen = zu). Datenbank über
+  `npm:postgres` (dynamisch importiert, nur in Deno) mit Secret `KOCHBUCH_DB_URL` = Transaction Pooler (6543) als
+  `kochbuch_connector.<projekt>`, `prepare: false`, eine Verbindung; JSON an die Datenbank mit `sql.json` (sonst doppelt verpackt).
+  Werkzeuge: `zutaten_liste` (eingebaute + gespeicherte Namen), `rezepte_finden` (`suche` → Liste; `id` → ganzes Rezept mit
+  Namen statt ids und `version`), `rezept_anlegen` (1–50; gleicher Name schon da = nicht angelegt, Hinweis mit id/version –
+  schützt vor Doppeln bei Wiederholung), `rezept_aktualisieren` (`id` + `version`, nur angegebene Felder ersetzen, wer
+  `zutaten`/`schritte` ändert, muss `schrittzutaten` mitgeben; Rezept vom Handy mit `quelle: hand` wird `claude`).
+  `pruefeRezept` ist **streng**: Unsinn wird mit deutschem Grund abgewiesen (Claude verbessert), nie still gekürzt; Ergebnis hat
+  genau die Form von `bereinigeRezept`. Kategorie als id oder Name. **Nur Koch-Rezepte**; Back-Rezepte (Teigwerte) erst mit
+  Schritt 5. Fehler der Datenbank → ruhiger Hinweis an Claude, Einzelheiten nur im Funktions-Protokoll (ohne Inhalte).
+  Tests: `tests/connector.test.js` (Kopien = Originale aus `js/`, gleiche Ausgabe wie `loeseNamenAuf` + `bereinigeRezept`,
+  MCP, Werkzeuge mit nachgebauter Datenbank) und in `tests/datenbank.test.js` ein Durchlauf gegen echtes PostgreSQL.
+  Einmal von Hand in Deno mit `npm:postgres` und Passwort-Anmeldung gegen ein lokales PostgreSQL geprüft.
 - **9** Praxistest, Projektanweisung ins Claude-Projekt, Import der bisherigen Sammlung (zuerst per Connector, sonst „Einfügen“). 2–5 $.
 - **3** „Rezept einfügen“ (Notlösung) und einfacher Editor (Notiz, Status, Schritte). 3–5 $.
 - **4** Neue Startseite (Kacheln, Suche über alles, „Weiter mit“). 3–5 $.
@@ -360,7 +374,7 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 | `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse, öffentlicher Schlüssel, Abfragen), `anmeldung.js` (Anmeldung, stilles Erneuern), `abgleich.js` (Klappe Abgleich: Anmelde-Formular, Status auf dem Verwalter-Handy, Umzug, versteckte Verwaltung), `ausloeser.js` (wann abgeglichen wird) |
 | `js/rezepte/` | Rezepte (Etappe 3): `rezept.js` (Modell, Prüfung, Speichern), `katalog.js` (Zutatenkatalog), `rechner.js` (Skalieren), `liste.js` (Ordnen, Favoriten, Mengen in Schritten), `kochen.js` (Oberfläche Kochen) |
 | `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js` (inkl. Kategorien, Ordnen der Liste), `zutaten.js` (Mehle/Saaten/Zusatzzutaten), `teilen.js` (Teilen-Link), `startseite.js` (HTML der Vorlagenliste), `ansicht.js` (Oberfläche, Navigation) |
-| `supabase/functions/` | Edge Functions (Connector), im Dashboard eingefügt; nicht Teil der App |
+| `supabase/functions/` | Edge Functions: `kochbuch/index.ts` (Connector), im Dashboard eingefügt; nicht Teil der App |
 | `datenbank/schema.sql` | Supabase-Datenbank (Tabellen, Zugriffsschutz, Sync-Funktionen, Connector-Rolle); nicht Teil der App |
 | `datenbank/connector-pruefen.sql` | Kontrollabfrage: was die Connector-Rolle darf (im Dashboard ausführen) |
 | `tests/` | Tests (`*.test.js`) |
