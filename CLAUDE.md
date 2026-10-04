@@ -283,6 +283,25 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
   **Wischen in der Kochen-Liste** (wie bei den Vorlagen): Zeile nach links wischen → „Löschen“, ohne Nachfrage, 6 s „Rückgängig“
   (alter Inhalt kommt als neue Änderung zurück). Die Leiste „Rückgängig“ gehört `ansicht.js` und wird `startKochen` mitgegeben.
 - **7** Datenbank-Teil des Connectors: `rezept_speichern`, eigene Rolle, Tests gegen PostgreSQL. 3–5 $.
+  ***(fertig)*** In `datenbank/schema.sql`: Rolle `kochbuch_connector` (nologin, noinherit, keine Sonderrechte, 3 Verbindungen,
+  10 s Zeitgrenze) darf **nur** vier Funktionen im Schema `connector` ausführen (sonst keine Tabelle, keine Funktion; Handys und
+  anonym kommen nicht an `connector`): `zutaten_liste()` → `[{ id, name }]`, `rezepte_finden(suche)` (Teilwort/id, ≤ 100) →
+  `[{ id, name, art, kategorie, version }]`, `rezept_lesen(id)` → `{ id, version, daten }` (ohne Verwaltungsfelder),
+  `rezept_speichern({ zutaten: [{ id, name, art }], rezepte: [{ id?, basis?, daten }] })` (≤ 50 Rezepte, ≤ 200 Zutaten).
+  Schreibt nur `rezepte`/`zutaten` im Haushalt mit `haushalte.connector = true` (höchstens einer, setzt der Verwalter),
+  nie `geloescht`; `geaendert_von` bleibt leer (Spalte ist eine Konto-uuid; erkennbar an `quelle` im Rezept).
+  Zutaten nur neu anlegen (vorhandene bleiben unverändert). Rezept: gleicher Inhalt = nichts schreiben (Wiederholung mit
+  gleicher id ist sicher); passende `basis` oder gelöscht (Ändern gewinnt) → schreiben; sonst Konfliktkopie
+  „Name (Änderung vom 4.10.)“ mit `konflikt: { von, am }`, keine zweite bei Wiederholung. Prüfung in
+  `intern.connector_pruefe_rezept` (nur bekannte Felder, Grenzen wie `bereinigeRezept`, `quelle` nur claude|import,
+  `schrittzutaten` nur Zutaten des Rezepts, je Schritt einmal, ≤ 100 kB) – weist ab mit `grund`, kürzt nie.
+  `datenbank/connector-pruefen.sql` listet, was die Rolle erreichen kann (Recht auf Objekt **und** Schema; benutzbare Schemas
+  außer `connector`/`public` als eigene Zeile; Dashboard-Kontrolle, der Test nutzt dieselbe Datei). Die Tests legen die
+  Supabase-Erweiterungen (`pg_stat_statements`, `pgcrypto`, `uuid-ossp`) in `extensions` an: Deren Objekte sind für alle
+  freigegeben, die Rolle darf das Schema aber nicht benutzen. `extensions` bewusst nicht im Skript angefasst (interne Supabase-Rollen).
+  Tests in `tests/datenbank.test.js` (beide Modi). **Anmeldung der Rolle** (`alter role … login password …`, Passwort nur als
+  Supabase-Secret) erst in Schritt 8; die Edge Function verbindet sich direkt per Postgres (Pooler, Benutzer
+  `kochbuch_connector.<projekt>`), nicht über PostgREST.
 - **8** Edge Function (Werkzeuge, Schlüsselprüfung, Prüfung von `schrittzutaten` wie in `bereinigeRezept`), Test der Repo-Kopie. Nutzer fügt sie im Dashboard ein. 4–7 $.
 - **9** Praxistest, Projektanweisung ins Claude-Projekt, Import der bisherigen Sammlung (zuerst per Connector, sonst „Einfügen“). 2–5 $.
 - **3** „Rezept einfügen“ (Notlösung) und einfacher Editor (Notiz, Status, Schritte). 3–5 $.
@@ -342,7 +361,8 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 | `js/rezepte/` | Rezepte (Etappe 3): `rezept.js` (Modell, Prüfung, Speichern), `katalog.js` (Zutatenkatalog), `rechner.js` (Skalieren), `liste.js` (Ordnen, Favoriten, Mengen in Schritten), `kochen.js` (Oberfläche Kochen) |
 | `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js` (inkl. Kategorien, Ordnen der Liste), `zutaten.js` (Mehle/Saaten/Zusatzzutaten), `teilen.js` (Teilen-Link), `startseite.js` (HTML der Vorlagenliste), `ansicht.js` (Oberfläche, Navigation) |
 | `supabase/functions/` | Edge Functions (Connector), im Dashboard eingefügt; nicht Teil der App |
-| `datenbank/schema.sql` | Supabase-Datenbank (Tabellen, Zugriffsschutz, Sync-Funktionen); nicht Teil der App |
+| `datenbank/schema.sql` | Supabase-Datenbank (Tabellen, Zugriffsschutz, Sync-Funktionen, Connector-Rolle); nicht Teil der App |
+| `datenbank/connector-pruefen.sql` | Kontrollabfrage: was die Connector-Rolle darf (im Dashboard ausführen) |
 | `tests/` | Tests (`*.test.js`) |
 
 `js/vorrat/` erst anlegen, wenn dort Code entsteht.
