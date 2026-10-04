@@ -245,6 +245,10 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
 - **0** Test, 1–2 $: Mini-Connector „Hallo“ als Edge Function (im Dashboard eingefügt), in claude.ai (Pro) hinzufügen.
   Klärt verbindlich: fester Schlüssel einstellbar? Läuft er im **Projekt** und in der **iPhone-App**? Muss er pro Chat
   eingeschaltet werden? Edge-Function-Limits (Free) nachlesen. Danach Plan B wählen, falls nötig. Nichts davon kommt in die App.
+  **Code fertig, Test durch den Nutzer offen:** `supabase/functions/hallo/index.ts` (Werkzeug `hallo`, liest/schreibt nichts),
+  Secret `KOCHBUCH_SCHLUESSEL` (mind. 32 Zeichen), nimmt den Schlüssel als Kopfzeile (`Authorization: Bearer …`/`x-api-key`)
+  **oder** im Pfad (`…/hallo/<Schlüssel>`) und nennt im Gruß den Weg. Tests: `tests/connector-hallo.test.js`.
+  Laut Claude-Doku (Stand 10/2026) sind „Request headers“ eine Beta für ausgewählte Organisationen → Plan B 1 wahrscheinlich.
 - **1** Datenmodell, Prüfung, Skalierung (`rechner`-Teil, `js/rezepte/`), Zutatenkatalog, `SAMMLUNGEN`. Kein Bildschirm. 3–5 $.
 - **2** Kochen: Liste (Kategorien, A–Z, Favoriten, Suche), Rezeptansicht (Portionen, Schritte, Status, Notiz, „neu“). 5–8 $.
 - **7** Datenbank-Teil des Connectors: `rezept_speichern`, eigene Rolle, Tests gegen PostgreSQL. 3–5 $.
@@ -305,6 +309,7 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 | `js/app.js` | Start und (später) Navigation |
 | `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse, öffentlicher Schlüssel, Abfragen), `anmeldung.js` (Anmeldung, stilles Erneuern), `abgleich.js` (Klappe Abgleich: Anmelde-Formular, Status auf dem Verwalter-Handy, Umzug, versteckte Verwaltung), `ausloeser.js` (wann abgeglichen wird) |
 | `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js` (inkl. Kategorien, Ordnen der Liste), `zutaten.js` (Mehle/Saaten/Zusatzzutaten), `teilen.js` (Teilen-Link), `startseite.js` (HTML der Vorlagenliste), `ansicht.js` (Oberfläche, Navigation) |
+| `supabase/functions/` | Edge Functions (Connector), im Dashboard eingefügt; nicht Teil der App |
 | `datenbank/schema.sql` | Supabase-Datenbank (Tabellen, Zugriffsschutz, Sync-Funktionen); nicht Teil der App |
 | `tests/` | Tests (`*.test.js`) |
 
