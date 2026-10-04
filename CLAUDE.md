@@ -208,9 +208,10 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
 - Ein voller Zutaten-Editor am Handy ist **nicht** vorgesehen (Hauptweg = Connector); zuerst nur Notiz, Status, Schritte ändern.
 
 **Connector „Rezepte direkt aus Claude“** (Remote-MCP-Server für claude.ai)
-- Fakten (geprüft): Eigene Connectors gehen mit **Pro** („+“ → „Add custom connector“, URL). Laut Claude-Hilfe kann Claude
-  feste Zugangsdaten (API-Schlüssel/Bearer-Token) bei jeder Anfrage mitschicken. **Noch ungeprüft:** ob das in der Oberfläche
-  tatsächlich einstellbar ist und ob Connectors in der **iPhone-App** und in **Projekten** funktionieren → Schritt 0.
+- **Geprüft in Schritt 0:** Eigener Connector im Pro-Konto (Customize → Connectors → „Add custom connector“), Anmeldung
+  „Keine Anmeldung“, **Request-Header** `authorization` = `Bearer <Schlüssel>` (Beta, im Konto vorhanden). Läuft im Browser,
+  im Projekt „Kochen & Backen“ und in der iPhone-App; in neuen Chats ist er schon eingeschaltet (er ist also in **jedem** Chat
+  verfügbar, nicht nur im Projekt). Supabase Free: 500.000 Aufrufe pro Monat (reicht weit).
 - Läuft als **Supabase Edge Function** im selben Projekt (Free: 0 $). Eingefügt **im Dashboard** (kein Zugangstoken als
   GitHub-Secret). Der Code liegt trotzdem im Repo (`supabase/functions/…`), mit Test, dass die eingefügte Kopie dem Repo-Stand
   entspricht (Deno kann keine Dateien aus `js/` laden → Prüflogik als Kopie + Test gegen das Original, wie bei `ping.test.js`).
@@ -223,11 +224,9 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   darf (nicht `service_role`). Nur Sammlungen `rezepte` und `zutaten`, nie `geloescht`, `geaendert_von` = „claude“.
   Prüfung wie bei Teilen-Links (Größenlimit, nur bekannte Felder, Zahlenbereiche). Schlüssel tauschbar in einer Minute.
   Schlimmster Fall bei Diebstahl: Rezepte werden hinzugefügt, nichts gelesen, nichts gelöscht.
-- **Plan B, falls claude.ai keinen festen Schlüssel erlaubt** (Reihenfolge der Wahl):
-  1. Schlüssel im URL-Pfad (`…/mcp/<Schlüssel>`), Connector ohne Anmeldung. Weniger sauber (URLs landen in Protokollen),
-     bei Recipes-only vertretbar; Schlüssel dann regelmäßig tauschen.
-  2. Kleines OAuth in der Edge Function (mehr Aufwand, nur wenn 1. nicht reicht).
-  3. Connector gar nicht möglich (iPhone/Projekt): Notlösung „Rezept einfügen“ + Import darüber.
+- **Schlüssel nur als Kopfzeile** `Authorization: Bearer <Schlüssel>` (entschieden nach Schritt 0). **Kein** Schlüssel im Pfad,
+  kein `x-api-key`, kein OAuth. Fehlt das Secret oder ist es kürzer als 32 Zeichen, ist die Funktion zu (401).
+  Plan B (Schlüssel im Pfad, OAuth) entfällt.
 - **Notlösung „Rezept einfügen“:** Kochbuch-Code (derselbe wie beim Connector, geprüft wie Links) in der App einfügen.
   Claude gibt ihn aus, wenn der Connector fehlt. Auch Weg für den späteren Import der bisherigen Sammlung.
 - **Projektanweisung (Vorschlag, für das Claude-Projekt „Kochen & Backen“):**
@@ -245,10 +244,12 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
 - **0** Test, 1–2 $: Mini-Connector „Hallo“ als Edge Function (im Dashboard eingefügt), in claude.ai (Pro) hinzufügen.
   Klärt verbindlich: fester Schlüssel einstellbar? Läuft er im **Projekt** und in der **iPhone-App**? Muss er pro Chat
   eingeschaltet werden? Edge-Function-Limits (Free) nachlesen. Danach Plan B wählen, falls nötig. Nichts davon kommt in die App.
-  **Code fertig, Test durch den Nutzer offen:** `supabase/functions/hallo/index.ts` (Werkzeug `hallo`, liest/schreibt nichts),
-  Secret `KOCHBUCH_SCHLUESSEL` (mind. 32 Zeichen), nimmt den Schlüssel als Kopfzeile (`Authorization: Bearer …`/`x-api-key`)
-  **oder** im Pfad (`…/hallo/<Schlüssel>`) und nennt im Gruß den Weg. Tests: `tests/connector-hallo.test.js`.
-  Laut Claude-Doku (Stand 10/2026) sind „Request headers“ eine Beta für ausgewählte Organisationen → Plan B 1 wahrscheinlich.
+  ***(fertig, bestanden)*** `supabase/functions/hallo/index.ts` (Werkzeug `hallo`, liest/schreibt nichts), Secret
+  `KOCHBUCH_SCHLUESSEL`, Tests `tests/connector-hallo.test.js`. Ergebnis: Header-Weg klappt in Browser, Projekt und iPhone,
+  ohne Einschalten pro Chat (siehe „Geprüft in Schritt 0“). Panne: Secret-Name zuerst mit Tippfehler → Funktion blieb wie
+  gewollt zu (401). Test-Funktion und Connector „Kochbuch Test“ werden nicht mehr gebraucht (löschen), **Secret bleibt** für den
+  echten Connector. Der Code von `hallo` (MCP-Grundgerüst) ist die Basis für Schritt 8 und wird dort ersetzt (dann ohne
+  Pfad-/`x-api-key`-Weg).
 - **1** Datenmodell, Prüfung, Skalierung (`rechner`-Teil, `js/rezepte/`), Zutatenkatalog, `SAMMLUNGEN`. Kein Bildschirm. 3–5 $.
 - **2** Kochen: Liste (Kategorien, A–Z, Favoriten, Suche), Rezeptansicht (Portionen, Schritte, Status, Notiz, „neu“). 5–8 $.
 - **7** Datenbank-Teil des Connectors: `rezept_speichern`, eigene Rolle, Tests gegen PostgreSQL. 3–5 $.
@@ -267,7 +268,7 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
 Dashboard einfügen; in claude.ai Connector hinzufügen (Name, URL, Schlüssel) und im Projekt aktivieren; Projektanweisung
 einfügen; Praxistest auf beiden iPhones.
 
-**Risiken:** Connector auf iPhone/im Projekt nicht möglich (Schritt 0, Plan B); Claude benutzt das Werkzeug falsch
+**Risiken:** Claude benutzt das Werkzeug falsch
 (doppelte Rezepte, Zutatennamen: Servervalidierung, `zutaten_liste`, Anweisung); Überschreiben von Notizen/Änderungen
 (Versionsprüfung; „Vorherige Fassung“ nur auf Wunsch); Umzug mit alter App-Version auf einem Handy (gering); zu viel Umfang
 (Grundsatz „im Zweifel weglassen“).
