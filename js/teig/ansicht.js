@@ -62,6 +62,7 @@ import { erstelleWischen } from './wischen.js';
 import { speicher } from '../kern/speicher.js';
 import { leseZahl, formatGramm, formatGrammFein, formatProzent } from '../kern/zahlen.js';
 import { text } from '../kern/html.js';
+import { startKochen, kochenEinstiegHtml, zeichneKochen } from '../rezepte/kochen.js';
 
 const HINWEISE = {
   'starter-zu-viel': 'Mehr Starter als Mehl – bitte den Starter-Anteil verringern.',
@@ -85,7 +86,7 @@ const NEUER_ZUSATZ = 10;              // % vom Mehl für eine neu gewählte Zusa
 const EIGENE = '__eigene';             // Auswahl-Eintrag „Eigene Sorte …“
 
 let wurzel;   // das HTML-Element, in dem der Teigrechner steht
-let ansicht = 'liste'; // 'liste' (Startseite) oder 'rechner'
+let ansicht = 'liste'; // 'liste' (Startseite), 'rechner' oder 'kochen' (Rezepte, rezepte/kochen.js)
 // { vorlageId, teig, mehl, modus, teiglinge, geaendert, anpassung } – mehl = zugegebenes Mehl.
 // geaendert = die Vorlage selbst wurde verändert (nicht nur die Menge).
 let zustand = null;
@@ -118,6 +119,8 @@ export function zeigeTeigrechner(ziel, { abgleich: bereich = null } = {}) {
   wurzel.addEventListener('input', beiEingabe);
   wurzel.addEventListener('change', beiAuswahl);
   wurzel.addEventListener('click', beiKlick);
+  // Kochen (Etappe 3): eigene Oberfläche in rezepte/kochen.js, hier nur Einstieg und Rückweg
+  startKochen(wurzel, { zurueck: () => zeige('liste'), beiOeffnen: () => { ansicht = 'kochen'; }, rueckgaengig: zeigeRueckgaengig });
   wischen = erstelleWischen(wurzel, {
     beiEnde() {
       if (nachholen) datenAktualisiert();
@@ -249,7 +252,8 @@ function zeige(neu) {
 }
 
 function zeichne() {
-  if (ansicht === 'rechner' && zustand) zeichneRechner();
+  if (ansicht === 'kochen') zeichneKochen({ scroll: true });
+  else if (ansicht === 'rechner' && zustand) zeichneRechner();
   else zeichneListe();
 }
 
@@ -272,6 +276,7 @@ function zeichneListe() {
     ${ordnung.anzahl >= SUCHE_AB || suche ? suchfeldHtml(suche) : ''}
     <div class="vorlagen-gruppen" data-liste>${listeHtml(ordnung)}</div>
     ${neuKarte ? '' : '<button type="button" class="knopf knopf-voll" data-aktion="neu-karte">+ Neue Vorlage</button>'}
+    ${neuKarte ? '' : kochenEinstiegHtml()}
     ${teilenKlappe()}
     ${einstellungenKlappe()}
     ${abgleich ? abgleich.html() : ''}`;

@@ -181,6 +181,14 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
 - `portionen` + `portionsart` (Personen/Stück/Laibe) wählbar, Mengen passen sich an.
 - Zutat: Katalog-`id`, `menge` (leer = „nach Geschmack“), `einheit`, `regel` (linear | ganze Stück | fix).
 - Schritte kurz und kleinteilig, beim Kochen abhakbar (nicht gespeichert). Bildschirm bleibt an (gibt es schon).
+- **Zutaten je Schritt** (`schrittzutaten`, parallel zu `schritte`, gleiche Reihenfolge): je Schritt eine Liste
+  `{ zutat: Katalog-id einer Zutat des Rezepts, menge?: Teilmenge }`. Ohne `menge` gilt die ganze Menge der Zutat; mit `menge`
+  (gleiche Einheit wie im Rezept) ist es ein Teil, z. B. Wasser 1500 ml in Schritt 2 und 500 ml in Schritt 4. Teilmengen skalieren
+  mit den Portionen nach der Regel der Zutat (`skaliereSchritte` in `rechner.js`). Die App zeigt sie als Chips unter dem Schritt.
+  Geprüft in `bereinigeRezept`: nur Zutaten des Rezepts, Menge > 0, jede Zutat höchstens einmal je Schritt; leere Schritte nehmen
+  ihren Eintrag mit. Beim Speichern darf statt `zutat` auch `name` stehen (wie bei den Zutaten). **Rückfall:** hat kein Schritt einen
+  Eintrag, fehlt das Feld, und die App sucht die Zutaten über den Namen im Schrittext (`mengenInSchritten`). Gilt für das ganze
+  Rezept: sobald ein Schritt Einträge hat, gelten nur die Einträge (ein Schritt ohne Eintrag zeigt dann keine Mengen).
 - `status`: **erprobt** | **noch testen**, ein Tipper. **Per Connector gespeicherte Rezepte sind „erprobt“**, „noch testen“ nur für
   importierte (`quelle: import`). Kurze Notiz am Rezept. „Neu“-Markierung bis zum ersten Öffnen
   (Geräte-Einstellung mit gesehenen `id`s; beim Umzug gelten alle alten Vorlagen als gesehen).
@@ -216,8 +224,8 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   GitHub-Secret). Der Code liegt trotzdem im Repo (`supabase/functions/…`), mit Test, dass die eingefügte Kopie dem Repo-Stand
   entspricht (Deno kann keine Dateien aus `js/` laden → Prüflogik als Kopie + Test gegen das Original, wie bei `ping.test.js`).
   Funktion ohne Supabase-JWT-Prüfung (`verify_jwt` aus), dafür eigene Prüfung des Schlüssels.
-- **Werkzeuge (mehr gibt es nicht):** `zutaten_liste` (nur Namen), `rezept_anlegen` (auch mehrere, für den Import),
-  `rezept_aktualisieren` (nur mit der Version, auf der Claude aufbaut; sonst Konfliktkopie, nie überschreiben),
+- **Werkzeuge (mehr gibt es nicht):** `zutaten_liste` (nur Namen), `rezept_anlegen` (auch mehrere, für den Import; **immer mit `schrittzutaten`**, geprüft wie in `bereinigeRezept`),
+  `rezept_aktualisieren` (nur mit der Version, auf der Claude aufbaut; sonst Konfliktkopie, nie überschreiben; ändert Claude Schritte oder Zutaten, liefert es `schrittzutaten` neu mit),
   `rezepte_finden` (Titel/`id`, ein Rezept per `id`). **Kein Löschen, kein Zugriff auf andere Tabellen, Konten, Vorrat.**
 - **Sicherheit:** langer Zufallsschlüssel nur als Supabase-Secret (nie im Repo, Repo ist öffentlich). Schreiben nur über
   eine Datenbank-Funktion `rezept_speichern`, aufrufbar von einer **eigenen Datenbank-Rolle**, die nur diese Funktion ausführen
@@ -233,7 +241,10 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   > Wenn wir ein Gericht oder Backwerk zu Ende gekocht haben und es gelungen ist, frage genau einmal: „Soll ich das Rezept im
   > Kochbuch speichern?“ Speichere nur nach einem Ja. Frage vorher mit `zutaten_liste` die vorhandenen Zutatennamen ab und
   > benutze diese Namen. Schreibe Mengen für die Portionszahl, für die wir gekocht haben, mit Einheit und Regel
-  > (linear / ganze Stück / fix). Schreibe Schritte kurz und kleinteilig, ein Handgriff pro Schritt. Status ist „erprobt“,
+  > (linear / ganze Stück / fix). Schreibe Schritte kurz und kleinteilig, ein Handgriff pro Schritt. **Liefere zu jedem Schritt
+  > in `schrittzutaten` alle Zutaten mit, die in diesem Schritt gebraucht werden** (Verweis auf die Zutat des Rezepts); wird eine
+  > Zutat auf mehrere Schritte verteilt, gib bei jedem Schritt die Teilmenge an (z. B. Wasser 1500 ml in Schritt 2, 500 ml in
+  > Schritt 4), sonst gilt die ganze Menge. Schritte ohne Zutaten bekommen eine leere Liste. Status ist „erprobt“,
   > weil wir es gerade gekocht haben. Übernimm unsere Anpassungen („weniger Salz“) als Notiz. Gibt es das Rezept schon
   > (`rezepte_finden`), dann aktualisiere es, statt ein neues anzulegen. Ist der Connector nicht erreichbar, gib das Rezept als
   > Kochbuch-Code aus, den ich in die App einfüge.
@@ -259,8 +270,20 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
   `formatMenge` in `zahlen.js`. Back-Rezept = Vorlagenfelder (`teig`, `mehl`, `modus`, `teiglinge`) plus Zutaten/Schritte, Portionen optional.
   `SAMMLUNGEN`: `rezepte` = `kopie`, `zutaten` = `zuletzt`. Noch nirgends in der Oberfläche eingebunden; Tests `tests/rezepte.test.js`, `tests/sync.test.js`.
 - **2** Kochen: Liste (Kategorien, A–Z, Favoriten, Suche), Rezeptansicht (Portionen, Schritte, Status, Notiz, „neu“). 5–8 $.
+  ***(fertig)*** `js/rezepte/liste.js` (reine Logik: `ordneRezepte`, Favoriten `kochen.favoriten` und „gesehen“ `rezepte.gesehen` als
+  Geräte-Einstellungen, `portionenText`, `mengenInSchritten`), `js/rezepte/kochen.js` (Oberfläche, eigene `data-k…`-Attribute),
+  `css/kochen.css`, Tests `tests/kochen.test.js`. Einstieg: Knopf „Kochen · N Rezepte“ unter „+ Neue Vorlage“, nur sichtbar, wenn es
+  Kochrezepte gibt (Back-Rezepte erscheinen erst in Schritt 5). Rezept: große − / +, Portionen (1–99, nur bis zum Schließen der App
+  gemerkt), Status Erprobt/Noch testen und Notiz sofort gespeichert (Notiz 0,5 s nach dem Tippen), Zutaten eingeklappt (die Mengen
+  stehen in den Schritten), Schritte antippen = abhaken (nicht gespeichert, „Alle Haken entfernen“), aktueller Schritt = erster
+  offener, hervorgehoben. **Mengen in den Schritten:** Zutat wird über ihren Namen im Schrittext gefunden (Wortanfang, letztes Wort
+  des Namens, „Zwiebel“ ↔ „Zwiebeln“); kommt eine Zutat in keinem Schritt vor, steht sie nur in der Zutatenliste. (Ursprünglich nur diese
+  Namenssuche; jetzt Rückfall, siehe unten.) Konflikt-Kopien: Vermerk in der Liste, im Rezept „Diese behalten“ / „Diese löschen“. Kein Bearbeiten von Name/Zutaten.
+  **Danach ergänzt:** Zutaten je Schritt (`schrittzutaten`, siehe „Rezept“ oben; Namenssuche nur noch als Rückfall) und
+  **Wischen in der Kochen-Liste** (wie bei den Vorlagen): Zeile nach links wischen → „Löschen“, ohne Nachfrage, 6 s „Rückgängig“
+  (alter Inhalt kommt als neue Änderung zurück). Die Leiste „Rückgängig“ gehört `ansicht.js` und wird `startKochen` mitgegeben.
 - **7** Datenbank-Teil des Connectors: `rezept_speichern`, eigene Rolle, Tests gegen PostgreSQL. 3–5 $.
-- **8** Edge Function (Werkzeuge, Schlüsselprüfung), Test der Repo-Kopie. Nutzer fügt sie im Dashboard ein. 4–7 $.
+- **8** Edge Function (Werkzeuge, Schlüsselprüfung, Prüfung von `schrittzutaten` wie in `bereinigeRezept`), Test der Repo-Kopie. Nutzer fügt sie im Dashboard ein. 4–7 $.
 - **9** Praxistest, Projektanweisung ins Claude-Projekt, Import der bisherigen Sammlung (zuerst per Connector, sonst „Einfügen“). 2–5 $.
 - **3** „Rezept einfügen“ (Notlösung) und einfacher Editor (Notiz, Status, Schritte). 3–5 $.
 - **4** Neue Startseite (Kacheln, Suche über alles, „Weiter mit“). 3–5 $.
@@ -313,10 +336,10 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 | `index.html` | einzige HTML-Seite |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline-Betrieb, Homescreen-App, App-Icon |
 | `css/basis.css` | Farben (hell/dunkel), Schrift, Knöpfe, Felder |
-| `css/<bereich>.css` | Design eines Bereichs (z. B. `teig.css`) |
+| `css/<bereich>.css` | Design eines Bereichs (z. B. `teig.css`, `kochen.css`) |
 | `js/app.js` | Start und (später) Navigation |
 | `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse, öffentlicher Schlüssel, Abfragen), `anmeldung.js` (Anmeldung, stilles Erneuern), `abgleich.js` (Klappe Abgleich: Anmelde-Formular, Status auf dem Verwalter-Handy, Umzug, versteckte Verwaltung), `ausloeser.js` (wann abgeglichen wird) |
-| `js/rezepte/` | Rezepte (Etappe 3): `rezept.js` (Modell, Prüfung, Speichern), `katalog.js` (Zutatenkatalog), `rechner.js` (Skalieren) |
+| `js/rezepte/` | Rezepte (Etappe 3): `rezept.js` (Modell, Prüfung, Speichern), `katalog.js` (Zutatenkatalog), `rechner.js` (Skalieren), `liste.js` (Ordnen, Favoriten, Mengen in Schritten), `kochen.js` (Oberfläche Kochen) |
 | `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js` (inkl. Kategorien, Ordnen der Liste), `zutaten.js` (Mehle/Saaten/Zusatzzutaten), `teilen.js` (Teilen-Link), `startseite.js` (HTML der Vorlagenliste), `ansicht.js` (Oberfläche, Navigation) |
 | `supabase/functions/` | Edge Functions (Connector), im Dashboard eingefügt; nicht Teil der App |
 | `datenbank/schema.sql` | Supabase-Datenbank (Tabellen, Zugriffsschutz, Sync-Funktionen); nicht Teil der App |
