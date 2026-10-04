@@ -259,6 +259,17 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
   `formatMenge` in `zahlen.js`. Back-Rezept = Vorlagenfelder (`teig`, `mehl`, `modus`, `teiglinge`) plus Zutaten/Schritte, Portionen optional.
   `SAMMLUNGEN`: `rezepte` = `kopie`, `zutaten` = `zuletzt`. Noch nirgends in der Oberfläche eingebunden; Tests `tests/rezepte.test.js`, `tests/sync.test.js`.
 - **2** Kochen: Liste (Kategorien, A–Z, Favoriten, Suche), Rezeptansicht (Portionen, Schritte, Status, Notiz, „neu“). 5–8 $.
+  ***(fertig)*** `js/rezepte/liste.js` (reine Logik: `ordneRezepte`, Favoriten `kochen.favoriten` und „gesehen“ `rezepte.gesehen` als
+  Geräte-Einstellungen, `portionenText`, `mengenInSchritten`), `js/rezepte/kochen.js` (Oberfläche, eigene `data-k…`-Attribute),
+  `css/kochen.css`, Tests `tests/kochen.test.js`. Einstieg: Knopf „Kochen · N Rezepte“ unter „+ Neue Vorlage“, nur sichtbar, wenn es
+  Kochrezepte gibt (Back-Rezepte erscheinen erst in Schritt 5). Rezept: große − / +, Portionen (1–99, nur bis zum Schließen der App
+  gemerkt), Status Erprobt/Noch testen und Notiz sofort gespeichert (Notiz 0,5 s nach dem Tippen), Zutaten eingeklappt (die Mengen
+  stehen in den Schritten), Schritte antippen = abhaken (nicht gespeichert, „Alle Haken entfernen“), aktueller Schritt = erster
+  offener, hervorgehoben. **Mengen in den Schritten:** Zutat wird über ihren Namen im Schrittext gefunden (Wortanfang, letztes Wort
+  des Namens, „Zwiebel“ ↔ „Zwiebeln“); kommt eine Zutat in keinem Schritt vor, steht sie nur in der Zutatenliste. Die Schritte
+  bleiben reiner Text (Datenmodell unverändert) – Claude soll Zutaten in den Schritten beim Namen nennen (in die Projektanweisung
+  aufnehmen). Konflikt-Kopien: Vermerk in der Liste, im Rezept „Diese behalten“ / „Diese löschen“. **Noch kein Löschen** normaler
+  Rezepte und kein Bearbeiten von Name/Zutaten.
 - **7** Datenbank-Teil des Connectors: `rezept_speichern`, eigene Rolle, Tests gegen PostgreSQL. 3–5 $.
 - **8** Edge Function (Werkzeuge, Schlüsselprüfung), Test der Repo-Kopie. Nutzer fügt sie im Dashboard ein. 4–7 $.
 - **9** Praxistest, Projektanweisung ins Claude-Projekt, Import der bisherigen Sammlung (zuerst per Connector, sonst „Einfügen“). 2–5 $.
@@ -313,10 +324,10 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 | `index.html` | einzige HTML-Seite |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline-Betrieb, Homescreen-App, App-Icon |
 | `css/basis.css` | Farben (hell/dunkel), Schrift, Knöpfe, Felder |
-| `css/<bereich>.css` | Design eines Bereichs (z. B. `teig.css`) |
+| `css/<bereich>.css` | Design eines Bereichs (z. B. `teig.css`, `kochen.css`) |
 | `js/app.js` | Start und (später) Navigation |
 | `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse, öffentlicher Schlüssel, Abfragen), `anmeldung.js` (Anmeldung, stilles Erneuern), `abgleich.js` (Klappe Abgleich: Anmelde-Formular, Status auf dem Verwalter-Handy, Umzug, versteckte Verwaltung), `ausloeser.js` (wann abgeglichen wird) |
-| `js/rezepte/` | Rezepte (Etappe 3): `rezept.js` (Modell, Prüfung, Speichern), `katalog.js` (Zutatenkatalog), `rechner.js` (Skalieren) |
+| `js/rezepte/` | Rezepte (Etappe 3): `rezept.js` (Modell, Prüfung, Speichern), `katalog.js` (Zutatenkatalog), `rechner.js` (Skalieren), `liste.js` (Ordnen, Favoriten, Mengen in Schritten), `kochen.js` (Oberfläche Kochen) |
 | `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js` (inkl. Kategorien, Ordnen der Liste), `zutaten.js` (Mehle/Saaten/Zusatzzutaten), `teilen.js` (Teilen-Link), `startseite.js` (HTML der Vorlagenliste), `ansicht.js` (Oberfläche, Navigation) |
 | `supabase/functions/` | Edge Functions (Connector), im Dashboard eingefügt; nicht Teil der App |
 | `datenbank/schema.sql` | Supabase-Datenbank (Tabellen, Zugriffsschutz, Sync-Funktionen); nicht Teil der App |
