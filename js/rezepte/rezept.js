@@ -32,14 +32,19 @@ export const QUELLEN = ['claude', 'import', 'hand'];
 
 /** Kategorien beim Kochen, in der Reihenfolge der Liste (Backen: KATEGORIEN aus teig/vorlagen.js). */
 export const KOCH_KATEGORIEN = [
-  { id: 'currys', name: 'Currys' },
-  { id: 'pasta', name: 'Pasta' },
-  { id: 'suppen', name: 'Suppen' },
-  { id: 'auflaeufe', name: 'Aufläufe' },
-  { id: 'pfanne', name: 'Pfannengerichte' },
-  { id: 'salate', name: 'Salate' },
+  { id: 'pasta', name: 'Pasta & Gnocchi' },
+  { id: 'currys', name: 'Currys & Dal' },
+  { id: 'wok', name: 'Wok & Pfanne' },
+  { id: 'suppen', name: 'Suppen & Eintöpfe' },
+  { id: 'auflaeufe', name: 'Aufläufe & Ofengerichte' },
+  { id: 'burger', name: 'Burger & Wraps' },
+  { id: 'salate', name: 'Salate & Bowls' },
+  { id: 'grillen', name: 'Grillen' },
+  { id: 'snacks', name: 'Snacks & Fingerfood' },
   { id: 'beilagen', name: 'Beilagen' },
-  { id: 'suesses', name: 'Süßes' },
+  { id: 'saucen', name: 'Saucen & Dips' },
+  { id: 'fruehstueck', name: 'Frühstück & Süßes' },
+  { id: 'sonstiges', name: 'Sonstiges' }, // Auffangkategorie
 ];
 
 const MAX_NAME = 80;

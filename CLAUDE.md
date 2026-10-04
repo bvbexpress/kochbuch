@@ -252,7 +252,7 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
   Pfad-/`x-api-key`-Weg).
 - **1** Datenmodell, Prüfung, Skalierung (`rechner`-Teil, `js/rezepte/`), Zutatenkatalog, `SAMMLUNGEN`. Kein Bildschirm. 3–5 $.
   ***(fertig)*** `js/rezepte/`: `rezept.js` (`bereinigeRezept`, `speichereRezept` löst Zutatennamen auf und legt neue im Katalog an,
-  `alleRezepte`, `loeseNamenAuf`; Kategorien beim Kochen in `KOCH_KATEGORIEN`), `katalog.js` (Sammlung `zutaten`, eingebaut = Mehle/Saaten/
+  `alleRezepte`, `loeseNamenAuf`; Kategorien beim Kochen in `KOCH_KATEGORIEN`: Pasta & Gnocchi, Currys & Dal, Wok & Pfanne, Suppen & Eintöpfe, Aufläufe & Ofengerichte, Burger & Wraps, Salate & Bowls, Grillen, Snacks & Fingerfood, Beilagen, Saucen & Dips, Frühstück & Süßes, Sonstiges), `katalog.js` (Sammlung `zutaten`, eingebaut = Mehle/Saaten/
   Zusätze; **id einer neuen Zutat = Name in Kleinbuchstaben ohne Sonderzeichen** (`zutatId`: „Kokosmilch“ → `kokosmilch`), damit gleichzeitiges Anlegen
   auf zwei Handys oder durch Claude kein Doppel gibt – die Edge Function rechnet genauso; `zutatenNamen` für `zutaten_liste`),
   `rechner.js` (`skaliere`: Kochen über Portionen, Backen über Mehl bzw. Teiglinge; Regeln linear/ganz/fix; leeres Ziel = Faktor 0),

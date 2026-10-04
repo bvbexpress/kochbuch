@@ -6,7 +6,7 @@ import { erstelleSpeicher, speicherImArbeitsspeicher } from '../js/kern/speicher
 import { SAMMLUNGEN } from '../js/kern/sync.js';
 import { LEERER_TEIG } from '../js/teig/vorlagen.js';
 import {
-  bereinigeRezept, speichereRezept, alleRezepte, holeRezept, loeseNamenAuf,
+  bereinigeRezept, speichereRezept, alleRezepte, holeRezept, loeseNamenAuf, KOCH_KATEGORIEN,
 } from '../js/rezepte/rezept.js';
 import {
   zutatId, alleZutaten, zutatenNamen, zutatName, findeOderNeu, EINGEBAUT,
@@ -276,4 +276,12 @@ test('Anzeige der Mengen', () => {
 test('Neue Sammlungen sind im Abgleich: Rezepte als Kopie, Zutaten „zuletzt“', () => {
   assert.equal(SAMMLUNGEN.rezepte, 'kopie');
   assert.equal(SAMMLUNGEN.zutaten, 'zuletzt');
+});
+
+test('Kochkategorien: feste Liste mit „Sonstiges“ als letzter Auffangkategorie, eindeutige ids', () => {
+  const ids = KOCH_KATEGORIEN.map((k) => k.id);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.equal(KOCH_KATEGORIEN.length, 13);
+  assert.equal(KOCH_KATEGORIEN.at(-1).id, 'sonstiges');
+  assert.equal(bereinigeRezept({ ...curry(), kategorie: 'sonstiges' }).kategorie, 'sonstiges');
 });
