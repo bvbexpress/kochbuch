@@ -251,6 +251,13 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
   echten Connector. Der Code von `hallo` (MCP-Grundgerüst) ist die Basis für Schritt 8 und wird dort ersetzt (dann ohne
   Pfad-/`x-api-key`-Weg).
 - **1** Datenmodell, Prüfung, Skalierung (`rechner`-Teil, `js/rezepte/`), Zutatenkatalog, `SAMMLUNGEN`. Kein Bildschirm. 3–5 $.
+  ***(fertig)*** `js/rezepte/`: `rezept.js` (`bereinigeRezept`, `speichereRezept` löst Zutatennamen auf und legt neue im Katalog an,
+  `alleRezepte`, `loeseNamenAuf`; Kategorien beim Kochen in `KOCH_KATEGORIEN`: Pasta & Gnocchi, Currys & Dal, Wok & Pfanne, Suppen & Eintöpfe, Aufläufe & Ofengerichte, Burger & Wraps, Salate & Bowls, Grillen, Snacks & Fingerfood, Beilagen, Saucen & Dips, Frühstück & Süßes, Sonstiges), `katalog.js` (Sammlung `zutaten`, eingebaut = Mehle/Saaten/
+  Zusätze; **id einer neuen Zutat = Name in Kleinbuchstaben ohne Sonderzeichen** (`zutatId`: „Kokosmilch“ → `kokosmilch`), damit gleichzeitiges Anlegen
+  auf zwei Handys oder durch Claude kein Doppel gibt – die Edge Function rechnet genauso; `zutatenNamen` für `zutaten_liste`),
+  `rechner.js` (`skaliere`: Kochen über Portionen, Backen über Mehl bzw. Teiglinge; Regeln linear/ganz/fix; leeres Ziel = Faktor 0),
+  `formatMenge` in `zahlen.js`. Back-Rezept = Vorlagenfelder (`teig`, `mehl`, `modus`, `teiglinge`) plus Zutaten/Schritte, Portionen optional.
+  `SAMMLUNGEN`: `rezepte` = `kopie`, `zutaten` = `zuletzt`. Noch nirgends in der Oberfläche eingebunden; Tests `tests/rezepte.test.js`, `tests/sync.test.js`.
 - **2** Kochen: Liste (Kategorien, A–Z, Favoriten, Suche), Rezeptansicht (Portionen, Schritte, Status, Notiz, „neu“). 5–8 $.
 - **7** Datenbank-Teil des Connectors: `rezept_speichern`, eigene Rolle, Tests gegen PostgreSQL. 3–5 $.
 - **8** Edge Function (Werkzeuge, Schlüsselprüfung), Test der Repo-Kopie. Nutzer fügt sie im Dashboard ein. 4–7 $.
@@ -309,12 +316,13 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 | `css/<bereich>.css` | Design eines Bereichs (z. B. `teig.css`) |
 | `js/app.js` | Start und (später) Navigation |
 | `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse, öffentlicher Schlüssel, Abfragen), `anmeldung.js` (Anmeldung, stilles Erneuern), `abgleich.js` (Klappe Abgleich: Anmelde-Formular, Status auf dem Verwalter-Handy, Umzug, versteckte Verwaltung), `ausloeser.js` (wann abgeglichen wird) |
+| `js/rezepte/` | Rezepte (Etappe 3): `rezept.js` (Modell, Prüfung, Speichern), `katalog.js` (Zutatenkatalog), `rechner.js` (Skalieren) |
 | `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js` (inkl. Kategorien, Ordnen der Liste), `zutaten.js` (Mehle/Saaten/Zusatzzutaten), `teilen.js` (Teilen-Link), `startseite.js` (HTML der Vorlagenliste), `ansicht.js` (Oberfläche, Navigation) |
 | `supabase/functions/` | Edge Functions (Connector), im Dashboard eingefügt; nicht Teil der App |
 | `datenbank/schema.sql` | Supabase-Datenbank (Tabellen, Zugriffsschutz, Sync-Funktionen); nicht Teil der App |
 | `tests/` | Tests (`*.test.js`) |
 
-`js/rezepte/`, `js/vorrat/` erst anlegen, wenn dort Code entsteht.
+`js/vorrat/` erst anlegen, wenn dort Code entsteht.
 
 ## Rechenregeln
 

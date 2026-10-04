@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 
 import { erstelleSpeicher, speicherImArbeitsspeicher } from '../js/kern/speicher.js';
 import { erstelleSync, kopieName } from '../js/kern/sync.js';
+import { speichereRezept, alleRezepte } from '../js/rezepte/rezept.js';
 
 /** Wie jsonb: Felder nach Länge, dann alphabetisch sortiert. */
 function wieJsonb(x) {
@@ -433,4 +434,41 @@ test('Name der Konflikt-Kopie: Datum der Änderung, kein doppelter Zusatz, nicht
   const lang = kopieName('x'.repeat(80), zeit);
   assert.equal(lang.length, 80);
   assert.ok(lang.endsWith(' (Änderung vom 3.10.)'));
+});
+
+// ---------- Etappe 3: Rezepte und Zutaten ----------
+
+test('Rezepte: gleichzeitige Änderung wird Kopie; dieselbe neue Zutat auf beiden Handys ist kein Konflikt', async () => {
+  const { a, b } = haushalt();
+  const neu = (h, notiz) => speichereRezept(h.speicher, {
+    art: 'kochen', name: 'Curry', portionen: 4, notiz, zutaten: [{ name: 'Kokosmilch', menge: 400, einheit: 'ml' }],
+  });
+  const r = neu(a, '');
+  await a.sync.abgleichen();
+  await b.sync.abgleichen();
+
+  // beide Handys legen „Kokosmilch“ nicht an (gibt es schon durch a) – und ändern gleichzeitig die Notiz
+  speichereRezept(a.speicher, { ...r, notiz: 'mehr Chili' });
+  speichereRezept(b.speicher, { ...b.speicher.hole('rezepte', r.id), notiz: 'weniger Salz' });
+  await a.sync.abgleichen();
+  const ergebnis = await b.sync.abgleichen();
+  assert.equal(ergebnis.kopien, 1);
+  const aufB = alleRezepte(b.speicher);
+  assert.equal(aufB.length, 2);
+  assert.equal(aufB.find((x) => x.id === r.id).notiz, 'mehr Chili', 'Server-Fassung bleibt');
+  assert.equal(aufB.find((x) => x.id !== r.id).notiz, 'weniger Salz');
+  assert.ok(aufB.find((x) => x.id !== r.id).konflikt);
+
+  // zwei neue Zutaten mit demselben Namen, gleichzeitig angelegt: gleiche id, gleicher Inhalt
+  const ergebnisA = speichereRezept(a.speicher, { art: 'kochen', name: 'Dal', portionen: 2, zutaten: [{ name: 'Rote Linsen' }] });
+  const ergebnisB = speichereRezept(b.speicher, { art: 'kochen', name: 'Suppe', portionen: 2, zutaten: [{ name: 'rote linsen' }] });
+  assert.ok(ergebnisA && ergebnisB);
+  await a.sync.abgleichen();
+  const nachB = await b.sync.abgleichen();
+  await a.sync.abgleichen();
+  assert.equal(nachB.ok, true);
+  assert.equal(a.speicher.alle('zutaten').filter((z) => z.id === 'rotelinsen').length, 1);
+  assert.equal(b.speicher.alle('zutaten').filter((z) => z.id === 'rotelinsen').length, 1);
+  assert.equal(a.speicher.alle('zutaten').length, b.speicher.alle('zutaten').length);
+  assert.equal(a.speicher.offene('zutaten').length + b.speicher.offene('zutaten').length, 0);
 });

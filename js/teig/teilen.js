@@ -118,7 +118,7 @@ export function bereinigeVorlage(v, jetzt = Date.now()) {
   };
 }
 
-function bereinigeTeig(roh) {
+export function bereinigeTeig(roh) {
   if (!istGueltigerTeig(roh)) return null;
   const teig = normalisiereTeig(roh);
   const mehlsorten = zeilen(teig.mehlsorten, 'anteil');
