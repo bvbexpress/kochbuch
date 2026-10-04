@@ -13,6 +13,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { bearbeite } from '../supabase/functions/kochbuch/index.ts';
+import { bereinigeRezept } from '../js/rezepte/rezept.js';
 
 const wurzel = new URL('..', import.meta.url).pathname;
 const schema = readFileSync(join(wurzel, 'datenbank/schema.sql'), 'utf8');
@@ -634,6 +636,74 @@ for (const [modus, grundausstattung] of Object.entries(MODI)) describe(`Supabase
       } finally {
         sql(`alter role kochbuch_connector nologin`);
       }
+    });
+
+    // ---------- Edge Function (Schritt 8) gegen diese Datenbank ----------
+
+    test('Edge Function: anlegen, finden, aktualisieren, Konflikt – App übernimmt alles unverändert', { skip: ohne }, async () => {
+      const textWert = (s) => `'${String(s).replaceAll("'", "''")}'`;
+      const datenbank = {
+        zutatenListe: async () => json(connector('select connector.zutaten_liste()')),
+        rezepteFinden: async (s) => json(connector(`select connector.rezepte_finden(${textWert(s)})`)),
+        rezeptLesen: async (id) => lesen(id.replaceAll("'", '')),
+        rezeptSpeichern: async (e) => speichern(e),
+      };
+      let nr = 0;
+      const rufe = async (name, args) => {
+        const a = await bearbeite(new Request('https://x.invalid/functions/v1/kochbuch', {
+          method: 'POST', headers: { authorization: `Bearer ${'k'.repeat(40)}` },
+          body: JSON.stringify({ jsonrpc: '2.0', id: ++nr, method: 'tools/call', params: { name, arguments: args } }),
+        }), { schluessel: 'k'.repeat(40), db: datenbank });
+        const { result } = await a.json();
+        assert.equal(result.isError, undefined, result.content[0].text);
+        return JSON.parse(result.content[0].text);
+      };
+      const zeile = (id) => runter(A, 0, 5000).datensaetze.find((x) => x.sammlung === 'rezepte' && x.id === id);
+      /** So sieht die App das Rezept (bereinigeRezept); muss dem Gespeicherten genau entsprechen. */
+      const wieApp = (d) => {
+        const { erstellt, geaendert, geloescht, ...inhalt } = d;
+        assert.deepEqual(bereinigeRezept(inhalt), inhalt);
+      };
+
+      const roh = {
+        name: 'Edge-Curry', kategorie: 'Currys & Dal', portionen: 2,
+        zutaten: [{ name: 'Kichererbsen', menge: 240, einheit: 'g', art: 'vorrat' }, { name: 'Ingwer', menge: 1, einheit: 'TL' },
+          { name: "Chili's", menge: null, regel: 'fix' }],
+        schritte: ['Kichererbsen abgießen.', 'Mit Ingwer und Chili anbraten.'],
+        schrittzutaten: [[{ name: 'Kichererbsen' }], [{ name: 'Ingwer' }, { name: "Chili's" }]],
+      };
+      const [neu] = (await rufe('rezept_anlegen', { rezepte: [roh] })).rezepte;
+      assert.deepEqual([neu.gespeichert, neu.version], [true, 1]);
+      wieApp(zeile(neu.id).daten);
+      assert.equal(zeile(neu.id).daten.zutaten[2].zutat, 'chilis');
+      assert.ok((await rufe('zutaten_liste', {})).zutaten.includes('Kichererbsen'));
+
+      // Gleicher Name noch einmal: nicht angelegt
+      assert.match((await rufe('rezept_anlegen', { rezepte: [roh] })).rezepte[0].fehler[0], /Gibt es schon/);
+      assert.equal(finden('Edge-Curry').length, 1);
+
+      // Lesen → unverändert zurückschicken = nichts geschrieben (gleiche Version)
+      const { id, version, ...gelesen } = await rufe('rezepte_finden', { id: neu.id });
+      assert.equal(version, 1);
+      assert.equal((await rufe('rezept_aktualisieren', { id, version, ...gelesen })).version, 1);
+
+      // Ändern mit passender Version
+      const n = await rufe('rezept_aktualisieren', { id, version: 1, notiz: 'Mit Limette.', portionen: 3 });
+      assert.deepEqual([n.gespeichert, n.version], [true, 2]);
+      wieApp(zeile(id).daten);
+      assert.equal(zeile(id).daten.notiz, 'Mit Limette.');
+
+      // Handy ändert dazwischen → Claudes Änderung auf alter Version wird Kopie, Original bleibt
+      const handy = zeile(id);
+      hoch(A, [{ sammlung: 'rezepte', id, daten: { ...handy.daten, notiz: 'Vom Handy.' }, geloescht: false, basis: 2 }]);
+      const k = await rufe('rezept_aktualisieren', { id, version: 2, notiz: 'Von Claude.' });
+      assert.equal(k.gespeichert, false);
+      assert.equal(zeile(id).daten.notiz, 'Vom Handy.');
+      const kopie = zeile(k.kopie).daten;
+      assert.deepEqual([kopie.notiz, kopie.konflikt.von], ['Von Claude.', id]);
+      assert.match(kopie.name, /^Edge-Curry \(Änderung vom \d+\.\d+\.\)$/);
+      const { konflikt, ...ohneVermerk } = kopie;
+      wieApp(ohneVermerk);
     });
   });
 
