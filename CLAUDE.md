@@ -167,11 +167,106 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   (`entferneAusListe` in `ansicht.js`; Löschen = Grabstein, Rückgängig stellt den alten Inhalt als neue Änderung wieder her).
   Während eines Wischens zeichnet `datenAktualisiert()` nicht neu, sondern holt es danach nach.
 
-### Etappe 3 – Rezepte
-- Rezepte mit **Personenanzahl** und automatischer Mengenanpassung.
-- Zutaten strukturiert: **Menge, Einheit, Zutat**, mit **Skalierungsregel je Zutat**: linear, auf ganze Stück runden, nicht skalieren.
-- Anleitung **Schritt für Schritt, kurz und kleinteilig**.
-- Teigrechner-Vorlagen und Rezepte nutzen dieselben Zutaten (siehe Zutatennamen).
+### Etappe 3 – Rezepte *(in Planung, noch nichts gebaut)*
+
+**Aufbau der App**
+- **Startseite:** zwei große Kacheln „Backen“ und „Kochen“, darunter eine Suche über alle Rezepte und „Weiter mit: …“
+  (die letzten 2 geöffneten Rezepte). Das automatische Öffnen der zuletzt benutzten Vorlage beim Start entfällt.
+- **Backen** öffnet **direkt die Back-Rezeptliste** (keine Zwischenebene), oben dauerhaft ein Knopf „Teigrechner“
+  (Schnellrechnung ohne Rezept, mit Knopf „Als Rezept speichern“).
+- **Kochen:** Rezepte nach Kategorien (Currys, Pasta, Suppen, Aufläufe …), innerhalb alphabetisch, Favoriten oben, Suche.
+- Die bisherigen Teigrechner-Vorlagen werden **Back-Rezepte** (Teigwerte plus Arbeitsschritte): keine zwei Listen.
+
+**Rezept**
+- `portionen` + `portionsart` (Personen/Stück/Laibe) wählbar, Mengen passen sich an.
+- Zutat: Katalog-`id`, `menge` (leer = „nach Geschmack“), `einheit`, `regel` (linear | ganze Stück | fix).
+- Schritte kurz und kleinteilig, beim Kochen abhakbar (nicht gespeichert). Bildschirm bleibt an (gibt es schon).
+- `status`: **erprobt** | **noch testen**, ein Tipper. **Per Connector gespeicherte Rezepte sind „erprobt“**, „noch testen“ nur für
+  importierte (`quelle: import`). Kurze Notiz am Rezept. „Neu“-Markierung bis zum ersten Öffnen
+  (Geräte-Einstellung mit gesehenen `id`s; beim Umzug gelten alle alten Vorlagen als gesehen).
+- **Sammlung `rezepte`** (`art`: backen | kochen, Name, Kategorie, Portionen, Zutaten, Schritte, Status, Notiz, `quelle`:
+  claude | import | hand, `teig` nur bei Back-Rezepten). Konfliktart `kopie` wie bei Vorlagen.
+  **Sammlung `zutaten`** (Katalog: `id`, Name, Art; Konfliktart `zuletzt`): schlank, Mehle/Saaten mit ihren festen `id`s
+  sind der Anfang, Einheiten-Umrechnung erst mit dem Vorrat (Etappe 4). Unbekannter Name beim Speichern = neuer Eintrag.
+  Neue Sammlungen in `SAMMLUNGEN` eintragen.
+- **Back-Rezept:** Mehl, Wasser, Salz usw. rechnet der Teigrechner (keine zweite Pflege), Belag u. ä. sind normale Zutaten.
+  Skaliert wird über Mehl bzw. Teiglinge.
+- **Neue Sammlung statt alte erweitern:** Ein Handy mit alter App-Version könnte neue Felder in `teigvorlagen` beim
+  Hochladen abschneiden.
+
+**Umzug Vorlagen → Back-Rezepte (ohne Datenverlust)**
+- Jede Vorlage wird ein Back-Rezept **mit derselben `id`** (beide Handys gleichzeitig = kein Doppel, gleicher Inhalt = kein Konflikt).
+- `teigvorlagen` bleibt **unverändert als Sicherung** (löschen nur später, bewusst, in eigenem Schritt). Vorher Sicherungs-Link
+  anbieten wie in Etappe 2. Lücke: Ändert ein Handy mit alter Version danach eine Vorlage, ändert es nur das Archiv
+  (Update-Hinweis und Versionsanzeige decken das ab).
+
+**Teigrechner ↔ Back-Rezept und Vereinfachung**
+- Im Back-Rezept „Im Teigrechner anpassen“. Zurück nur **„Nur für heute“** (Rezept zeigt die angepassten Mengen, Original
+  bleibt) oder **„Ins Rezept übernehmen“** (dauerhaft).
+- Dadurch entfallen die **Speichern-Karte** (Name/Kategorie/Modus) und die **Klappe „Vorlage“**. Name, Kategorie, Modus liegen
+  beim Bearbeiten des Rezepts; „Als neue speichern“ wird „Kopie machen“ im Rezept.
+- Ein voller Zutaten-Editor am Handy ist **nicht** vorgesehen (Hauptweg = Connector); zuerst nur Notiz, Status, Schritte ändern.
+
+**Connector „Rezepte direkt aus Claude“** (Remote-MCP-Server für claude.ai)
+- Fakten (geprüft): Eigene Connectors gehen mit **Pro** („+“ → „Add custom connector“, URL). Laut Claude-Hilfe kann Claude
+  feste Zugangsdaten (API-Schlüssel/Bearer-Token) bei jeder Anfrage mitschicken. **Noch ungeprüft:** ob das in der Oberfläche
+  tatsächlich einstellbar ist und ob Connectors in der **iPhone-App** und in **Projekten** funktionieren → Schritt 0.
+- Läuft als **Supabase Edge Function** im selben Projekt (Free: 0 $). Eingefügt **im Dashboard** (kein Zugangstoken als
+  GitHub-Secret). Der Code liegt trotzdem im Repo (`supabase/functions/…`), mit Test, dass die eingefügte Kopie dem Repo-Stand
+  entspricht (Deno kann keine Dateien aus `js/` laden → Prüflogik als Kopie + Test gegen das Original, wie bei `ping.test.js`).
+  Funktion ohne Supabase-JWT-Prüfung (`verify_jwt` aus), dafür eigene Prüfung des Schlüssels.
+- **Werkzeuge (mehr gibt es nicht):** `zutaten_liste` (nur Namen), `rezept_anlegen` (auch mehrere, für den Import),
+  `rezept_aktualisieren` (nur mit der Version, auf der Claude aufbaut; sonst Konfliktkopie, nie überschreiben),
+  `rezepte_finden` (Titel/`id`, ein Rezept per `id`). **Kein Löschen, kein Zugriff auf andere Tabellen, Konten, Vorrat.**
+- **Sicherheit:** langer Zufallsschlüssel nur als Supabase-Secret (nie im Repo, Repo ist öffentlich). Schreiben nur über
+  eine Datenbank-Funktion `rezept_speichern`, aufrufbar von einer **eigenen Datenbank-Rolle**, die nur diese Funktion ausführen
+  darf (nicht `service_role`). Nur Sammlungen `rezepte` und `zutaten`, nie `geloescht`, `geaendert_von` = „claude“.
+  Prüfung wie bei Teilen-Links (Größenlimit, nur bekannte Felder, Zahlenbereiche). Schlüssel tauschbar in einer Minute.
+  Schlimmster Fall bei Diebstahl: Rezepte werden hinzugefügt, nichts gelesen, nichts gelöscht.
+- **Plan B, falls claude.ai keinen festen Schlüssel erlaubt** (Reihenfolge der Wahl):
+  1. Schlüssel im URL-Pfad (`…/mcp/<Schlüssel>`), Connector ohne Anmeldung. Weniger sauber (URLs landen in Protokollen),
+     bei Recipes-only vertretbar; Schlüssel dann regelmäßig tauschen.
+  2. Kleines OAuth in der Edge Function (mehr Aufwand, nur wenn 1. nicht reicht).
+  3. Connector gar nicht möglich (iPhone/Projekt): Notlösung „Rezept einfügen“ + Import darüber.
+- **Notlösung „Rezept einfügen“:** Kochbuch-Code (derselbe wie beim Connector, geprüft wie Links) in der App einfügen.
+  Claude gibt ihn aus, wenn der Connector fehlt. Auch Weg für den späteren Import der bisherigen Sammlung.
+- **Projektanweisung (Vorschlag, für das Claude-Projekt „Kochen & Backen“):**
+  > Wenn wir ein Gericht oder Backwerk zu Ende gekocht haben und es gelungen ist, frage genau einmal: „Soll ich das Rezept im
+  > Kochbuch speichern?“ Speichere nur nach einem Ja. Frage vorher mit `zutaten_liste` die vorhandenen Zutatennamen ab und
+  > benutze diese Namen. Schreibe Mengen für die Portionszahl, für die wir gekocht haben, mit Einheit und Regel
+  > (linear / ganze Stück / fix). Schreibe Schritte kurz und kleinteilig, ein Handgriff pro Schritt. Status ist „erprobt“,
+  > weil wir es gerade gekocht haben. Übernimm unsere Anpassungen („weniger Salz“) als Notiz. Gibt es das Rezept schon
+  > (`rezepte_finden`), dann aktualisiere es, statt ein neues anzulegen. Ist der Connector nicht erreichbar, gib das Rezept als
+  > Kochbuch-Code aus, den ich in die App einfüge.
+  > (Beim Import alter Rezepte setzt Claude `quelle: import` und „noch testen“.)
+
+**Bauplan** (je Schritt ein PR mit Tests). **Reihenfolge: zuerst der Connector, der Back-Umbau danach.**
+Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben anfangs ca. 50 $):
+- **0** Test, 1–2 $: Mini-Connector „Hallo“ als Edge Function (im Dashboard eingefügt), in claude.ai (Pro) hinzufügen.
+  Klärt verbindlich: fester Schlüssel einstellbar? Läuft er im **Projekt** und in der **iPhone-App**? Muss er pro Chat
+  eingeschaltet werden? Edge-Function-Limits (Free) nachlesen. Danach Plan B wählen, falls nötig. Nichts davon kommt in die App.
+- **1** Datenmodell, Prüfung, Skalierung (`rechner`-Teil, `js/rezepte/`), Zutatenkatalog, `SAMMLUNGEN`. Kein Bildschirm. 3–5 $.
+- **2** Kochen: Liste (Kategorien, A–Z, Favoriten, Suche), Rezeptansicht (Portionen, Schritte, Status, Notiz, „neu“). 5–8 $.
+- **7** Datenbank-Teil des Connectors: `rezept_speichern`, eigene Rolle, Tests gegen PostgreSQL. 3–5 $.
+- **8** Edge Function (Werkzeuge, Schlüsselprüfung), Test der Repo-Kopie. Nutzer fügt sie im Dashboard ein. 4–7 $.
+- **9** Praxistest, Projektanweisung ins Claude-Projekt, Import der bisherigen Sammlung (zuerst per Connector, sonst „Einfügen“). 2–5 $.
+- **3** „Rezept einfügen“ (Notlösung) und einfacher Editor (Notiz, Status, Schritte). 3–5 $.
+- **4** Neue Startseite (Kacheln, Suche über alles, „Weiter mit“). 3–5 $.
+- **5** Umzug Vorlagen → Back-Rezepte, Back-Rezeptansicht. 5–8 $.
+- **6** „Im Teigrechner anpassen“, „Nur für heute“/„Ins Rezept übernehmen“, Speichern-Karte und Klappe „Vorlage“ weg. 6–10 $.
+- Wird das Geld knapp: Schritt 6 verkleinern (nur die beiden Knöpfe), Editor weglassen, 4–6 notfalls später (Back-Teil bleibt
+  bis dahin wie heute, die Rezepte per Connector laufen unabhängig davon).
+- Reihenfolge-Hinweis: Bis Schritt 4 hat die App noch die alte Startseite. Kochen-Rezepte bekommen dafür in Schritt 2 einen
+  einfachen Einstieg (eigener Bereich unter der Vorlagenliste), der in Schritt 4 durch die Kacheln ersetzt wird.
+
+**Was der Nutzer selbst einrichtet:** Funktions-Secret (Schlüssel) in Supabase; Datenbank-Skript ausführen; Edge Function im
+Dashboard einfügen; in claude.ai Connector hinzufügen (Name, URL, Schlüssel) und im Projekt aktivieren; Projektanweisung
+einfügen; Praxistest auf beiden iPhones.
+
+**Risiken:** Connector auf iPhone/im Projekt nicht möglich (Schritt 0, Plan B); Claude benutzt das Werkzeug falsch
+(doppelte Rezepte, Zutatennamen: Servervalidierung, `zutaten_liste`, Anweisung); Überschreiben von Notizen/Änderungen
+(Versionsprüfung; „Vorherige Fassung“ nur auf Wunsch); Umzug mit alter App-Version auf einem Handy (gering); zu viel Umfang
+(Grundsatz „im Zweifel weglassen“).
 
 ### Etappe 4 – Gemeinsamer Vorrat
 - Manuelle Pflege, auch **grobe Zustände** (voll / halb / fast leer) statt nur Mengen.
