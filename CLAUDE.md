@@ -258,7 +258,7 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
   ***(fertig, bestanden)*** `supabase/functions/hallo/index.ts` (Werkzeug `hallo`, liest/schreibt nichts), Secret
   `KOCHBUCH_SCHLUESSEL`, Tests `tests/connector-hallo.test.js` (beides in Schritt 8 entfernt). Ergebnis: Header-Weg klappt in Browser, Projekt und iPhone,
   ohne Einschalten pro Chat (siehe „Geprüft in Schritt 0“). Panne: Secret-Name zuerst mit Tippfehler → Funktion blieb wie
-  gewollt zu (401). Test-Funktion und Connector „Kochbuch Test“ werden nicht mehr gebraucht (löschen), **Secret bleibt** für den
+  gewollt zu (401). Test-Funktion und Connector „Kochbuch Test“ sind gelöscht (Supabase und claude.ai), **Secret bleibt** für den
   echten Connector. Der Code von `hallo` (MCP-Grundgerüst) ist die Basis für Schritt 8 und wird dort ersetzt (dann ohne
   Pfad-/`x-api-key`-Weg).
 - **1** Datenmodell, Prüfung, Skalierung (`rechner`-Teil, `js/rezepte/`), Zutatenkatalog, `SAMMLUNGEN`. Kein Bildschirm. 3–5 $.
@@ -303,7 +303,7 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
   Supabase-Secret) erst in Schritt 8; die Edge Function verbindet sich direkt per Postgres (Pooler, Benutzer
   `kochbuch_connector.<projekt>`), nicht über PostgREST.
 - **8** Edge Function (Werkzeuge, Schlüsselprüfung, Prüfung von `schrittzutaten` wie in `bereinigeRezept`), Test der Repo-Kopie. Nutzer fügt sie im Dashboard ein. 4–7 $.
-  ***(fertig, Einrichtung durch den Nutzer offen)*** `supabase/functions/kochbuch/index.ts` (ersetzt `hallo`, das samt Test entfernt ist).
+  ***(fertig, Einrichtung in Supabase/claude.ai durch den Nutzer offen)*** `supabase/functions/kochbuch/index.ts` (ersetzt `hallo`, das samt Test entfernt ist).
   MCP wie bei `hallo`, Zugang **nur** `Authorization: Bearer` (Secret `KOCHBUCH_SCHLUESSEL`, < 32 Zeichen = zu). Datenbank über
   `npm:postgres` (dynamisch importiert, nur in Deno) mit Secret `KOCHBUCH_DB_URL` = Transaction Pooler (6543) als
   `kochbuch_connector.<projekt>`, `prepare: false`, eine Verbindung; JSON an die Datenbank mit `sql.json` (sonst doppelt verpackt).
