@@ -25,6 +25,8 @@ export const SAMMLUNGEN = {
   mehle: 'zuletzt',
   saaten: 'zuletzt',
   zusaetze: 'zuletzt',
+  rezepte: 'kopie',     // Etappe 3: Koch- und Back-Rezepte
+  zutaten: 'zuletzt',   // Etappe 3: Zutatenkatalog
 };
 
 const PAKET = 200;          // höchstens so viele Änderungen je Hochladen (Grenze in schema.sql)

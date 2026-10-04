@@ -30,3 +30,9 @@ export function formatGrammFein(gramm) {
 export function formatProzent(prozent) {
   return prozent < 1 ? zweiStellen.format(prozent) : eineStelle.format(prozent);
 }
+
+/** Menge einer Zutat: ab 10 ganze Zahlen, darunter eine Stelle, unter 1 zwei (z. B. "0,25"). */
+export function formatMenge(menge) {
+  if (menge >= 10) return ganzeZahl.format(Math.round(menge));
+  return menge < 1 ? zweiStellen.format(menge) : eineStelle.format(menge);
+}
