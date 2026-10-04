@@ -101,6 +101,13 @@ const SUPABASE = `
   create function auth.uid() returns uuid language sql stable
     as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
   grant usage on schema auth to anon, authenticated;
+  -- Erweiterungen wie bei Supabase im Schema extensions (nur für diese Rollen benutzbar).
+  -- pg_stat_statements gibt seine Ansichten selbst für alle (PUBLIC) frei, pgcrypto/uuid-ossp ihre Funktionen.
+  create schema extensions;
+  grant usage on schema extensions to anon, authenticated;
+  create extension pg_stat_statements with schema extensions;
+  create extension pgcrypto with schema extensions;
+  create extension "uuid-ossp" with schema extensions;
   insert into auth.users values
     ('${A}', 'a@beispiel.invalid'), ('${B}', 'b@beispiel.invalid'),
     ('${F}', 'f@beispiel.invalid'), ('${X}', 'x@beispiel.invalid');
@@ -344,6 +351,23 @@ for (const [modus, grundausstattung] of Object.entries(MODI)) describe(`Supabase
         'funktion|connector.rezept_lesen', 'funktion|connector.rezept_speichern',
         'funktion|connector.rezepte_finden', 'funktion|connector.zutaten_liste',
       ]);
+      // Die Erweiterungen geben Objekte für alle frei (wie bei Supabase) – erreichbar sind sie trotzdem nicht
+      assert.equal(sql(`select has_table_privilege('kochbuch_connector', 'extensions.pg_stat_statements', 'select')`), 't');
+      assert.equal(sql(`select has_schema_privilege('kochbuch_connector', 'extensions', 'usage')`), 'f');
+    });
+
+    test('Die Kontrollabfrage meldet es, sobald ein Schema für alle benutzbar wird', { skip: ohne }, () => {
+      sql('grant usage on schema extensions to public');
+      try {
+        const zeilen = sql(pruefung).split('\n');
+        assert.ok(zeilen.includes('schema|extensions'), zeilen.join(' '));
+        assert.ok(zeilen.includes('tabelle|extensions.pg_stat_statements'));
+        assert.ok(zeilen.includes('funktion|extensions.crypt'));
+        assert.ok(zeilen.includes('funktion|extensions.uuid_generate_v4'));
+      } finally {
+        sql('revoke usage on schema extensions from public');
+      }
+      assert.equal(sql(pruefung).split('\n').length, 4);
     });
 
     test('Direkter Zugriff, Sync-Funktionen und Anlegen: alles verboten', { skip: ohne }, () => {
@@ -367,6 +391,10 @@ for (const [modus, grundausstattung] of Object.entries(MODI)) describe(`Supabase
         'create function public.eigen() returns int language sql as $$ select 1 $$',
         'create schema eigen',
         'create table connector.eigen (id int)',
+        'select * from extensions.pg_stat_statements',
+        'select * from extensions.pg_stat_statements_info',
+        `select extensions.crypt('a', extensions.gen_salt('bf'))`,
+        'select extensions.uuid_generate_v4()',
       ]) assert.match(fehler(() => connector(befehl)), /permission denied/, befehl);
     });
 

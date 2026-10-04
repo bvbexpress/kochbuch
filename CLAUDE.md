@@ -295,7 +295,10 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
   „Name (Änderung vom 4.10.)“ mit `konflikt: { von, am }`, keine zweite bei Wiederholung. Prüfung in
   `intern.connector_pruefe_rezept` (nur bekannte Felder, Grenzen wie `bereinigeRezept`, `quelle` nur claude|import,
   `schrittzutaten` nur Zutaten des Rezepts, je Schritt einmal, ≤ 100 kB) – weist ab mit `grund`, kürzt nie.
-  `datenbank/connector-pruefen.sql` listet, was die Rolle darf (Dashboard-Kontrolle; der Test nutzt dieselbe Datei).
+  `datenbank/connector-pruefen.sql` listet, was die Rolle erreichen kann (Recht auf Objekt **und** Schema; benutzbare Schemas
+  außer `connector`/`public` als eigene Zeile; Dashboard-Kontrolle, der Test nutzt dieselbe Datei). Die Tests legen die
+  Supabase-Erweiterungen (`pg_stat_statements`, `pgcrypto`, `uuid-ossp`) in `extensions` an: Deren Objekte sind für alle
+  freigegeben, die Rolle darf das Schema aber nicht benutzen. `extensions` bewusst nicht im Skript angefasst (interne Supabase-Rollen).
   Tests in `tests/datenbank.test.js` (beide Modi). **Anmeldung der Rolle** (`alter role … login password …`, Passwort nur als
   Supabase-Secret) erst in Schritt 8; die Edge Function verbindet sich direkt per Postgres (Pooler, Benutzer
   `kochbuch_connector.<projekt>`), nicht über PostgREST.
