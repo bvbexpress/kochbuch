@@ -16,6 +16,7 @@ import { join } from 'node:path';
 
 const wurzel = new URL('..', import.meta.url).pathname;
 const schema = readFileSync(join(wurzel, 'datenbank/schema.sql'), 'utf8');
+const pruefung = readFileSync(join(wurzel, 'datenbank/connector-pruefen.sql'), 'utf8');
 
 /** Ordner mit initdb/pg_ctl/psql, oder null. */
 function postgresOrdner() {
@@ -73,6 +74,25 @@ const runter = (konto, seit, anzahl = 500) =>
 const vorlage = (id, name, basis = 0, geloescht = false) =>
   ({ sammlung: 'vorlagen', id, daten: { id, name }, geloescht, basis });
 
+
+/** SQL als Connector-Rolle (so meldet sich später die Edge Function an). */
+// `session authorization` statt `role`: Die Sitzung gehört dann wirklich der Rolle (wie nach der Anmeldung).
+const connector = (befehle) => sql(`begin; set local session authorization kochbuch_connector; ${befehle}; commit;`);
+const sqlText = (x) => `'${JSON.stringify(x).replaceAll("'", "''")}'`;
+const speichern = (eingabe) => json(connector(`select connector.rezept_speichern(${sqlText(eingabe)}::jsonb)`));
+const finden = (suche) => json(connector(`select connector.rezepte_finden(${sqlText(suche).replace(/^'"|"'$/g, "'")})`));
+const lesen = (id) => {
+  const text = connector(`select connector.rezept_lesen('${id}')`);
+  return text ? json(text) : null;
+};
+/** Kleines gültiges Koch-Rezept, wie es die Edge Function schicken würde. */
+const rezept = (name) => ({
+  art: 'kochen', name, kategorie: 'currys', portionen: 4, portionsart: 'personen',
+  zutaten: [{ zutat: 'linsen', menge: 200, einheit: 'g', regel: 'linear' }, { zutat: 'salz', menge: null, einheit: '', regel: 'fix' }],
+  schritte: ['Linsen waschen.', 'Kochen.'],
+  schrittzutaten: [[{ zutat: 'linsen' }], []],
+  status: 'erprobt', notiz: '', quelle: 'claude',
+});
 
 // Teile von Supabase, die es in jedem Projekt gibt
 const SUPABASE = `
@@ -144,8 +164,9 @@ after(() => {
   rmSync(ordner, { recursive: true, force: true });
 });
 
-test('Skript enthält keine E-Mail-Adressen', () => {
+test('Skript enthält keine E-Mail-Adressen und keine Passwörter', () => {
   assert.doesNotMatch(schema, /[\w.+-]+@[\w-]+\.[\w.]+/);
+  assert.doesNotMatch(schema, /password/i);
 });
 
 for (const [modus, grundausstattung] of Object.entries(MODI)) describe(`Supabase ${modus}`, () => {
@@ -297,6 +318,295 @@ for (const [modus, grundausstattung] of Object.entries(MODI)) describe(`Supabase
     sql(`delete from auth.users where id = '00000000-0000-4000-8000-0000000000c0'`);
     assert.ok(runter(A, 0, 1000).datensaetze.some((x) => x.id === 'v-c'));
     assert.equal(sql(`select count(*) from public.mitglieder where name = 'Alt'`), '0');
+  });
+
+  // ---------- Connector (Etappe 3, Schritt 7) ----------
+
+  describe('Connector-Rolle', () => {
+    before(() => {
+      if (ohne) return;
+      sql(`update public.haushalte set connector = (name = 'Zuhause')`);
+    });
+
+    test('Rolle ohne Sonderrechte, ohne Anmeldung, in keiner anderen Rolle', { skip: ohne }, () => {
+      assert.equal(sql(`select rolsuper, rolcreaterole, rolcreatedb, rolbypassrls, rolreplication, rolinherit, rolcanlogin
+        from pg_roles where rolname = 'kochbuch_connector'`), 'f|f|f|f|f|f|f');
+      assert.equal(sql(`select count(*) from pg_auth_members where member = 'kochbuch_connector'::regrole`), '0');
+      assert.equal(sql(`select count(*) from pg_auth_members where roleid = 'kochbuch_connector'::regrole`), '0');
+      for (const rolle of ['anon', 'authenticated', 'postgres']) {
+        assert.match(fehler(() => connector(`set role ${rolle}`)), /permission denied/, rolle);
+      }
+    });
+
+    test('Darf genau die vier Connector-Funktionen ausführen – keine andere, keine Tabelle', { skip: ohne }, () => {
+      // dieselbe Abfrage, die der Verwalter im Dashboard ausführt (keine Tabelle, keine andere Funktion)
+      assert.deepEqual(sql(pruefung).split('\n'), [
+        'funktion|connector.rezept_lesen', 'funktion|connector.rezept_speichern',
+        'funktion|connector.rezepte_finden', 'funktion|connector.zutaten_liste',
+      ]);
+    });
+
+    test('Direkter Zugriff, Sync-Funktionen und Anlegen: alles verboten', { skip: ohne }, () => {
+      for (const befehl of [
+        'select * from public.datensaetze',
+        'select * from public.mitglieder',
+        'select * from public.haushalte',
+        'select * from auth.users',
+        `insert into public.datensaetze (haushalt, sammlung, id, daten, version, stand)
+           values (gen_random_uuid(), 'rezepte', 'x', '{}', 1, 1)`,
+        `update public.datensaetze set geloescht = true`,
+        `delete from public.datensaetze`,
+        `select public.hochladen('[]')`,
+        `select public.herunterladen(0)`,
+        `select intern.hochladen('[]')`,
+        `select intern.mein_haushalt()`,
+        `select intern.connector_haushalt()`,
+        `select public.ping()`,
+        `select nextval('public.datensaetze_stand')`,
+        'create table public.eigen (id int)',
+        'create function public.eigen() returns int language sql as $$ select 1 $$',
+        'create schema eigen',
+        'create table connector.eigen (id int)',
+      ]) assert.match(fehler(() => connector(befehl)), /permission denied/, befehl);
+    });
+
+    test('Handys und anonym kommen nicht an die Connector-Funktionen', { skip: ohne }, () => {
+      for (const konto of [A, null]) {
+        assert.match(fehler(() => als(konto, `select connector.zutaten_liste()`)), /permission denied/);
+        assert.match(fehler(() => als(konto, `select connector.rezept_speichern('{}')`)), /permission denied/);
+        assert.match(fehler(() => als(konto, `select intern.connector_pruefe_rezept('{}')`)), /permission denied/);
+      }
+    });
+
+    test('Anlegen: neues Rezept samt neuen Zutaten kommt auf beiden Handys an', { skip: ohne }, () => {
+      const { stand } = runter(A, 0, 1000);
+      const e = speichern({
+        zutaten: [{ id: 'kokosmilch', name: 'Kokosmilch', art: 'vorrat' }],
+        rezepte: [{ daten: rezept('Linsen-Dal') }],
+      });
+      assert.deepEqual(e.zutaten, [{ id: 'kokosmilch', ok: true, neu: true }]);
+      const [r] = e.rezepte;
+      assert.equal(r.ok, true);
+      assert.equal(r.version, 1);
+      assert.match(r.id, /^[0-9a-f-]{36}$/);
+
+      const neu = runter(B, stand).datensaetze;
+      const d = neu.find((x) => x.id === r.id);
+      assert.equal(d.sammlung, 'rezepte');
+      assert.equal(d.geloescht, false);
+      assert.equal(d.daten.id, r.id);
+      assert.equal(d.daten.name, 'Linsen-Dal');
+      assert.equal(d.daten.quelle, 'claude');
+      assert.ok(Number.isSafeInteger(d.daten.erstellt) && d.daten.erstellt === d.daten.geaendert);
+      assert.deepEqual(neu.find((x) => x.id === 'kokosmilch').daten,
+        { id: 'kokosmilch', name: 'Kokosmilch', art: 'vorrat', erstellt: d.daten.erstellt, geaendert: d.daten.erstellt, geloescht: false });
+      assert.equal(sql(`select count(*) from public.datensaetze where id = '${r.id}' and geaendert_von is null
+        and haushalt = (select id from public.haushalte where name = 'Zuhause')`), '1');
+    });
+
+    test('Vorhandene Zutaten bleiben unverändert', { skip: ohne }, () => {
+      hoch(A, [{ sammlung: 'zutaten', id: 'ingwer', daten: { id: 'ingwer', name: 'Ingwer', art: 'gemuese' }, geloescht: false, basis: 0 }]);
+      const e = speichern({ zutaten: [{ id: 'ingwer', name: 'INGWER!', art: 'sonstiges' }] });
+      assert.deepEqual(e.zutaten, [{ id: 'ingwer', ok: true, neu: false }]);
+      const d = runter(A, 0, 1000).datensaetze.find((x) => x.id === 'ingwer');
+      assert.deepEqual([d.version, d.daten.name, d.daten.art], [1, 'Ingwer', 'gemuese']);
+    });
+
+    test('Wiederholung mit gleicher id und gleichem Inhalt: kein Doppel, keine neue Version', { skip: ohne }, () => {
+      const id = '11111111-1111-4111-8111-111111111111';
+      assert.equal(speichern({ rezepte: [{ id, basis: 0, daten: rezept('Pho') }] }).rezepte[0].version, 1);
+      const nochmal = speichern({ rezepte: [{ id, basis: 0, daten: rezept('Pho') }] }).rezepte[0];
+      assert.deepEqual(nochmal, { id, ok: true, version: 1 });
+      assert.equal(finden('Pho').length, 1);
+    });
+
+    test('Aktualisieren mit passender Version; erstellt bleibt', { skip: ohne }, () => {
+      const { id } = speichern({ rezepte: [{ daten: rezept('Chili') }] }).rezepte[0];
+      const erstellt = lesen(id).daten.erstellt;
+      assert.equal(erstellt, undefined); // Verwaltungsfelder gibt rezept_lesen nicht heraus
+      const e = speichern({ rezepte: [{ id, basis: 1, daten: { ...rezept('Chili'), notiz: 'weniger Salz' } }] }).rezepte[0];
+      assert.deepEqual(e, { id, ok: true, version: 2 });
+      const l = lesen(id);
+      assert.equal(l.version, 2);
+      assert.equal(l.daten.notiz, 'weniger Salz');
+      const d = runter(A, 0, 1000).datensaetze.find((x) => x.id === id);
+      assert.ok(d.daten.erstellt <= d.daten.geaendert);
+    });
+
+    test('Veraltete Version: Original bleibt, Claudes Fassung wird Kopie mit Vermerk (nie überschreiben)', { skip: ohne }, () => {
+      const { id } = speichern({ rezepte: [{ daten: rezept('Gulasch') }] }).rezepte[0];
+      // Handy ändert inzwischen (Version 2)
+      const server = runter(A, 0, 1000).datensaetze.find((x) => x.id === id);
+      hoch(A, [{ sammlung: 'rezepte', id, daten: { ...server.daten, notiz: 'vom Handy' }, geloescht: false, basis: 1 }]);
+
+      const e = speichern({ rezepte: [{ id, basis: 1, daten: { ...rezept('Gulasch'), notiz: 'von Claude' } }] }).rezepte[0];
+      assert.equal(e.ok, false);
+      assert.equal(e.version, 1);
+      assert.notEqual(e.kopie, id);
+      assert.equal(lesen(id).daten.notiz, 'vom Handy');
+      assert.equal(lesen(id).version, 2);
+
+      const kopie = runter(A, 0, 1000).datensaetze.find((x) => x.id === e.kopie);
+      assert.match(kopie.daten.name, /^Gulasch \(Änderung vom \d{1,2}\.\d{1,2}\.\)$/);
+      assert.equal(kopie.daten.notiz, 'von Claude');
+      assert.equal(kopie.daten.konflikt.von, id);
+      assert.ok(Number.isSafeInteger(kopie.daten.konflikt.am));
+
+      // Wiederholung: dieselbe Kopie, keine zweite
+      const nochmal = speichern({ rezepte: [{ id, basis: 1, daten: { ...rezept('Gulasch'), notiz: 'von Claude' } }] }).rezepte[0];
+      assert.equal(nochmal.kopie, e.kopie);
+      assert.equal(finden('Gulasch').length, 2);
+      // Veraltete Version, aber gleicher Inhalt wie auf dem Server: kein Konflikt
+      const gleich = speichern({ rezepte: [{ id, basis: 1, daten: { ...rezept('Gulasch'), notiz: 'vom Handy' } }] }).rezepte[0];
+      assert.deepEqual(gleich, { id, ok: true, version: 2 });
+    });
+
+    test('Ändern gewinnt gegen Löschen: gelöschtes Rezept kommt zurück', { skip: ohne }, () => {
+      const { id } = speichern({ rezepte: [{ daten: rezept('Ramen') }] }).rezepte[0];
+      hoch(A, [{ sammlung: 'rezepte', id, daten: { id }, geloescht: true, basis: 1 }]);
+      assert.equal(lesen(id), null);
+      assert.equal(finden('Ramen').length, 0);
+      const e = speichern({ rezepte: [{ id, basis: 1, daten: rezept('Ramen') }] }).rezepte[0];
+      assert.deepEqual(e, { id, ok: true, version: 3 });
+      assert.equal(runter(A, 0, 1000).datensaetze.find((x) => x.id === id).geloescht, false);
+    });
+
+    test('Kann nichts löschen und keine anderen Sammlungen anfassen', { skip: ohne }, () => {
+      hoch(A, [vorlage('77777777-7777-4777-8777-777777777777', 'Teigvorlage')]);
+      const e = speichern({ rezepte: [
+        { id: '77777777-7777-4777-8777-777777777777', basis: 1, daten: rezept('Überschreibt Vorlage?') },
+        { daten: { ...rezept('Weg'), geloescht: true } },
+        { daten: rezept('Weg'), geloescht: true },
+        { daten: rezept('Andere'), sammlung: 'teigvorlagen' },
+      ] }).rezepte;
+      // Gleiche id in einer anderen Sammlung = eigener Datensatz; die Vorlage bleibt
+      assert.equal(e[0].ok, true);
+      const vorlageDanach = runter(A, 0, 1000).datensaetze.find((x) => x.sammlung === 'vorlagen' && x.id === '77777777-7777-4777-8777-777777777777');
+      assert.deepEqual([vorlageDanach.version, vorlageDanach.daten.name], [1, 'Teigvorlage']);
+      assert.deepEqual(e.slice(1).map((x) => x.fehler), ['ungueltig', 'ungueltig', 'ungueltig']);
+      assert.equal(sql(`select count(*) from public.datensaetze where geloescht and geaendert_von is null`), '0');
+      // ohne Konto geschrieben: nur Rezepte und Zutaten (v-c stammt vom gelöschten Konto weiter oben)
+      assert.equal(sql(`select string_agg(distinct sammlung, ',') from public.datensaetze
+        where geaendert_von is null and id <> 'v-c'`), 'rezepte,zutaten');
+    });
+
+    test('Liest nur Rezepte und Zutaten des eigenen Haushalts', { skip: ohne }, () => {
+      hoch(F, [{ sammlung: 'rezepte', id: '22222222-2222-4222-8222-222222222222',
+        daten: { ...rezept('Fremdes Curry'), id: '22222222-2222-4222-8222-222222222222' }, geloescht: false, basis: 0 }]);
+      hoch(F, [{ sammlung: 'zutaten', id: 'fremdzutat', daten: { id: 'fremdzutat', name: 'Fremdzutat' }, geloescht: false, basis: 0 }]);
+      hoch(A, [vorlage('v-curry', 'Curry-Vorlage'), { sammlung: 'mehle', id: 'curry', daten: { id: 'curry', name: 'Curry-Mehl' }, geloescht: false, basis: 0 }]);
+
+      assert.equal(finden('Curry').length, 0);
+      assert.equal(lesen('22222222-2222-4222-8222-222222222222'), null);
+      assert.equal(lesen('v-curry'), null);
+      const namen = json(connector('select connector.zutaten_liste()')).map((z) => z.name);
+      assert.ok(namen.includes('Kokosmilch') && namen.includes('Ingwer'));
+      assert.ok(!namen.includes('Fremdzutat') && !namen.includes('Curry-Mehl'));
+    });
+
+    test('Finden: Teilwort ohne Groß/klein, genaue id, leer = alle; Sonderzeichen wörtlich', { skip: ohne }, () => {
+      const { id } = speichern({ rezepte: [{ daten: rezept('Pasta 100% Vollkorn') }] }).rezepte[0];
+      assert.deepEqual(finden('VOLLKORN').map((r) => r.id), [id]);
+      assert.deepEqual(finden(id).map((r) => r.name), ['Pasta 100% Vollkorn']);
+      assert.deepEqual(finden('0%').map((r) => r.id), [id]);
+      assert.equal(finden('_').length, 0);
+      const r = finden('vollkorn')[0];
+      assert.deepEqual(Object.keys(r).sort(), ['art', 'id', 'kategorie', 'name', 'version']);
+      assert.ok(json(connector(`select connector.rezepte_finden('')`)).length >= 5);
+      assert.ok(json(connector(`select connector.rezepte_finden()`)).length >= 5);
+    });
+
+    test('Unbrauchbare Rezepte werden einzeln abgewiesen, mit Grund', { skip: ohne }, () => {
+      const k = rezept('K');
+      const gruende = speichern({ rezepte: [
+        'kein Objekt',
+        { daten: k, extra: 1 },
+        { id: 'keine-uuid', daten: k },
+        { id: '33333333-3333-4333-8333-33333333333A', daten: k },
+        { basis: -1, daten: k },
+        { basis: 1.5, daten: k },
+        { daten: [] },
+        { daten: { ...k, unbekannt: 1 } },
+        { daten: { ...k, art: 'grillen' } },
+        { daten: { ...k, name: '   ' } },
+        { daten: { ...k, name: 'x'.repeat(81) } },
+        { daten: { ...k, portionen: undefined } },
+        { daten: { ...k, portionen: 0 } },
+        { daten: { ...k, portionen: '4' } },
+        { daten: { ...k, quelle: 'hand' } },
+        { daten: { ...k, quelle: undefined } },
+        { daten: { ...k, status: 'lecker' } },
+        { daten: { ...k, notiz: 'x'.repeat(2001) } },
+        { daten: { ...k, kategorie: 'Pasta!' } },
+        { daten: { ...k, zutaten: [{ zutat: 'a b', menge: 1 }] } },
+        { daten: { ...k, zutaten: [{ zutat: 'salz', menge: -1 }] } },
+        { daten: { ...k, zutaten: [{ zutat: 'salz', name: 'Salz' }] } },
+        { daten: { ...k, zutaten: [{ zutat: 'salz', regel: 'quadratisch' }] } },
+        { daten: { ...k, zutaten: Array.from({ length: 81 }, () => ({ zutat: 'salz' })) } },
+        { daten: { ...k, schritte: ['ok', 3] } },
+        { daten: { ...k, schritte: [''] } },
+        { daten: { ...k, schrittzutaten: [[]] } },
+        { daten: { ...k, schrittzutaten: [[{ zutat: 'pfeffer' }], []] } },
+        { daten: { ...k, schrittzutaten: [[{ zutat: 'linsen' }, { zutat: 'linsen' }], []] } },
+        { daten: { ...k, schrittzutaten: [[{ zutat: 'linsen', menge: 0 }], []] } },
+        { daten: { ...k, teig: {} } },
+        { daten: { ...k, art: 'backen', portionen: undefined } },
+        { daten: { ...k, notiz: 'x'.repeat(99_000), schritte: ['ä'.repeat(500), 'b'] } },
+      ] }).rezepte;
+      assert.ok(gruende.every((x) => x.ok === false && x.fehler === 'ungueltig'), JSON.stringify(gruende));
+      assert.deepEqual(gruende.map((x) => x.grund), [
+        'eintrag', 'eintrag', 'id', 'id', 'basis', 'basis', 'daten', 'unbekanntes Feld unbekannt', 'art', 'name', 'name',
+        'portionen', 'portionen', 'portionen', 'quelle', 'quelle', 'status', 'notiz', 'kategorie',
+        'zutaten', 'zutaten', 'zutaten', 'zutaten', 'zutaten', 'schritte', 'schritte',
+        'schrittzutaten', 'schrittzutaten', 'schrittzutaten', 'schrittzutaten', 'teig', 'teig', 'zu groß',
+      ]);
+      assert.equal(finden('K').filter((r) => r.name === 'K').length, 0);
+    });
+
+    test('Gültige Varianten: Teilmengen je Schritt, Back-Rezept, nach Geschmack', { skip: ohne }, () => {
+      const e = speichern({ rezepte: [
+        { daten: { ...rezept('Brühe'), schrittzutaten: [[{ zutat: 'linsen', menge: 100 }], [{ zutat: 'linsen' }]] } },
+        { daten: { ...rezept('Ohne Zuordnung'), schrittzutaten: null, zutaten: [{ zutat: 'salz', menge: null, einheit: '', regel: 'fix' }] } },
+        { daten: { art: 'backen', name: 'Pizza', quelle: 'import', status: 'testen', teig: { mehle: [] }, mehl: 500,
+          modus: 'teiglinge', teiglinge: { anzahl: 4, gewicht: 250 }, zutaten: [], schritte: [] } },
+      ] }).rezepte;
+      assert.deepEqual(e.map((x) => x.ok), [true, true, true]);
+    });
+
+    test('Zu viel auf einmal und falsche Form werden ganz abgelehnt', { skip: ohne }, () => {
+      assert.match(fehler(() => speichern({ rezepte: Array.from({ length: 51 }, (_, i) => ({ daten: rezept(`R${i}`) })) })), /Höchstens 50/);
+      assert.match(fehler(() => speichern({ zutaten: Array.from({ length: 201 }, (_, i) => ({ id: `z${i}`, name: `Z${i}` })) })), /Höchstens 50/);
+      assert.match(fehler(() => speichern([])), /Erwartet/);
+      assert.match(fehler(() => speichern({ rezepte: {} })), /Erwartet/);
+      const z = speichern({ zutaten: [{ id: 'Groß', name: 'Groß' }, { id: 'ok', name: ' ' }, { id: 'ok', name: 'Ok', art: 'stein' }, { id: 'ok', name: 'Ok', x: 1 }] }).zutaten;
+      assert.deepEqual(z.map((x) => x.grund), ['id', 'name', 'art', 'zutat']);
+    });
+
+    test('Ohne freigegebenen Haushalt geht nichts; höchstens ein Haushalt freigegeben', { skip: ohne }, () => {
+      sql(`update public.haushalte set connector = false`);
+      try {
+        assert.match(fehler(() => connector('select connector.zutaten_liste()')), /Kein Haushalt/);
+        assert.match(fehler(() => speichern({ rezepte: [{ daten: rezept('Nirgends') }] })), /Kein Haushalt/);
+        assert.match(fehler(() => sql(`update public.haushalte set connector = true`)), /haushalte_ein_connector/);
+      } finally {
+        sql(`update public.haushalte set connector = (name = 'Zuhause')`);
+      }
+      // Ein Handy kann die Freigabe nicht setzen
+      assert.match(fehler(() => als(F, `update public.haushalte set connector = true`)), /permission denied/);
+    });
+
+    test('Erneutes Ausführen des Skripts lässt Anmeldung und Freigabe stehen', { skip: ohne }, () => {
+      sql(`alter role kochbuch_connector login`);
+      try {
+        sql(schema);
+        assert.equal(sql(`select rolcanlogin from pg_roles where rolname = 'kochbuch_connector'`), 't');
+        assert.equal(sql(`select name from public.haushalte where connector`), 'Zuhause');
+        assert.equal(sql(`select rolconnlimit, array_to_string(rolconfig, ',') from pg_roles where rolname = 'kochbuch_connector'`),
+          '3|statement_timeout=10s');
+      } finally {
+        sql(`alter role kochbuch_connector nologin`);
+      }
+    });
   });
 
   if (modus === 'streng') test('Automatische RLS: nicht von außen ausführbar, wirkt aber weiter', { skip: ohne }, () => {
