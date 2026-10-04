@@ -120,7 +120,7 @@ export function zeigeTeigrechner(ziel, { abgleich: bereich = null } = {}) {
   wurzel.addEventListener('change', beiAuswahl);
   wurzel.addEventListener('click', beiKlick);
   // Kochen (Etappe 3): eigene Oberfläche in rezepte/kochen.js, hier nur Einstieg und Rückweg
-  startKochen(wurzel, { zurueck: () => zeige('liste'), beiOeffnen: () => { ansicht = 'kochen'; } });
+  startKochen(wurzel, { zurueck: () => zeige('liste'), beiOeffnen: () => { ansicht = 'kochen'; }, rueckgaengig: zeigeRueckgaengig });
   wischen = erstelleWischen(wurzel, {
     beiEnde() {
       if (nachholen) datenAktualisiert();

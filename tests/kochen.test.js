@@ -152,3 +152,78 @@ test('Status und Notiz speichern sich über das Rezept; „neu“ und Sterne ble
   assert.equal(alleRezepte(s, 'kochen').length, 1);
   assert.equal(s.offene('rezepte').length, 1);
 });
+
+// ---------- Zutaten je Schritt ----------
+
+const mitSchrittzutaten = () => ({
+  art: 'kochen', name: 'Nudeln', kategorie: 'pasta', portionen: 2,
+  zutaten: [
+    { name: 'Wasser', menge: 2000, einheit: 'ml' },
+    { name: 'Spaghetti', menge: 200, einheit: 'g' },
+    { name: 'Eier', menge: 2, einheit: 'Stück', regel: 'ganz' },
+  ],
+  schritte: ['Wasser aufsetzen', '', 'Spaghetti kochen', 'Rest vom Wasser zugeben'],
+  schrittzutaten: [
+    [{ name: 'Wasser', menge: 1500 }],
+    [{ name: 'Eier' }],                // gehört zum leeren Schritt, der wegfällt
+    [{ name: 'Spaghetti' }, { name: 'Wasser' }, { name: 'Wasser' }],
+    [{ name: 'Wasser', menge: 500 }, { zutat: 'gibtsnicht' }, { name: 'Spaghetti', menge: -3 }],
+  ],
+});
+
+test('Zutaten je Schritt: Namen werden zu ids, leere Schritte nehmen ihre Einträge mit, Unsinn fällt weg', () => {
+  const s = neuerSpeicher();
+  const r = holeRezept(s, speichereRezept(s, mitSchrittzutaten()).id);
+  assert.deepEqual(r.schritte, ['Wasser aufsetzen', 'Spaghetti kochen', 'Rest vom Wasser zugeben']);
+  assert.deepEqual(r.schrittzutaten, [
+    [{ zutat: 'wasser', menge: 1500 }],
+    [{ zutat: 'spaghetti' }, { zutat: 'wasser' }],  // doppelt nur einmal
+    [{ zutat: 'wasser', menge: 500 }],               // fremde Zutat und negative Menge weg
+  ]);
+});
+
+test('Zutaten je Schritt: ohne Einträge fehlt das Feld (Rückfall auf die Namenssuche)', () => {
+  const s = neuerSpeicher();
+  const ohne = { ...mitSchrittzutaten(), schrittzutaten: undefined };
+  assert.equal(holeRezept(s, speichereRezept(s, ohne).id).schrittzutaten, undefined);
+  const leer = { ...mitSchrittzutaten(), schrittzutaten: [[], [], []] };
+  assert.equal(holeRezept(s, speichereRezept(s, leer).id).schrittzutaten, undefined);
+  const kaputt = { ...mitSchrittzutaten(), schrittzutaten: 'x' };
+  assert.equal(holeRezept(s, speichereRezept(s, kaputt).id).schrittzutaten, undefined);
+});
+
+test('Zutaten je Schritt: Teilmengen skalieren mit den Portionen, ohne Teilmenge gilt die ganze Menge', () => {
+  const s = neuerSpeicher();
+  const r = holeRezept(s, speichereRezept(s, mitSchrittzutaten()).id);
+  const bei = (portionen) => skaliere(r, { portionen }).schritte;
+  assert.deepEqual(bei(2)[0], [{ zutat: 'wasser', menge: 1500, einheit: 'ml' }]);
+  assert.deepEqual(bei(4)[0], [{ zutat: 'wasser', menge: 3000, einheit: 'ml' }]);
+  assert.equal(bei(4)[2][0].menge, 1000);                   // Rest vom Wasser
+  assert.equal(bei(1)[1][0].menge, 100);                    // ganze Menge Spaghetti
+  assert.equal(bei(4)[1][1].menge, 4000);                   // Wasser ohne Teilmenge = ganze Menge
+  assert.equal(skaliere(holeRezept(s, speichereRezept(s, curry()).id), { portionen: 4 }).schritte, null);
+});
+
+test('Zutaten je Schritt: Teilmenge folgt der Regel der Zutat (fix bleibt, ganz rundet)', () => {
+  const r = {
+    art: 'kochen', portionen: 2,
+    zutaten: [{ zutat: 'backpulver', menge: 1, einheit: 'TL', regel: 'fix' }, { zutat: 'eier', menge: 3, einheit: 'Stück', regel: 'ganz' }],
+    schrittzutaten: [[{ zutat: 'backpulver', menge: 1 }, { zutat: 'eier', menge: 1 }]],
+  };
+  const s = skaliere(r, { portionen: 4 }).schritte[0];
+  assert.equal(s[0].menge, 1);
+  assert.equal(s[1].menge, 2);
+});
+
+test('Rezept löschen und „Rückgängig“: gleicher Inhalt, gleiche id', () => {
+  const s = neuerSpeicher();
+  const id = speichereRezept(s, mitSchrittzutaten()).id;
+  const alt = s.hole('rezepte', id);
+  s.loesche('rezepte', id);
+  assert.equal(holeRezept(s, id), null);
+  s.speichere('rezepte', alt);
+  const neu = holeRezept(s, id);
+  assert.equal(neu.name, 'Nudeln');
+  assert.deepEqual(neu.schrittzutaten, holeRezept(s, id).schrittzutaten);
+  assert.equal(alleRezepte(s).length, 1);
+});

@@ -6,6 +6,10 @@
 //   portionen + portionsart ('personen' | 'stueck' | 'laibe') – bei Kochen Pflicht, bei Backen optional
 //   zutaten      [{ zutat: Katalog-id, menge: Zahl | null („nach Geschmack“), einheit, regel }]
 //   schritte     [Text] – kurz, ein Handgriff pro Schritt (Abhaken wird nicht gespeichert)
+//   schrittzutaten  [[{ zutat, menge? }]] – je Schritt (gleiche Reihenfolge wie `schritte`) die Zutaten dieses
+//                Schritts: `zutat` = Katalog-id einer Zutat des Rezepts, `menge` = Teilmenge (gleiche Einheit,
+//                skaliert mit den Portionen); ohne `menge` gilt die ganze Menge. Fehlt das Feld ganz, sucht die
+//                Oberfläche die Zutaten über ihren Namen im Schrittext (Rückfall, siehe liste.js).
 //   status       'erprobt' | 'testen'      notiz (kurz)      quelle 'claude' | 'import' | 'hand'
 //   nur Backen:  teig, mehl, modus, teiglinge – wie bei den Teigvorlagen; Mehl, Wasser, Salz usw. rechnet
 //                der Teigrechner, `zutaten` sind nur das Übrige (Belag …) und skalieren mit dem Mehl
@@ -53,6 +57,7 @@ const MAX_ZUTATEN = 80;
 const MAX_SCHRITTE = 60;
 const MAX_SCHRITT = 500;
 const MAX_NOTIZ = 2000;
+const MAX_SCHRITTZUTATEN = 20;
 const MAX_ZAHL = 100_000;
 const MAX_PORTIONEN = 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -84,8 +89,9 @@ export function bereinigeRezept(roh) {
   if (!backen && portionen === null) return null;
 
   const zutaten = bereinigeZutaten(roh.zutaten ?? []);
-  const schritte = bereinigeSchritte(roh.schritte ?? []);
-  if (!zutaten || !schritte) return null;
+  const geprueft = bereinigeSchritte(roh.schritte ?? [], roh.schrittzutaten, zutaten);
+  if (!zutaten || !geprueft) return null;
+  const { schritte, schrittzutaten } = geprueft;
 
   const quelle = QUELLEN.includes(roh.quelle) ? roh.quelle : 'hand';
   const status = STATUS.includes(roh.status) ? roh.status : quelle === 'import' ? 'testen' : 'erprobt';
@@ -102,6 +108,7 @@ export function bereinigeRezept(roh) {
     portionsart: PORTIONSARTEN.some((p) => p.id === roh.portionsart) ? roh.portionsart : 'personen',
     zutaten,
     schritte,
+    ...(schrittzutaten ? { schrittzutaten } : {}),
     status,
     notiz,
     quelle,
@@ -140,15 +147,35 @@ function bereinigeZutaten(liste) {
   return sauber;
 }
 
-function bereinigeSchritte(liste) {
+/**
+ * Schritte (leere fallen weg) samt den Zutaten je Schritt. Die Zutaten-Liste hat danach genau so viele
+ * Einträge wie die Schritte; Verweise auf Zutaten, die das Rezept nicht hat, und unsinnige Teilmengen
+ * fallen weg. Sind es insgesamt keine, fehlt `schrittzutaten` (→ Namenssuche als Rückfall).
+ */
+function bereinigeSchritte(liste, roheZutaten, zutaten) {
   if (!Array.isArray(liste) || liste.length > MAX_SCHRITTE) return null;
-  const sauber = [];
-  for (const s of liste) {
-    if (typeof s !== 'string') return null;
+  const imRezept = new Set((zutaten ?? []).map((z) => z.zutat));
+  const schritte = [];
+  const je = [];
+  liste.forEach((s, i) => {
+    if (typeof s !== 'string') return;
     const t = text(s, MAX_SCHRITT);
-    if (t) sauber.push(t); // leere Schritte fallen weg
-  }
-  return sauber;
+    if (!t) return;
+    schritte.push(t);
+    const gesehen = new Set();
+    const eintraege = [];
+    const roh = Array.isArray(roheZutaten) && Array.isArray(roheZutaten[i]) ? roheZutaten[i] : [];
+    for (const e of roh.slice(0, MAX_SCHRITTZUTATEN)) {
+      if (!e || typeof e !== 'object' || !imRezept.has(e.zutat) || gesehen.has(e.zutat)) continue;
+      const menge = e.menge === undefined || e.menge === null ? null : zahl(e.menge, 0, MAX_ZAHL);
+      if (e.menge !== undefined && e.menge !== null && menge === null) continue;
+      gesehen.add(e.zutat);
+      eintraege.push(menge === null ? { zutat: e.zutat } : { zutat: e.zutat, menge });
+    }
+    je.push(eintraege);
+  });
+  if (liste.some((s) => typeof s !== 'string')) return null;
+  return { schritte, schrittzutaten: je.some((e) => e.length) ? je : null };
 }
 
 /**
@@ -171,7 +198,16 @@ export function loeseNamenAuf(roh, katalog) {
     const { name, art, ...rest } = z;
     return { ...rest, zutat: treffer.eintrag.id };
   });
-  return { roh: { ...roh, zutaten }, neu };
+  // Zutaten je Schritt dürfen auch `name` statt `zutat` haben; sie verweisen nur auf Zutaten des Rezepts (kein neuer Eintrag)
+  const schrittzutaten = Array.isArray(roh.schrittzutaten)
+    ? roh.schrittzutaten.map((je) => (Array.isArray(je) ? je.map((e) => {
+      if (!e || typeof e !== 'object' || e.zutat !== undefined) return e;
+      const treffer = findeOderNeu(liste, e.name);
+      const { name, art, ...rest } = e;
+      return treffer ? { ...rest, zutat: treffer.eintrag.id } : rest;
+    }) : je))
+    : roh.schrittzutaten;
+  return { roh: { ...roh, zutaten, ...(schrittzutaten !== undefined ? { schrittzutaten } : {}) }, neu };
 }
 
 // ---------- Speichern ----------

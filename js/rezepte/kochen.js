@@ -24,6 +24,7 @@ const NOTIZ_PAUSE = 500; // ms nach dem letzten Tippen, dann wird die Notiz gesp
 let wurzel = null;
 let zurueckZurStartseite = () => {};
 let beiOeffnen = () => {};
+let rueckgaengig = () => {};  // zeigt die Leiste „Rückgängig“ (kommt aus ansicht.js)
 let seite = 'liste';        // 'liste' | 'rezept'
 let rezeptId = null;
 let suche = '';
@@ -34,11 +35,13 @@ const erledigt = new Map();      // rezept-id → Set der abgehakten Schritte (N
 
 const kochrezepte = () => alleRezepte(speicher, 'kochen');
 
-/** Einmal beim Start: ziel = Element der App, zurueck = zurück zur Startseite, beiOeffnen = Kochen wurde geöffnet. */
-export function startKochen(ziel, { zurueck, beiOeffnen: oeffnen }) {
+/** Einmal beim Start: ziel = Element der App, zurueck = zurück zur Startseite, beiOeffnen = Kochen wurde geöffnet,
+ *  rueckgaengig(hinweis, f) = Leiste „Rückgängig“ nach dem Löschen. */
+export function startKochen(ziel, { zurueck, beiOeffnen: oeffnen, rueckgaengig: leiste }) {
   wurzel = ziel;
   zurueckZurStartseite = zurueck;
   beiOeffnen = oeffnen;
+  rueckgaengig = leiste;
   wurzel.addEventListener('click', beiKlick);
   wurzel.addEventListener('input', beiEingabe);
   wurzel.addEventListener('change', beiAenderung);
@@ -98,7 +101,9 @@ function listeInnenHtml(ordnung) {
     const neu = !bekannt.has(r.id);
     const info = [portionenText(r.portionen, r.portionsart), r.status === 'testen' ? 'Noch testen' : null]
       .filter(Boolean).join(' · ');
-    return `<li class="vorlage-zeile">
+    // Nach links wischen zeigt den roten Knopf „Löschen“ hinter der Zeile (Geste: teig/wischen.js)
+    return `<li class="vorlage-zeile" data-zeile>
+        <button type="button" class="vorlage-weg" data-kweg="${text(r.id)}" tabindex="-1">Löschen</button>
         <div class="vorlage-inhalt">
           <button type="button" class="vorlage-oeffnen" data-koeffnen="${text(r.id)}">
             <span class="vorlage-name">${text(r.name)}${neu ? ' <span class="neu">Neu</span>' : ''}</span>
@@ -135,7 +140,10 @@ function rezeptHtml(r) {
   const portionen = portionenWahl.get(r.id) ?? r.portionen;
   const skaliert = skaliere(r, { portionen });
   const haken = erledigt.get(r.id) ?? new Set();
-  const mengen = mengenInSchritten(r.schritte, skaliert.zutaten, katalog);
+  // Zutaten je Schritt aus dem Rezept; fehlen sie, über den Namen im Schrittext suchen
+  const mengen = skaliert.schritte
+    ? skaliert.schritte.map((je) => je.map((m) => ({ ...m, name: zutatName(katalog, m.zutat) })))
+    : mengenInSchritten(r.schritte, skaliert.zutaten, katalog);
   const jetzt = r.schritte.findIndex((_, i) => !haken.has(i)); // erster offener Schritt = der aktuelle
   const stern = rezeptFavoriten(speicher).includes(r.id);
   const vermerk = vermerkText(r, alleRezepte(speicher));
@@ -287,6 +295,8 @@ function beiKlick(ereignis) {
     schalteRezeptFavorit(speicher, stern.dataset.kstern);
     return seite === 'rezept' ? zeichneKochen({ scroll: true }) : zeichneListeNeu();
   }
+  const weg = ziel.closest('[data-kweg]');
+  if (weg) return entferne(weg.dataset.kweg);
   const schritt = ziel.closest('[data-kschritt]');
   if (schritt) return schalteSchritt(Number(schritt.dataset.kschritt));
   const status = ziel.closest('[data-kstatus]');
@@ -313,6 +323,18 @@ function zurueck() {
     return window.scrollTo(0, 0);
   }
   zurueckZurStartseite();
+}
+
+/** Rezept per Wischen löschen – ohne Nachfrage, dafür mit „Rückgängig“ (der alte Inhalt kommt als neue Änderung zurück). */
+function entferne(id) {
+  const rezept = holeRezept(speicher, id);
+  const alt = speicher.hole(SAMMLUNG, id);
+  if (!rezept || !alt || !speicher.loesche(SAMMLUNG, id)) return;
+  zeichneListeNeu();
+  rueckgaengig(`„${rezept.name}“ gelöscht`, () => {
+    speicher.speichere(SAMMLUNG, alt);
+    zeichneListeNeu();
+  });
 }
 
 /** Konflikt-Kopie behalten: Speichern entfernt den Vermerk. */

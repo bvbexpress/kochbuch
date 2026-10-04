@@ -38,13 +38,34 @@ export function skaliereMenge(menge, regel, faktor) {
   return regel === 'ganz' ? Math.max(1, Math.round(roh)) : roh;
 }
 
-/** Rezept auf ein Ziel umrechnen: { faktor, portionen (oder null), zutaten } – das Rezept bleibt unverändert. */
+/**
+ * Zutaten je Schritt auf einen Faktor umrechnen: je Schritt [{ zutat, menge, einheit }].
+ * Eine Teilmenge skaliert wie die Zutat im Rezept (gleiche Regel), ohne Teilmenge gilt die ganze Menge.
+ * Hat das Rezept keine Zutaten je Schritt: null (die Oberfläche sucht dann über die Namen).
+ */
+export function skaliereSchritte(rezept, faktor) {
+  if (!rezept.schrittzutaten) return null;
+  const zutaten = new Map(rezept.zutaten.map((z) => [z.zutat, z]));
+  return rezept.schrittzutaten.map((je) => je
+    .filter((e) => zutaten.has(e.zutat))
+    .map((e) => {
+      const z = zutaten.get(e.zutat);
+      const menge = e.menge === undefined ? z.menge : e.menge;
+      return { zutat: z.zutat, menge: skaliereMenge(menge, z.regel, faktor), einheit: z.einheit };
+    }));
+}
+
+/**
+ * Rezept auf ein Ziel umrechnen: { faktor, portionen (oder null), zutaten, schritte } – das Rezept bleibt
+ * unverändert. `schritte` = Zutaten je Schritt (siehe skaliereSchritte) oder null.
+ */
 export function skaliere(rezept, ziel) {
   const faktor = faktorFuer(rezept, ziel);
   return {
     faktor,
     portionen: rezept.portionen ? rezept.portionen * faktor : null,
     zutaten: rezept.zutaten.map((z) => ({ ...z, menge: skaliereMenge(z.menge, z.regel, faktor) })),
+    schritte: skaliereSchritte(rezept, faktor),
   };
 }
 
