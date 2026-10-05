@@ -278,11 +278,14 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   >
   > **Status** ist „erprobt“, weil wir es gerade gekocht haben.
   >
-  > **Import:** Hängt eine Wissensbasis-Datei mit alten Rezepten am Projekt, speichere daraus nur auf mein Zeichen und nur Koch-Rezepte,
-  > in Gruppen zu höchstens 10, jedes Rezept mit `quelle: import` und Status „noch testen“ (bleibt so, bis wir es gekocht haben). Vorher
-  > `rezepte_finden`, damit nichts doppelt entsteht. Schritte und vorhandene Mengen übernimmst du unverändert. **Fehlende Mengen darfst du als
-  > Vorschlag ergänzen**, passend zu unseren Vorlieben und Learnings aus der Wissensbasis. **Vermerke in der Notiz, was du ergänzt hast**
-  > („Mengen ergänzt: Salz, Öl“). Ist die Portionszahl unklar, frage nach.
+  > **Import:** Alte Rezepte (aus alten ChatGPT-Chats) füge ich als Text in den Chat ein. Auf mein Zeichen speicherst du sie, nur
+  > Koch-Rezepte, mit `quelle: import` und Status „noch testen“ (bleibt so, bis wir es gekocht haben). Vorher `rezepte_finden`, damit nichts
+  > doppelt entsteht. Schritte und vorhandene Mengen übernimmst du unverändert. **Fehlende oder als „unklar“ markierte Mengen ergänzt du als
+  > Vorschlag**, passend zu unseren Vorlieben und Learnings, und **vermerkst in der Notiz, was du ergänzt hast** („Mengen ergänzt: Salz,
+  > Öl“). Ist die Portionszahl unklar, frage nach. Kochen wir direkt nach einem eingefügten alten Rezept, speicherst du am Ende den
+  > gekochten Endstand ganz normal als „erprobt“ (steht es schon als Import im Kochbuch, aktualisiere es).
+  >
+  > **Fehler:** Ist der Connector nicht erreichbar oder schlägt das Speichern fehl, sag es mir ausdrücklich.
 
 **Bauplan** (je Schritt ein PR mit Tests). **Reihenfolge: zuerst der Connector, der Back-Umbau danach.**
 Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben anfangs ca. 50 $):
@@ -357,8 +360,8 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
   Wasser, Gemüsebrühe; **Grundzutat im Singular, Form in der Einheit**; id = `zutatId(Name)`; Kopie in `supabase/functions/kochbuch/index.ts`,
   Test vergleicht beide). **Nach Änderung der Liste die Funktion im Dashboard neu einfügen**, sonst kennt der Connector die neuen
   Namen nicht (er legt sie dann selbst mit gleicher id an – kein Schaden). Bereits gespeicherte Zutaten mit gleicher id behalten die
-  eingebaute Schreibweise. Namensregeln stehen in der Projektanweisung (oben). Danach ergänzt: **Gerät je Schritt** (`schrittgeraete`, siehe „Rezept“), die App startet immer mit der Startseite, weitere oft benutzte Zutaten (Reis, Pasta, Linsen, Kräuter, Hack …); Projektanweisung überarbeitet (Prüfen vor dem Vorschlag, Endstand zeigen und bestätigen lassen, Import mit ergänzten Mengen und Vermerk in der Notiz). Der Satz zum Kochbuch-Code ist gestrichen, solange „Rezept einfügen“ (Schritt 3) fehlt. Import: Datei im Projekt, Claude liest sie und
-  speichert per `rezept_anlegen` in Gruppen mit `quelle: import`.
+  eingebaute Schreibweise. Namensregeln stehen in der Projektanweisung (oben). Danach ergänzt: **Gerät je Schritt** (`schrittgeraete`, siehe „Rezept“), die App startet immer mit der Startseite, weitere oft benutzte Zutaten (Reis, Pasta, Linsen, Kräuter, Hack …); Projektanweisung überarbeitet (Prüfen vor dem Vorschlag, Endstand zeigen und bestätigen lassen, Import mit ergänzten Mengen und Vermerk in der Notiz, Fehler ausdrücklich melden). Der Satz zum Kochbuch-Code ist gestrichen, solange „Rezept einfügen“ (Schritt 3) fehlt. Import: alte Rezepte als Text im Chat, Claude
+  speichert per `rezept_anlegen` mit `quelle: import`.
 - **3** „Rezept einfügen“ (Notlösung) und einfacher Editor (Notiz, Status, Schritte). 3–5 $.
 - **4** Neue Startseite (Kacheln, Suche über alles, „Weiter mit“). 3–5 $.
 - **5** Umzug Vorlagen → Back-Rezepte, Back-Rezeptansicht. 5–8 $.
