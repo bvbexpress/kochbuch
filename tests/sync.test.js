@@ -460,15 +460,15 @@ test('Rezepte: gleichzeitige Änderung wird Kopie; dieselbe neue Zutat auf beide
   assert.ok(aufB.find((x) => x.id !== r.id).konflikt);
 
   // zwei neue Zutaten mit demselben Namen, gleichzeitig angelegt: gleiche id, gleicher Inhalt
-  const ergebnisA = speichereRezept(a.speicher, { art: 'kochen', name: 'Dal', portionen: 2, zutaten: [{ name: 'Rote Linsen' }] });
-  const ergebnisB = speichereRezept(b.speicher, { art: 'kochen', name: 'Suppe', portionen: 2, zutaten: [{ name: 'rote linsen' }] });
+  const ergebnisA = speichereRezept(a.speicher, { art: 'kochen', name: 'Dal', portionen: 2, zutaten: [{ name: 'Tempeh' }] });
+  const ergebnisB = speichereRezept(b.speicher, { art: 'kochen', name: 'Suppe', portionen: 2, zutaten: [{ name: 'tempeh' }] });
   assert.ok(ergebnisA && ergebnisB);
   await a.sync.abgleichen();
   const nachB = await b.sync.abgleichen();
   await a.sync.abgleichen();
   assert.equal(nachB.ok, true);
-  assert.equal(a.speicher.alle('zutaten').filter((z) => z.id === 'rotelinsen').length, 1);
-  assert.equal(b.speicher.alle('zutaten').filter((z) => z.id === 'rotelinsen').length, 1);
+  assert.equal(a.speicher.alle('zutaten').filter((z) => z.id === 'tempeh').length, 1);
+  assert.equal(b.speicher.alle('zutaten').filter((z) => z.id === 'tempeh').length, 1);
   assert.equal(a.speicher.alle('zutaten').length, b.speicher.alle('zutaten').length);
   assert.equal(a.speicher.offene('zutaten').length + b.speicher.offene('zutaten').length, 0);
 });

@@ -10,6 +10,9 @@
 //                Schritts: `zutat` = Katalog-id einer Zutat des Rezepts, `menge` = Teilmenge (gleiche Einheit,
 //                skaliert mit den Portionen); ohne `menge` gilt die ganze Menge. Fehlt das Feld ganz, sucht die
 //                Oberfläche die Zutaten über ihren Namen im Schrittext (Rückfall, siehe liste.js).
+//   schrittgeraete  [Text] – optional je Schritt (gleiche Reihenfolge wie `schritte`) das Gerät: „Wok“, „Ofen 200 °C Umluft“,
+//                leer = keins. Fehlt das Feld, hat kein Schritt ein Gerät. Die Liste aller Geräte oben im Rezept
+//                entsteht daraus (`geraeteListe` in liste.js), sie wird nicht gespeichert.
 //   status       'erprobt' | 'testen'      notiz (kurz)      quelle 'claude' | 'import' | 'hand'
 //   nur Backen:  teig, mehl, modus, teiglinge – wie bei den Teigvorlagen; Mehl, Wasser, Salz usw. rechnet
 //                der Teigrechner, `zutaten` sind nur das Übrige (Belag …) und skalieren mit dem Mehl
@@ -58,6 +61,7 @@ const MAX_SCHRITTE = 60;
 const MAX_SCHRITT = 500;
 const MAX_NOTIZ = 2000;
 const MAX_SCHRITTZUTATEN = 20;
+const MAX_GERAET = 40;
 const MAX_ZAHL = 100_000;
 const MAX_PORTIONEN = 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -89,9 +93,9 @@ export function bereinigeRezept(roh) {
   if (!backen && portionen === null) return null;
 
   const zutaten = bereinigeZutaten(roh.zutaten ?? []);
-  const geprueft = bereinigeSchritte(roh.schritte ?? [], roh.schrittzutaten, zutaten);
+  const geprueft = bereinigeSchritte(roh.schritte ?? [], roh.schrittzutaten, zutaten, roh.schrittgeraete);
   if (!zutaten || !geprueft) return null;
-  const { schritte, schrittzutaten } = geprueft;
+  const { schritte, schrittzutaten, schrittgeraete } = geprueft;
 
   const quelle = QUELLEN.includes(roh.quelle) ? roh.quelle : 'hand';
   const status = STATUS.includes(roh.status) ? roh.status : quelle === 'import' ? 'testen' : 'erprobt';
@@ -109,6 +113,7 @@ export function bereinigeRezept(roh) {
     zutaten,
     schritte,
     ...(schrittzutaten ? { schrittzutaten } : {}),
+    ...(schrittgeraete ? { schrittgeraete } : {}),
     status,
     notiz,
     quelle,
@@ -151,17 +156,20 @@ function bereinigeZutaten(liste) {
  * Schritte (leere fallen weg) samt den Zutaten je Schritt. Die Zutaten-Liste hat danach genau so viele
  * Einträge wie die Schritte; Verweise auf Zutaten, die das Rezept nicht hat, und unsinnige Teilmengen
  * fallen weg. Sind es insgesamt keine, fehlt `schrittzutaten` (→ Namenssuche als Rückfall).
+ * Dasselbe für das Gerät je Schritt (`schrittgeraete`): leere Schritte nehmen ihren Eintrag mit, ohne Gerät fehlt das Feld.
  */
-function bereinigeSchritte(liste, roheZutaten, zutaten) {
+function bereinigeSchritte(liste, roheZutaten, zutaten, roheGeraete) {
   if (!Array.isArray(liste) || liste.length > MAX_SCHRITTE) return null;
   const imRezept = new Set((zutaten ?? []).map((z) => z.zutat));
   const schritte = [];
   const je = [];
+  const geraete = [];
   liste.forEach((s, i) => {
     if (typeof s !== 'string') return;
     const t = text(s, MAX_SCHRITT);
     if (!t) return;
     schritte.push(t);
+    geraete.push(Array.isArray(roheGeraete) ? text(roheGeraete[i], MAX_GERAET) ?? '' : '');
     const gesehen = new Set();
     const eintraege = [];
     const roh = Array.isArray(roheZutaten) && Array.isArray(roheZutaten[i]) ? roheZutaten[i] : [];
@@ -175,7 +183,11 @@ function bereinigeSchritte(liste, roheZutaten, zutaten) {
     je.push(eintraege);
   });
   if (liste.some((s) => typeof s !== 'string')) return null;
-  return { schritte, schrittzutaten: je.some((e) => e.length) ? je : null };
+  return {
+    schritte,
+    schrittzutaten: je.some((e) => e.length) ? je : null,
+    schrittgeraete: geraete.some(Boolean) ? geraete : null,
+  };
 }
 
 /**

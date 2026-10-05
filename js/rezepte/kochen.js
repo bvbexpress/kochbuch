@@ -14,7 +14,7 @@ import { alleZutaten, zutatName } from './katalog.js';
 import { skaliere, mengeText } from './rechner.js';
 import {
   SUCHE_AB, ordneRezepte, rezeptFavoriten, schalteRezeptFavorit, gesehen, markiereGesehen,
-  portionenText, mengenInSchritten,
+  portionenText, mengenInSchritten, geraeteListe,
 } from './liste.js';
 import { vermerkText } from '../teig/vorlagen.js';
 
@@ -149,6 +149,7 @@ function rezeptHtml(r) {
   const vermerk = vermerkText(r, alleRezepte(speicher));
   const geaendert = Math.abs(portionen - r.portionen) > 0.005;
   const art = r.portionsart;
+  const geraete = geraeteListe(r);
 
   const zutatenZeilen = skaliert.zutaten.map((z) => `
       <li class="zutat">
@@ -161,11 +162,13 @@ function rezeptHtml(r) {
     const chips = mengen[i].map((m) => (m.menge === null
       ? `<span class="menge-chip">${text(m.name)}, <span class="leise">nach Geschmack</span></span>`
       : `<span class="menge-chip"><b class="zahl">${text(mengeText(m.menge, m.einheit))}</b> ${text(m.name)}</span>`)).join('');
+    const geraet = r.schrittgeraete?.[i] ?? '';
     const klasse = fertig ? 'erledigt' : i === jetzt ? 'jetzt' : '';
     return `<li class="schritt ${klasse}">
         <button type="button" class="schritt-knopf" data-kschritt="${i}" aria-pressed="${fertig}" ${i === jetzt ? 'aria-current="step"' : ''}>
           <span class="schritt-nr" aria-hidden="true">${fertig ? '✓' : i + 1}</span>
           <span class="schritt-inhalt">
+            ${geraet ? `<span class="geraet-tag">${text(geraet)}</span>` : ''}
             <span class="schritt-text">${text(s)}</span>
             ${chips ? `<span class="schritt-mengen">${chips}</span>` : ''}
           </span>
@@ -206,6 +209,7 @@ function rezeptHtml(r) {
         <textarea class="eingabe notiz-feld" data-knotiz rows="2" maxlength="2000"
                   placeholder="z. B. weniger Salz …" autocomplete="off">${text(r.notiz)}</textarea></label>
     </section>
+    ${geraete.length ? `<p class="geraete" aria-label="Geräte"><span class="leise">Geräte:</span> ${geraete.map((g) => `<span class="geraet-tag">${text(g)}</span>`).join(' ')}</p>` : ''}
     <details class="klappe" data-kklappe="zutaten" ${zutatenOffen ? 'open' : ''}>
       <summary>Zutaten (${r.zutaten.length})</summary>
       <div class="klappe-inhalt"><ul class="zutaten-liste">${zutatenZeilen || '<li class="leise">Keine Zutaten.</li>'}</ul></div>

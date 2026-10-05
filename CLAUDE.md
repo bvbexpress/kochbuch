@@ -36,7 +36,7 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
 - **Startseite = Vorlagenliste**, gruppiert nach Kategorien (Brot, Brötchen, Pizza, Focaccia, Gebäck; alte eigene
   Vorlagen ohne Kategorie unter „Ohne Kategorie“ am Ende), Favoriten (Stern) oben, Suche ab 10 Vorlagen.
   Zeile zeigt dieselben Werte wie der Rechner (`zusammenfassung` in `startseite.js`).
-- Ein Tipper öffnet den **Rechner**: Name als Überschrift, Zurück-Pfeil. Beim App-Start direkt die zuletzt benutzte Vorlage.
+- Ein Tipper öffnet den **Rechner**: Name als Überschrift, Zurück-Pfeil. Die App startet **immer mit der Liste** (Startseite), nie in der zuletzt benutzten Vorlage (geändert nach Schritt 9; die Geräte-Einstellung `teig.stand` wird nicht mehr gelesen oder geschrieben).
 - **Modus je Vorlage** (`modus`: `mehl` | `teiglinge`), nur in der Klappe „Vorlage“ bzw. beim Speichern änderbar.
   Ohne `modus` (alt): Teiglinge-Angabe vorhanden = Teiglinge-Modus. Teiglinge-Angabe nur im Teiglinge-Modus gespeichert.
 - **Speichern:** Nur echte Rezeptänderungen zählen als „geändert“ (nicht Mehl, Anzahl, Gewicht). Karte mit Name,
@@ -171,7 +171,7 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
 
 **Aufbau der App**
 - **Startseite:** zwei große Kacheln „Backen“ und „Kochen“, darunter eine Suche über alle Rezepte und „Weiter mit: …“
-  (die letzten 2 geöffneten Rezepte). Das automatische Öffnen der zuletzt benutzten Vorlage beim Start entfällt.
+  (die letzten 2 geöffneten Rezepte). Das automatische Öffnen der zuletzt benutzten Vorlage beim Start ist schon weg (Schritt 9).
 - **Backen** öffnet **direkt die Back-Rezeptliste** (keine Zwischenebene), oben dauerhaft ein Knopf „Teigrechner“
   (Schnellrechnung ohne Rezept, mit Knopf „Als Rezept speichern“).
 - **Kochen:** Rezepte nach Kategorien (Currys, Pasta, Suppen, Aufläufe …), innerhalb alphabetisch, Favoriten oben, Suche.
@@ -189,6 +189,12 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   ihren Eintrag mit. Beim Speichern darf statt `zutat` auch `name` stehen (wie bei den Zutaten). **Rückfall:** hat kein Schritt einen
   Eintrag, fehlt das Feld, und die App sucht die Zutaten über den Namen im Schrittext (`mengenInSchritten`). Gilt für das ganze
   Rezept: sobald ein Schritt Einträge hat, gelten nur die Einträge (ein Schritt ohne Eintrag zeigt dann keine Mengen).
+- **Gerät je Schritt** (`schrittgeraete`, parallel zu `schritte`, optional): je Schritt ein kurzer Text (≤ 40 Zeichen), z. B. „Wok“,
+  „Beschichtete Pfanne“, „Ofen 200 °C Umluft“, „Airfryer“; leerer Text = kein Gerät. Fehlt das Feld, hat kein Schritt ein Gerät.
+  Die App zeigt ein kleines Kennzeichen am Schritt und oben im Rezept die **Liste aller Geräte** (ohne Doppelte, Reihenfolge des ersten
+  Auftretens, `geraeteListe` in `liste.js`, nicht gespeichert). Leere Schritte nehmen ihren Eintrag mit (`bereinigeSchritte`).
+  Der Connector prüft streng (gleiche Länge wie `schritte`, Fehler statt Kürzen); wer `schritte` ändert und das Rezept Geräte hat, muss
+  `schrittgeraete` neu mitliefern (sonst verrutschen sie). Die Datenbank-Prüfung `intern.connector_pruefe_rezept` kennt das Feld.
 - `status`: **erprobt** | **noch testen**, ein Tipper. **Per Connector gespeicherte Rezepte sind „erprobt“**, „noch testen“ nur für
   importierte (`quelle: import`). Kurze Notiz am Rezept. „Neu“-Markierung bis zum ersten Öffnen
   (Geräte-Einstellung mit gesehenen `id`s; beim Umzug gelten alle alten Vorlagen als gesehen).
@@ -225,7 +231,7 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   entspricht (Deno kann keine Dateien aus `js/` laden → Prüflogik als Kopie + Test gegen das Original, wie bei `ping.test.js`).
   Funktion ohne Supabase-JWT-Prüfung (`verify_jwt` aus), dafür eigene Prüfung des Schlüssels.
 - **Werkzeuge (mehr gibt es nicht):** `zutaten_liste` (nur Namen), `rezept_anlegen` (auch mehrere, für den Import; **immer mit `schrittzutaten`**, geprüft wie in `bereinigeRezept`),
-  `rezept_aktualisieren` (nur mit der Version, auf der Claude aufbaut; sonst Konfliktkopie, nie überschreiben; ändert Claude Schritte oder Zutaten, liefert es `schrittzutaten` neu mit),
+  `rezept_aktualisieren` (nur mit der Version, auf der Claude aufbaut; sonst Konfliktkopie, nie überschreiben; ändert Claude Schritte oder Zutaten, liefert es `schrittzutaten` (und bei Rezepten mit Geräten `schrittgeraete`) neu mit),
   `rezepte_finden` (Titel/`id`, ein Rezept per `id`). **Kein Löschen, kein Zugriff auf andere Tabellen, Konten, Vorrat.**
 - **Sicherheit:** langer Zufallsschlüssel nur als Supabase-Secret (nie im Repo, Repo ist öffentlich). Schreiben nur über
   eine Datenbank-Funktion `rezept_speichern`, aufrufbar von einer **eigenen Datenbank-Rolle**, die nur diese Funktion ausführen
@@ -237,12 +243,21 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   Plan B (Schlüssel im Pfad, OAuth) entfällt.
 - **Notlösung „Rezept einfügen“:** Kochbuch-Code (derselbe wie beim Connector, geprüft wie Links) in der App einfügen.
   Claude gibt ihn aus, wenn der Connector fehlt. Auch Weg für den späteren Import der bisherigen Sammlung.
-- **Projektanweisung (für das Claude-Projekt „Kochen & Backen“, Stand Schritt 9):**
-  > **Kochbuch speichern.** Wenn wir ein Gericht zu Ende gekocht haben und es gelungen ist, frage genau einmal: „Soll ich das Rezept
-  > im Kochbuch speichern?“ Speichere nur nach einem Ja. Das Kochbuch ist nur für Koch-Rezepte (Backen/Teig folgt später).
+- **Projektanweisung (für das Claude-Projekt „Kochen & Backen“, Stand nach Schritt 9):**
+  > **Kochbuch.** Das Kochbuch der Familie hat Werkzeuge (`zutaten_liste`, `rezepte_finden`, `rezept_anlegen`, `rezept_aktualisieren`).
+  > Es ist nur für Koch-Rezepte (Backen/Teig folgt später). Löschen geht nicht.
   >
-  > **Reihenfolge:** 1. `zutaten_liste` abfragen (immer zuerst, jedes Mal neu). 2. `rezepte_finden` – gibt es das Rezept schon,
-  > dann `rezept_aktualisieren` (mit der Version, auf der du aufbaust), nicht neu anlegen. 3. Erst dann `rezept_anlegen`.
+  > **Vor dem Vorschlag:** Bevor du ein Gericht vorschlägst, prüfe mit `rezepte_finden`, ob es schon im Kochbuch steht. Wenn ja, kochen wir
+  > nach diesem Rezept; Änderungen schlägst du nur gezielt vor (z. B. aus den Notizen), nicht das ganze Rezept neu.
+  >
+  > **Speichern:** Gespeichert wird der **tatsächlich gekochte Endstand**: alle Korrekturen aus dem Gespräch eingearbeitet, die Schritte in
+  > der Reihenfolge, in der wir es wirklich gemacht haben, Learnings als kurze Notiz („weniger Salz“, „10 Min. länger“), Gerät pro Schritt.
+  > Ist es gelungen, **zeige mir das fertige Rezept kurz zusammengefasst** (Name, Portionen, Zutaten mit Mengen, Schritte, Geräte, Notiz)
+  > und frage, ob du es so speichern sollst. **Gespeichert wird erst nach meiner Bestätigung.** Hat sich ein bestehendes Rezept beim
+  > Kochen geändert, **aktualisiere es** (`rezept_aktualisieren` mit der Version aus `rezepte_finden`), statt ein neues anzulegen.
+  >
+  > **Reihenfolge der Werkzeuge:** 1. `zutaten_liste` abfragen (immer zuerst, jedes Mal neu). 2. `rezepte_finden`. 3. Dann
+  > `rezept_anlegen` oder `rezept_aktualisieren`.
   >
   > **Namen der Zutaten:** Benutze genau die Namen aus `zutaten_liste`. Fehlt eine Zutat, lege sie mit einem einfachen Namen neu an:
   > Grundzutat im **Singular**, ohne Zusatz zur Form oder Menge. Die Form steckt in der **Einheit**, nicht im Namen:
@@ -257,15 +272,17 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   > **Schritte** kurz und kleinteilig, ein Handgriff pro Schritt. **Zu jedem Schritt `schrittzutaten`:** alle Zutaten, die in diesem
   > Schritt gebraucht werden (Verweis auf die Zutat des Rezepts). Wird eine Zutat auf mehrere Schritte verteilt, gib bei jedem Schritt
   > die Teilmenge an (z. B. Wasser 1500 ml in Schritt 2, 500 ml in Schritt 4), sonst gilt die ganze Menge. Schritte ohne Zutaten
-  > bekommen eine leere Liste.
+  > bekommen eine leere Liste. **Zu jedem Schritt `schrittgeraete`** (gleiche Länge wie die Schritte): das Gerät kurz mit Einstellung,
+  > z. B. „Wok“, „Beschichtete Pfanne“, „Ofen 200 °C Umluft“, „Airfryer“; leerer Text, wenn kein Gerät gebraucht wird. Ändern
+  > sich die Schritte beim Aktualisieren, liefere `schrittzutaten` und `schrittgeraete` neu mit.
   >
-  > **Status** ist „erprobt“, weil wir es gerade gekocht haben. Übernimm unsere Anpassungen („weniger Salz“) als Notiz.
+  > **Status** ist „erprobt“, weil wir es gerade gekocht haben.
   >
   > **Import:** Hängt eine Wissensbasis-Datei mit alten Rezepten am Projekt, speichere daraus nur auf mein Zeichen und nur Koch-Rezepte,
-  > in Gruppen zu höchstens 10, jedes Rezept mit `quelle: import` (dann „noch testen“). Vorher `rezepte_finden`, damit nichts doppelt
-  > entsteht. Mengen und Schritte nur übernehmen, nichts dazuerfinden; ist die Portionszahl unklar, frage nach.
-  >
-  > Ist der Connector nicht erreichbar, gib das Rezept als Kochbuch-Code aus, den ich in die App einfüge.
+  > in Gruppen zu höchstens 10, jedes Rezept mit `quelle: import` und Status „noch testen“ (bleibt so, bis wir es gekocht haben). Vorher
+  > `rezepte_finden`, damit nichts doppelt entsteht. Schritte und vorhandene Mengen übernimmst du unverändert. **Fehlende Mengen darfst du als
+  > Vorschlag ergänzen**, passend zu unseren Vorlieben und Learnings aus der Wissensbasis. **Vermerke in der Notiz, was du ergänzt hast**
+  > („Mengen ergänzt: Salz, Öl“). Ist die Portionszahl unklar, frage nach.
 
 **Bauplan** (je Schritt ein PR mit Tests). **Reihenfolge: zuerst der Connector, der Back-Umbau danach.**
 Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben anfangs ca. 50 $):
@@ -336,11 +353,11 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
   Einmal von Hand in Deno mit `npm:postgres` und Passwort-Anmeldung gegen ein lokales PostgreSQL geprüft.
 - **9** Praxistest, Projektanweisung ins Claude-Projekt, Import der bisherigen Sammlung (zuerst per Connector, sonst „Einfügen“). 2–5 $.
   ***(Code fertig, Praxis läuft)*** Connector läuft (Verbindung, vier Werkzeuge, Testrezept auf beiden iPhones). Eingebauter Katalog um
-  `KOCH_ZUTATEN` erweitert (45 Standardzutaten: Öle, Zwiebel/Knoblauch/Ingwer, Würzsaucen, Säuren, Grundgewürze, Dosenware, Gemüse,
+  `KOCH_ZUTATEN` erweitert (etwa 75 Standardzutaten: Öle, Zwiebel/Knoblauch/Ingwer, Würzsaucen, Säuren, Grundgewürze, Dosenware, Gemüse,
   Wasser, Gemüsebrühe; **Grundzutat im Singular, Form in der Einheit**; id = `zutatId(Name)`; Kopie in `supabase/functions/kochbuch/index.ts`,
   Test vergleicht beide). **Nach Änderung der Liste die Funktion im Dashboard neu einfügen**, sonst kennt der Connector die neuen
   Namen nicht (er legt sie dann selbst mit gleicher id an – kein Schaden). Bereits gespeicherte Zutaten mit gleicher id behalten die
-  eingebaute Schreibweise. Namensregeln stehen in der Projektanweisung (oben). Import: Datei im Projekt, Claude liest sie und
+  eingebaute Schreibweise. Namensregeln stehen in der Projektanweisung (oben). Danach ergänzt: **Gerät je Schritt** (`schrittgeraete`, siehe „Rezept“), die App startet immer mit der Startseite, weitere oft benutzte Zutaten (Reis, Pasta, Linsen, Kräuter, Hack …); Projektanweisung überarbeitet (Prüfen vor dem Vorschlag, Endstand zeigen und bestätigen lassen, Import mit ergänzten Mengen und Vermerk in der Notiz). Der Satz zum Kochbuch-Code ist gestrichen, solange „Rezept einfügen“ (Schritt 3) fehlt. Import: Datei im Projekt, Claude liest sie und
   speichert per `rezept_anlegen` in Gruppen mit `quelle: import`.
 - **3** „Rezept einfügen“ (Notlösung) und einfacher Editor (Notiz, Status, Schritte). 3–5 $.
 - **4** Neue Startseite (Kacheln, Suche über alles, „Weiter mit“). 3–5 $.
@@ -469,7 +486,7 @@ Gespeicherte Daten beim Laden immer auf Gültigkeit prüfen.
 - **Küchentauglich:** große Schaltflächen (mind. **56 px**, `--tipp-hoehe`), mit einer Hand und Teig an den Fingern bedienbar.
 - **Live-Ergebnisse** beim Tippen, kein „Berechnen“-Knopf.
 - Häufigster Weg (Vorlage laden → Mehlmenge ändern → ablesen) in **höchstens zwei Tippern**
-  (Vorlage in der Liste antippen → Menge eintippen; die zuletzt benutzte ist beim Start schon offen).
+  (Vorlage in der Liste antippen → Menge eintippen).
 - **Bildschirm bleibt an**, solange die App offen ist.
 - **Nur das Nötige sichtbar**, Zusatzoptionen einklappbar (`details.klappe`).
 - Zahlenfelder mit `inputmode="decimal"`, Komma und Punkt erlaubt; beim Antippen wird der Inhalt markiert.

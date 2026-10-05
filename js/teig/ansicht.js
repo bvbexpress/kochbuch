@@ -23,12 +23,9 @@ import {
   loescheEigeneVorlage,
   holeEigeneVorlage,
   stelleEigeneVorlageWiederHer,
-  istGueltigerTeig,
-  normalisiereTeig,
   eigeneVorlagen,
   pruefeUebernahme,
   uebernehmeVorlagen,
-  bereinigeTeiglinge,
   bereinigeKategorie,
   modusVon,
   ordneVorlagen,
@@ -76,9 +73,7 @@ const HINWEISE = {
 };
 
 // Geräte-Einstellungen (werden nicht synchronisiert)
-const STAND = 'teig.stand';            // der zuletzt offene Teig
 const MEHL_EINHEIT = 'teig.mehlEinheit'; // Mehlanteile in 'prozent' oder 'gramm'
-const TEIGLINGE_ALT = 'teig.teiglinge'; // bis Schritt 11: Teiglinge-Modus fürs ganze Gerät (nur noch gelesen)
 const AUFFRISCHUNG = 'teig.auffrischung'; // Starter-Auffrischung: { bedarf, rest, verhaeltnis }
 const VERHAELTNISSE = [[1, 1, 1], [1, 1.5, 1.5], [1, 2.5, 2.5]]; // Schnellwahl Anstellgut:Mehl:Wasser
 const STANDARD_REST = 20;             // g Starter für den Kühlschrank
@@ -108,9 +103,9 @@ export function zeigeTeigrechner(ziel, { abgleich: bereich = null } = {}) {
   wurzel = ziel;
   abgleich = bereich;
   ladeKatalog();
-  // Beim Öffnen direkt die zuletzt benutzte Vorlage, sonst die Liste
-  zustand = letzterStand();
-  ansicht = zustand ? 'rechner' : 'liste';
+  // Die App startet immer mit der Liste (Startseite), nie in der zuletzt benutzten Vorlage
+  zustand = null;
+  ansicht = 'liste';
   zeichne();
   pruefeAdresse();
   window.addEventListener('hashchange', pruefeAdresse);
@@ -164,7 +159,6 @@ export function datenAktualisiert() {
     const neu = vorlage && vorlageZustand(vorlage);
     if (neu && (neu.modus !== zustand.modus || JSON.stringify(neu.teig) !== JSON.stringify(zustand.teig))) {
       zustand = { ...neu, mehl: zustand.mehl, teiglinge: zustand.teiglinge };
-      merkeStand();
     }
   }
   zeichne();
@@ -195,22 +189,6 @@ function neueAnpassung() {
   return { wasser: 0, quellwasser: 0 };
 }
 
-function letzterStand() {
-  const stand = speicher.einstellung(STAND);
-  if (!stand || !istGueltigerTeig(stand.teig) || typeof stand.mehl !== 'number') return null;
-  // Älterer Stand: Modus und Teiglinge-Werte waren eine Geräte-Einstellung
-  const alt = speicher.einstellung(TEIGLINGE_ALT) ?? {};
-  return {
-    vorlageId: typeof stand.vorlageId === 'string' ? stand.vorlageId : null,
-    teig: normalisiereTeig(stand.teig),
-    mehl: stand.mehl,
-    modus: MODI.includes(stand.modus) ? stand.modus : alt.aktiv === true ? 'teiglinge' : 'mehl',
-    teiglinge: bereinigeTeiglinge(stand.teiglinge) ?? bereinigeTeiglinge(alt) ?? { ...STANDARD_TEIGLINGE },
-    geaendert: stand.geaendert === true,
-    anpassung: stand.anpassung ?? neueAnpassung(),
-  };
-}
-
 function mehlEinheit() {
   return speicher.einstellung(MEHL_EINHEIT) === 'gramm' ? 'gramm' : 'prozent';
 }
@@ -231,10 +209,6 @@ function auffrischung() {
 
 function setzeAuffrischung(aenderung) {
   speicher.setzeEinstellung(AUFFRISCHUNG, { ...auffrischung(), ...aenderung });
-}
-
-function merkeStand() {
-  speicher.setzeEinstellung(STAND, zustand);
 }
 
 function aktuelleVorlage() {
@@ -364,7 +338,6 @@ function oeffneVorlage(id) {
   // Gleiche Vorlage nochmal geöffnet: den aktuellen Stand (z. B. die Menge) behalten
   if (zustand?.vorlageId !== id) {
     zustand = vorlageZustand(vorlage);
-    merkeStand();
   }
   zeige('rechner');
 }
@@ -938,7 +911,6 @@ function beiEingabe(ereignis) {
   }
   if (!NUR_MENGE.has(feld)) zustand.geaendert = true;
   aktualisiere();
-  merkeStand();
 }
 
 /** Neue Mehlmischung übernehmen und das Wasser als Vorschlag anpassen. */
@@ -1029,7 +1001,6 @@ function beiAuswahl(ereignis) {
     teig.zusaetze = [...teig.zusaetze, { id, name: sorte.name, prozent: NEUER_ZUSATZ, wasser: sorte.wasser }];
   }
   zustand.geaendert = true;
-  merkeStand();
   zeichne();
 }
 
@@ -1147,7 +1118,6 @@ function entferneZusatz(index) {
 
 function geaendertUndNeu() {
   zustand.geaendert = true;
-  merkeStand();
   zeichne();
 }
 
@@ -1189,7 +1159,6 @@ function entferneSorte(art, id) {
 
 function ladeUndZeige(vorlage, rueckmeldung = null) {
   zustand = vorlageZustand(vorlage);
-  merkeStand();
   meldung = rueckmeldung;
   zeige('rechner');
 }
@@ -1247,7 +1216,6 @@ function nachDemSpeichern(gespeichert, rueckmeldung) {
   speicherKarte = null;
   zustand.vorlageId = gespeichert.id;
   zustand.geaendert = false;
-  merkeStand();
   meldung = rueckmeldung;
   zeige(zurueckDanach ? 'liste' : 'rechner');
 }
@@ -1272,17 +1240,15 @@ function verwerfeAenderungen() {
   const vorlage = aktuelleVorlage();
   if (vorlage) {
     zustand = vorlageZustand(vorlage);
-    merkeStand();
   } else {
     vergissStand();
   }
   zeige('liste');
 }
 
-/** Kein „zuletzt benutzt“ mehr – die App startet dann mit der Liste. */
+/** Offenen Teig vergessen. Die App startet ohnehin immer mit der Liste. */
 function vergissStand() {
   zustand = null;
-  speicher.setzeEinstellung(STAND, null);
 }
 
 function loescheVorlage() {

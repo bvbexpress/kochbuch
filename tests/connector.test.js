@@ -21,7 +21,7 @@ const quelltext = readFileSync(new URL('../supabase/functions/kochbuch/index.ts'
 const curry = (aenderung = {}) => ({
   name: 'Linsencurry', kategorie: 'currys', portionen: 4,
   zutaten: [
-    { name: 'Rote Linsen', menge: 200, einheit: 'g', art: 'vorrat' },
+    { name: 'Tempeh', menge: 200, einheit: 'g', art: 'vorrat' },
     { name: 'Zwiebel', menge: 1, einheit: '', regel: 'ganz', art: 'gemuese' },
     { name: 'Wasser', menge: 800, einheit: 'ml' },
     { name: 'Salz', menge: null, regel: 'fix' },
@@ -31,7 +31,7 @@ const curry = (aenderung = {}) => ({
   schrittzutaten: [
     [{ name: 'Zwiebel' }],
     [{ name: 'Butter' }],
-    [{ name: 'Rote Linsen' }, { name: 'Wasser', menge: 600 }],
+    [{ name: 'Tempeh' }, { name: 'Wasser', menge: 600 }],
     [{ name: 'Wasser', menge: 200 }, { name: 'Salz' }],
   ],
   ...aenderung,
@@ -83,7 +83,7 @@ function wieDieApp(roh, katalog) {
 }
 
 test('Gültige Rezepte: genau das, was die App selbst daraus macht (und von ihr unverändert übernommen)', () => {
-  const vorhanden = [{ id: 'roteLinsen-alt', name: 'Rote Linsen' }, { id: 'kokosmilch', name: 'Kokosmilch' }];
+  const vorhanden = [{ id: 'tempeh-alt', name: 'Tempeh' }, { id: 'kokosmilch', name: 'Kokosmilch' }];
   const katalog = katalogAus(vorhanden);
   const appKatalog = [...katalogJs.EINGEBAUT, ...vorhanden.map((z) => ({ ...z, art: 'sonstiges' }))];
   const faelle = [
@@ -92,6 +92,8 @@ test('Gültige Rezepte: genau das, was die App selbst daraus macht (und von ihr 
     curry({ quelle: 'import' }),
     curry({ kategorie: 'Currys & Dal', name: '  Curry\tfein  ' }),
     curry({ schrittzutaten: [[], [], [], []] }),
+    curry({ schrittgeraete: ['', 'Beschichtete Pfanne', 'Topf', 'Topf'] }),
+    curry({ schrittgeraete: ['', '', '', ''] }),
     curry({ zutaten: [{ name: 'Kokos-Milch', menge: 400, einheit: 'ml' }, { name: 'Weizen 550', menge: 1, einheit: 'EL' }],
       schritte: ['Alles.'], schrittzutaten: [[{ name: 'kokosmilch', menge: 100 }, { name: 'WEIZEN 550' }]] }),
   ];
@@ -107,12 +109,14 @@ test('Gültige Rezepte: genau das, was die App selbst daraus macht (und von ihr 
   const r = pruefeRezept(curry(), katalog);
   assert.deepEqual(r.neu, []); // Zwiebel, Wasser, Salz sind eingebaut
   assert.equal(r.rezept.zutaten[1].zutat, 'zwiebel');
-  assert.equal(r.rezept.zutaten[0].zutat, 'roteLinsen-alt'); // vorhandene Zutat über den Namen gefunden
+  assert.equal(r.rezept.zutaten[0].zutat, 'tempeh-alt'); // vorhandene Zutat über den Namen gefunden
   assert.equal(r.rezept.zutaten[4].zutat, 'butter'); // eingebaute
-  assert.deepEqual(r.rezept.schrittzutaten[2], [{ zutat: 'roteLinsen-alt' }, { zutat: 'wasser', menge: 600 }]);
+  assert.deepEqual(r.rezept.schrittzutaten[2], [{ zutat: 'tempeh-alt' }, { zutat: 'wasser', menge: 600 }]);
   assert.equal(r.rezept.status, 'erprobt');
   assert.equal(pruefeRezept(curry({ quelle: 'import' }), katalog).rezept.status, 'testen');
   assert.equal(pruefeRezept(curry({ schrittzutaten: [[], [], [], []] }), katalog).rezept.schrittzutaten, undefined);
+  assert.deepEqual(pruefeRezept(curry({ schrittgeraete: [' ', 'Wok', null, 'Ofen 200 °C Umluft'] }), katalog).rezept.schrittgeraete, ['', 'Wok', '', 'Ofen 200 °C Umluft']);
+  assert.equal(pruefeRezept(curry({ schrittgeraete: ['', '', '', ''] }), katalog).rezept.schrittgeraete, undefined, 'kein Gerät = Feld fehlt');
 });
 
 test('Unsinn wird mit verständlichem Grund abgewiesen, nie still repariert', () => {
@@ -151,6 +155,10 @@ test('Unsinn wird mit verständlichem Grund abgewiesen, nie still repariert', ()
   assert.match(grund(curry({ schrittzutaten: [[{ name: 'Zwiebel', menge: 0 }], [], [], []] })), /Schritt 1: menge/);
   assert.match(grund(curry({ schrittzutaten: [[{ name: 'Zwiebel', zutat: 'x', extra: 1 }], [], [], []] })), /Schritt 1/);
   assert.match(grund(curry({ schrittzutaten: ['Zwiebel', [], [], []] })), /keine Liste/);
+  assert.match(grund(curry({ schrittgeraete: ['Wok'] })), /schrittgeraete braucht genau so viele Einträge/);
+  assert.match(grund(curry({ schrittgeraete: 'Wok' })), /schrittgeraete braucht genau so viele Einträge/);
+  assert.match(grund(curry({ schrittgeraete: ['', 'x'.repeat(41), '', ''] })), /Schritt 2: Gerät ist kein kurzer Text/);
+  assert.match(grund(curry({ schrittgeraete: ['', 5, '', ''] })), /Schritt 2: Gerät/);
   assert.match(grund(curry({ status: 'lecker' })), /status/);
   assert.match(grund(curry({ quelle: 'hand' })), /quelle/);
   assert.match(grund(curry({ notiz: 'x'.repeat(2001) })), /notiz/);
@@ -165,11 +173,11 @@ test('Unsinn wird mit verständlichem Grund abgewiesen, nie still repariert', ()
 
 test('Gespeichertes Rezept → Form für Claude (Namen statt ids) → wieder gespeichert = gleich', () => {
   const katalog = katalogAus([{ id: 'wasser', name: 'Wasser' }, { id: 'zwiebel', name: 'Zwiebel' }, { id: 'salz', name: 'Salz' },
-    { id: 'rotelinsen', name: 'Rote Linsen' }]);
+    { id: 'tempeh', name: 'Tempeh' }]);
   const { rezept } = pruefeRezept(curry(), katalog);
   const fuer = fuerClaude('id-1', 3, rezept, katalog);
   assert.deepEqual(fuer.zutaten[1], { name: 'Zwiebel', menge: 1, einheit: '', regel: 'ganz' });
-  assert.deepEqual(fuer.schrittzutaten[2], [{ name: 'Rote Linsen' }, { name: 'Wasser', menge: 600 }]);
+  assert.deepEqual(fuer.schrittzutaten[2], [{ name: 'Tempeh' }, { name: 'Wasser', menge: 600 }]);
   const { id, version, ...zurueck } = fuer;
   assert.deepEqual([id, version], ['id-1', 3]);
   assert.deepEqual(pruefeRezept(zurueck, katalog).rezept, rezept);
@@ -177,6 +185,8 @@ test('Gespeichertes Rezept → Form für Claude (Namen statt ids) → wieder ges
   const alt = fuerClaude('id-2', 1, { art: 'kochen', name: 'Alt', portionen: 2, zutaten: [{ zutat: 'geheim', menge: 1 }], schritte: ['a'] }, katalog);
   assert.deepEqual([alt.zutaten[0].name, alt.schrittzutaten, alt.quelle], ['geheim', null, 'hand']);
   assert.match(fuerClaude('id-3', 1, { art: 'backen', name: 'Brot' }, katalog).hinweis, /Back-Rezept/);
+  assert.equal(alt.schrittgeraete, null);
+  assert.deepEqual(fuerClaude('id-4', 1, { ...rezept, schrittgeraete: ['', 'Wok', '', ''] }, katalog).schrittgeraete, ['', 'Wok', '', '']);
 });
 
 test('Katalog: eingebaute gelten mit festem Namen, kaputte Einträge fallen weg', () => {
@@ -310,11 +320,11 @@ test('rezept_anlegen: speichert geprüft, legt neue Zutaten an, kein zweites Rez
   assert.deepEqual([gut.gespeichert, gut.version, gut.name], [true, 1, 'Linsencurry']);
   assert.match(kaputt.fehler.join(' '), /portionen/);
   assert.match(doppelt.fehler.join(' '), /doppelt/);
-  assert.deepEqual(r.daten.neue_zutaten, ['Rote Linsen']);
+  assert.deepEqual(r.daten.neue_zutaten, ['Tempeh']);
   // An die Datenbank geht genau ein Speichern mit den geprüften Daten
   const speichern = db.aufrufe.filter((a) => a[0] === 'rezept_speichern');
   assert.equal(speichern.length, 1);
-  assert.deepEqual(speichern[0][1].zutaten.map((z) => z.id), ['rotelinsen']);
+  assert.deepEqual(speichern[0][1].zutaten.map((z) => z.id), ['tempeh']);
   assert.deepEqual(speichern[0][1].rezepte, [{ daten: pruefeRezept(curry(), katalogAus([{ id: 'ingwer', name: 'Ingwer' }])).rezept }]);
 
   // Wiederholung (z. B. nach Netzfehler): kein Doppel, Hinweis mit id und version
@@ -363,6 +373,35 @@ test('rezepte_finden: Liste nach Name, ein Rezept per id mit Namen und Version',
   assert.match((await rufe(db, 'rezepte_finden', { suche: 5 })).text, /Text/);
 });
 
+test('Gerät je Schritt: anlegen, ändern, ohne Geräte ändern; Schritte nur mit neuen Geräten', async () => {
+  const db = nachgebauteDb();
+  const geraete = ['', 'Beschichtete Pfanne', 'Topf', 'Topf'];
+  const { id } = (await rufe(db, 'rezept_anlegen', { rezepte: [curry({ schrittgeraete: geraete })] })).daten.rezepte[0];
+  assert.deepEqual(db.rezepte.get(id).daten.schrittgeraete, geraete);
+  assert.deepEqual((await rufe(db, 'rezepte_finden', { id })).daten.schrittgeraete, geraete);
+
+  // Nur das Gerät ändern
+  const n = await rufe(db, 'rezept_aktualisieren', { id, version: 1, schrittgeraete: ['', 'Wok', 'Topf', 'Topf'] });
+  assert.deepEqual([n.daten.gespeichert, n.daten.version], [true, 2]);
+  assert.equal(db.rezepte.get(id).daten.schrittgeraete[1], 'Wok');
+  // Schritte ändern, Geräte vergessen → abgewiesen (sie würden verrutschen)
+  const ohne = await rufe(db, 'rezept_aktualisieren', { id, version: 2, schritte: ['a', 'b'], schrittzutaten: [[], []] });
+  assert.equal(ohne.fehler, true);
+  assert.match(ohne.text, /schrittgeraete neu mitliefern/);
+  // Falsche Länge → abgewiesen
+  assert.match((await rufe(db, 'rezept_aktualisieren', { id, version: 2, schrittgeraete: ['Wok'] })).text, /so viele Einträge/);
+  // Mit neuen Geräten klappt es; alle leer = Feld fehlt
+  const ok = await rufe(db, 'rezept_aktualisieren', { id, version: 2, schritte: ['a', 'b'], schrittzutaten: [[], []], schrittgeraete: ['', ''] });
+  assert.equal(ok.daten.version, 3);
+  assert.equal(db.rezepte.get(id).daten.schrittgeraete, undefined);
+
+  // Rezept ohne Geräte: Schritte ändern geht auch ohne schrittgeraete
+  const { id: id2 } = (await rufe(db, 'rezept_anlegen', { rezepte: [curry({ name: 'Ohne Geräte' })] })).daten.rezepte[0];
+  const frei = await rufe(db, 'rezept_aktualisieren', { id: id2, version: 1, schritte: ['a'], schrittzutaten: [[]] });
+  assert.equal(frei.daten.version, 2);
+  assert.equal(db.rezepte.get(id2).daten.schrittgeraete, undefined);
+});
+
 test('rezept_aktualisieren: nur angegebene Felder, mit Version; sonst Kopie, nie überschreiben', async () => {
   const db = nachgebauteDb();
   const { id } = (await rufe(db, 'rezept_anlegen', { rezepte: [curry({ notiz: 'Alte Notiz' })] })).daten.rezepte[0];
@@ -375,15 +414,15 @@ test('rezept_aktualisieren: nur angegebene Felder, mit Version; sonst Kopie, nie
   // Schritte ändern ohne schrittzutaten → abgewiesen
   assert.match((await rufe(db, 'rezept_aktualisieren', { id, version: 2, schritte: ['Alles kochen.'] })).text, /schrittzutaten neu/);
   const s = await rufe(db, 'rezept_aktualisieren', {
-    id, version: 2, schritte: ['Alles kochen.'], schrittzutaten: [[{ name: 'Rote Linsen' }, { name: 'Ingwer' }]],
+    id, version: 2, schritte: ['Alles kochen.'], schrittzutaten: [[{ name: 'Tempeh' }, { name: 'Ingwer' }]],
   });
   assert.equal(s.fehler, true);
   assert.match(s.text, /„Ingwer“ steht nicht in den Zutaten/);
   const z = await rufe(db, 'rezept_aktualisieren', {
-    id, version: 2, zutaten: [{ name: 'Rote Linsen', menge: 250, einheit: 'g' }, { name: 'Ingwer', menge: 1, einheit: 'TL' }, { name: 'Koriander' }],
-    schritte: ['Alles kochen.'], schrittzutaten: [[{ name: 'Rote Linsen' }, { name: 'Ingwer' }]],
+    id, version: 2, zutaten: [{ name: 'Tempeh', menge: 250, einheit: 'g' }, { name: 'Ingwer', menge: 1, einheit: 'TL' }, { name: 'Kardamom' }],
+    schritte: ['Alles kochen.'], schrittzutaten: [[{ name: 'Tempeh' }, { name: 'Ingwer' }]],
   });
-  assert.deepEqual([z.daten.version, z.daten.neue_zutaten], [3, ['Koriander']]);
+  assert.deepEqual([z.daten.version, z.daten.neue_zutaten], [3, ['Kardamom']]);
   assert.equal(db.rezepte.get(id).daten.notiz, 'Weniger Salz.');
 
   // Veraltete Version: Original bleibt, Änderung wird Kopie

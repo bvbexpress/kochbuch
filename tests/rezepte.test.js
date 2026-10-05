@@ -173,17 +173,17 @@ test('Rezept mit Namen speichern: Zutaten bekommen ids, neue landen im Katalog',
   const r = speichereRezept(s, {
     art: 'kochen', name: 'Dal', portionen: 2,
     zutaten: [
-      { name: 'Rote Linsen', art: 'vorrat', menge: 200, einheit: 'g' },
+      { name: 'Tempeh', art: 'vorrat', menge: 200, einheit: 'g' },
       { name: 'milch', menge: 100, einheit: 'ml' },
-      { name: 'Rote  Linsen', menge: 1, einheit: 'EL' },
+      { name: 'TEMPEH', menge: 1, einheit: 'EL' },
     ],
   });
   assert.match(r.id, /^[0-9a-f-]{36}$/);
-  assert.deepEqual(r.zutaten.map((z) => z.zutat), ['rotelinsen', 'milch', 'rotelinsen']);
+  assert.deepEqual(r.zutaten.map((z) => z.zutat), ['tempeh', 'milch', 'tempeh']);
   assert.equal(s.alle('zutaten').length, 1, 'nur eine neue Zutat, Milch gibt es schon');
   assert.deepEqual(
     (({ id, name, art }) => ({ id, name, art }))(s.alle('zutaten')[0]),
-    { id: 'rotelinsen', name: 'Rote Linsen', art: 'vorrat' },
+    { id: 'tempeh', name: 'Tempeh', art: 'vorrat' },
   );
   assert.equal(holeRezept(s, r.id).name, 'Dal');
   assert.equal(alleRezepte(s, 'backen').length, 0);

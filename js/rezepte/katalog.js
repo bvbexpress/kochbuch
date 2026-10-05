@@ -2,7 +2,7 @@
 //
 // Teigrechner, Rezepte und später der Vorrat verweisen per `id` auf eine Zutat, nie per Freitext.
 // Eingebaut sind die Mehle, Saaten und Zusatzzutaten aus teig/zutaten.js (mit ihren festen ids) und
-// etwa 45 Standardzutaten zum Kochen (KOCH_ZUTATEN).
+// etwa 75 Standardzutaten zum Kochen (KOCH_ZUTATEN).
 // Alles andere entsteht beim Speichern eines Rezepts: unbekannter Name = neuer Eintrag.
 //
 // Die id einer neuen Zutat folgt aus dem Namen (`zutatId`): „Kokosmilch“ → "kokosmilch". Legen zwei
@@ -95,6 +95,38 @@ export const KOCH_ZUTATEN = [
   // Sonstiges
   ['Wasser', 'vorrat'],
   ['Gemüsebrühe', 'vorrat'],
+  // Oft bei uns: Beilagen und Grundlagen
+  ['Vollkornreis', 'vorrat'],
+  ['Basmatireis', 'vorrat'],
+  ['Vollkornpasta', 'vorrat'],
+  ['Spätzle', 'vorrat'],
+  ['Gnocchi', 'vorrat'],
+  ['Rote Linsen', 'vorrat'],
+  ['Berglinsen', 'vorrat'],
+  ['Cashew', 'vorrat'],
+  ['Pinienkern', 'vorrat'],
+  ['Currypaste', 'vorrat'],
+  ['Vegetarisches Hack', 'vorrat'],
+  // Oft bei uns: Gemüse und Obst
+  ['Butternutkürbis', 'gemuese'],
+  ['Zuckerschote', 'gemuese'],
+  ['Rucola', 'gemuese'],
+  ['Romanasalat', 'gemuese'],
+  ['Blumenkohl', 'gemuese'],
+  ['Schalotte', 'gemuese'],
+  ['Limette', 'obst'],
+  ['Zitrone', 'obst'],
+  // Oft bei uns: Milch, Fleisch
+  ['Sahne', 'milchprodukt'],
+  ['Hähnchenbrust', 'fleisch'],
+  ['Rinderhack', 'fleisch'],
+  // Oft bei uns: Gewürze und Kräuter
+  ['Garam Masala', 'gewuerz'],
+  ['Thymian', 'gewuerz'],
+  ['Rosmarin', 'gewuerz'],
+  ['Basilikum', 'gewuerz'],
+  ['Petersilie', 'gewuerz'],
+  ['Koriander', 'gewuerz'],
 ];
 
 /** Eingebaute Zutaten: Mehle, Saaten, Zusätze, Standardzutaten zum Kochen. */

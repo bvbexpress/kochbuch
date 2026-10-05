@@ -579,6 +579,10 @@ for (const [modus, grundausstattung] of Object.entries(MODI)) describe(`Supabase
         { daten: { ...k, schrittzutaten: [[{ zutat: 'pfeffer' }], []] } },
         { daten: { ...k, schrittzutaten: [[{ zutat: 'linsen' }, { zutat: 'linsen' }], []] } },
         { daten: { ...k, schrittzutaten: [[{ zutat: 'linsen', menge: 0 }], []] } },
+        { daten: { ...k, schrittgeraete: ['Wok'] } },
+        { daten: { ...k, schrittgeraete: ['Wok', 3] } },
+        { daten: { ...k, schrittgeraete: ['Wok', 'x'.repeat(41)] } },
+        { daten: { ...k, schrittgeraete: 'Wok' } },
         { daten: { ...k, teig: {} } },
         { daten: { ...k, art: 'backen', portionen: undefined } },
         { daten: { ...k, notiz: 'x'.repeat(99_000), schritte: ['ä'.repeat(500), 'b'] } },
@@ -588,7 +592,8 @@ for (const [modus, grundausstattung] of Object.entries(MODI)) describe(`Supabase
         'eintrag', 'eintrag', 'id', 'id', 'basis', 'basis', 'daten', 'unbekanntes Feld unbekannt', 'art', 'name', 'name',
         'portionen', 'portionen', 'portionen', 'quelle', 'quelle', 'status', 'notiz', 'kategorie',
         'zutaten', 'zutaten', 'zutaten', 'zutaten', 'zutaten', 'schritte', 'schritte',
-        'schrittzutaten', 'schrittzutaten', 'schrittzutaten', 'schrittzutaten', 'teig', 'teig', 'zu groß',
+        'schrittzutaten', 'schrittzutaten', 'schrittzutaten', 'schrittzutaten',
+        'schrittgeraete', 'schrittgeraete', 'schrittgeraete', 'schrittgeraete', 'teig', 'teig', 'zu groß',
       ]);
       assert.equal(finden('K').filter((r) => r.name === 'K').length, 0);
     });
@@ -596,11 +601,12 @@ for (const [modus, grundausstattung] of Object.entries(MODI)) describe(`Supabase
     test('Gültige Varianten: Teilmengen je Schritt, Back-Rezept, nach Geschmack', { skip: ohne }, () => {
       const e = speichern({ rezepte: [
         { daten: { ...rezept('Brühe'), schrittzutaten: [[{ zutat: 'linsen', menge: 100 }], [{ zutat: 'linsen' }]] } },
+        { daten: { ...rezept('Mit Geräten'), schrittgeraete: ['Wok', ''] } },
         { daten: { ...rezept('Ohne Zuordnung'), schrittzutaten: null, zutaten: [{ zutat: 'salz', menge: null, einheit: '', regel: 'fix' }] } },
         { daten: { art: 'backen', name: 'Pizza', quelle: 'import', status: 'testen', teig: { mehle: [] }, mehl: 500,
           modus: 'teiglinge', teiglinge: { anzahl: 4, gewicht: 250 }, zutaten: [], schritte: [] } },
       ] }).rezepte;
-      assert.deepEqual(e.map((x) => x.ok), [true, true, true]);
+      assert.deepEqual(e.map((x) => x.ok), [true, true, true, true]);
     });
 
     test('Zu viel auf einmal und falsche Form werden ganz abgelehnt', { skip: ohne }, () => {
