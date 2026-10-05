@@ -49,7 +49,7 @@ export const ZUTAT_ARTEN = ['mehl', 'saat', 'zusatz', 'gemuese', 'obst', 'fleisc
 export const GRENZEN = {
   name: 80, einheit: 20, zutaten: 80, schritte: 60, schritt: 500, notiz: 2000, schrittzutaten: 20, zahl: 100_000, portionen: 1000,
 };
-/** = EINGEBAUT in js/rezepte/katalog.js (Mehle, Saaten, Zusätze mit festen ids) */
+/** = EINGEBAUT in js/rezepte/katalog.js (Mehle, Saaten, Zusätze mit festen ids, dazu KOCH_ZUTATEN) */
 export const EINGEBAUT = [
   ['tipo00', 'Tipo 00', 'mehl'], ['weizen550', 'Weizen 550', 'mehl'], ['weizenvollkorn', 'Weizenvollkorn', 'mehl'],
   ['dinkelvollkorn', 'Dinkelvollkorn', 'mehl'], ['roggen1150', 'Roggen 1150', 'mehl'], ['roggenvollkorn', 'Roggenvollkorn', 'mehl'],
@@ -59,6 +59,26 @@ export const EINGEBAUT = [
   ['milch', 'Milch', 'zusatz'], ['ei', 'Ei', 'zusatz'], ['butter', 'Butter', 'zusatz'], ['zucker', 'Zucker', 'zusatz'],
   ['honig', 'Honig', 'zusatz'],
 ].map(([id, name, art]) => ({ id, name, art }));
+/** = KOCH_ZUTATEN in js/rezepte/katalog.js (id folgt aus dem Namen) */
+const KOCH_ZUTATEN = [
+  // Öle und Fette
+  ['Olivenöl', 'vorrat'], ['Rapsöl', 'vorrat'], ['Sesamöl', 'vorrat'],
+  // Zwiebeln, Knoblauch, Ingwer
+  ['Zwiebel', 'gemuese'], ['Rote Zwiebel', 'gemuese'], ['Frühlingszwiebel', 'gemuese'], ['Knoblauch', 'gemuese'], ['Ingwer', 'gemuese'],
+  // Würzsaucen
+  ['Sojasauce', 'vorrat'], ['Worcestersauce', 'vorrat'], ['Fischsauce', 'vorrat'], ['Tomatenmark', 'vorrat'], ['Senf', 'vorrat'], ['Sambal Oelek', 'vorrat'],
+  // Säuren
+  ['Zitronensaft', 'vorrat'], ['Limettensaft', 'vorrat'], ['Apfelessig', 'vorrat'], ['Balsamico', 'vorrat'],
+  // Grundgewürze
+  ['Salz', 'gewuerz'], ['Pfeffer', 'gewuerz'], ['Paprikapulver', 'gewuerz'], ['Kreuzkümmel', 'gewuerz'], ['Currypulver', 'gewuerz'], ['Kurkuma', 'gewuerz'], ['Oregano', 'gewuerz'], ['Zimt', 'gewuerz'], ['Chiliflocken', 'gewuerz'],
+  // Dosenware
+  ['Gehackte Tomaten', 'vorrat'], ['Passierte Tomaten', 'vorrat'], ['Kokosmilch', 'vorrat'], ['Kichererbsen', 'vorrat'], ['Kidneybohnen', 'vorrat'], ['Mais', 'vorrat'],
+  // Häufiges Gemüse
+  ['Karotte', 'gemuese'], ['Paprika', 'gemuese'], ['Tomate', 'gemuese'], ['Kartoffel', 'gemuese'], ['Zucchini', 'gemuese'], ['Champignon', 'gemuese'], ['Lauch', 'gemuese'], ['Brokkoli', 'gemuese'], ['Spinat', 'gemuese'],
+  // Sonstiges
+  ['Wasser', 'vorrat'], ['Gemüsebrühe', 'vorrat'],
+].map(([name, art]) => ({ id: zutatId(name), name, art }));
+EINGEBAUT.push(...KOCH_ZUTATEN);
 
 /** = zutatId in js/rezepte/katalog.js: „Weizen 550“ → "weizen550", „Kokos-Milch“ → "kokosmilch". */
 export function zutatId(name) {

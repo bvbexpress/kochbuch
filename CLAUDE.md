@@ -237,18 +237,35 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   Plan B (Schlüssel im Pfad, OAuth) entfällt.
 - **Notlösung „Rezept einfügen“:** Kochbuch-Code (derselbe wie beim Connector, geprüft wie Links) in der App einfügen.
   Claude gibt ihn aus, wenn der Connector fehlt. Auch Weg für den späteren Import der bisherigen Sammlung.
-- **Projektanweisung (Vorschlag, für das Claude-Projekt „Kochen & Backen“):**
-  > Wenn wir ein Gericht oder Backwerk zu Ende gekocht haben und es gelungen ist, frage genau einmal: „Soll ich das Rezept im
-  > Kochbuch speichern?“ Speichere nur nach einem Ja. Frage vorher mit `zutaten_liste` die vorhandenen Zutatennamen ab und
-  > benutze diese Namen. Schreibe Mengen für die Portionszahl, für die wir gekocht haben, mit Einheit und Regel
-  > (linear / ganze Stück / fix). Schreibe Schritte kurz und kleinteilig, ein Handgriff pro Schritt. **Liefere zu jedem Schritt
-  > in `schrittzutaten` alle Zutaten mit, die in diesem Schritt gebraucht werden** (Verweis auf die Zutat des Rezepts); wird eine
-  > Zutat auf mehrere Schritte verteilt, gib bei jedem Schritt die Teilmenge an (z. B. Wasser 1500 ml in Schritt 2, 500 ml in
-  > Schritt 4), sonst gilt die ganze Menge. Schritte ohne Zutaten bekommen eine leere Liste. Status ist „erprobt“,
-  > weil wir es gerade gekocht haben. Übernimm unsere Anpassungen („weniger Salz“) als Notiz. Gibt es das Rezept schon
-  > (`rezepte_finden`), dann aktualisiere es, statt ein neues anzulegen. Ist der Connector nicht erreichbar, gib das Rezept als
-  > Kochbuch-Code aus, den ich in die App einfüge.
-  > (Beim Import alter Rezepte setzt Claude `quelle: import` und „noch testen“.)
+- **Projektanweisung (für das Claude-Projekt „Kochen & Backen“, Stand Schritt 9):**
+  > **Kochbuch speichern.** Wenn wir ein Gericht zu Ende gekocht haben und es gelungen ist, frage genau einmal: „Soll ich das Rezept
+  > im Kochbuch speichern?“ Speichere nur nach einem Ja. Das Kochbuch ist nur für Koch-Rezepte (Backen/Teig folgt später).
+  >
+  > **Reihenfolge:** 1. `zutaten_liste` abfragen (immer zuerst, jedes Mal neu). 2. `rezepte_finden` – gibt es das Rezept schon,
+  > dann `rezept_aktualisieren` (mit der Version, auf der du aufbaust), nicht neu anlegen. 3. Erst dann `rezept_anlegen`.
+  >
+  > **Namen der Zutaten:** Benutze genau die Namen aus `zutaten_liste`. Fehlt eine Zutat, lege sie mit einem einfachen Namen neu an:
+  > Grundzutat im **Singular**, ohne Zusatz zur Form oder Menge. Die Form steckt in der **Einheit**, nicht im Namen:
+  > „Knoblauch“, 2 Zehen (nicht „Knoblauchzehe“, nicht „Knoblauchzehen“); „Zwiebel“, 2 Stück; „Karotte“, 3 Stück;
+  > „Ingwer“, 1 Stück oder 20 g; „Zitronensaft“, 2 EL. Keine Zubereitung im Namen („Zwiebel“, nicht „Zwiebel, gewürfelt“ –
+  > das gehört in den Schritt), keine Marken, keine Mengen. Deutsche Namen ohne Klammern.
+  >
+  > **Mengen** für die Portionszahl, für die wir gekocht haben, mit Einheit und Regel (linear / ganz / fix). „Ganz“ für Dinge,
+  > die man nur als Ganzes nimmt (Ei, Zwiebel), „fix“ für Mengen, die nicht mitwachsen (Lorbeerblatt, Salz nach Geschmack).
+  > Keine Menge = „nach Geschmack“.
+  >
+  > **Schritte** kurz und kleinteilig, ein Handgriff pro Schritt. **Zu jedem Schritt `schrittzutaten`:** alle Zutaten, die in diesem
+  > Schritt gebraucht werden (Verweis auf die Zutat des Rezepts). Wird eine Zutat auf mehrere Schritte verteilt, gib bei jedem Schritt
+  > die Teilmenge an (z. B. Wasser 1500 ml in Schritt 2, 500 ml in Schritt 4), sonst gilt die ganze Menge. Schritte ohne Zutaten
+  > bekommen eine leere Liste.
+  >
+  > **Status** ist „erprobt“, weil wir es gerade gekocht haben. Übernimm unsere Anpassungen („weniger Salz“) als Notiz.
+  >
+  > **Import:** Hängt eine Wissensbasis-Datei mit alten Rezepten am Projekt, speichere daraus nur auf mein Zeichen und nur Koch-Rezepte,
+  > in Gruppen zu höchstens 10, jedes Rezept mit `quelle: import` (dann „noch testen“). Vorher `rezepte_finden`, damit nichts doppelt
+  > entsteht. Mengen und Schritte nur übernehmen, nichts dazuerfinden; ist die Portionszahl unklar, frage nach.
+  >
+  > Ist der Connector nicht erreichbar, gib das Rezept als Kochbuch-Code aus, den ich in die App einfüge.
 
 **Bauplan** (je Schritt ein PR mit Tests). **Reihenfolge: zuerst der Connector, der Back-Umbau danach.**
 Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben anfangs ca. 50 $):
@@ -318,6 +335,13 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
   MCP, Werkzeuge mit nachgebauter Datenbank) und in `tests/datenbank.test.js` ein Durchlauf gegen echtes PostgreSQL.
   Einmal von Hand in Deno mit `npm:postgres` und Passwort-Anmeldung gegen ein lokales PostgreSQL geprüft.
 - **9** Praxistest, Projektanweisung ins Claude-Projekt, Import der bisherigen Sammlung (zuerst per Connector, sonst „Einfügen“). 2–5 $.
+  ***(Code fertig, Praxis läuft)*** Connector läuft (Verbindung, vier Werkzeuge, Testrezept auf beiden iPhones). Eingebauter Katalog um
+  `KOCH_ZUTATEN` erweitert (45 Standardzutaten: Öle, Zwiebel/Knoblauch/Ingwer, Würzsaucen, Säuren, Grundgewürze, Dosenware, Gemüse,
+  Wasser, Gemüsebrühe; **Grundzutat im Singular, Form in der Einheit**; id = `zutatId(Name)`; Kopie in `supabase/functions/kochbuch/index.ts`,
+  Test vergleicht beide). **Nach Änderung der Liste die Funktion im Dashboard neu einfügen**, sonst kennt der Connector die neuen
+  Namen nicht (er legt sie dann selbst mit gleicher id an – kein Schaden). Bereits gespeicherte Zutaten mit gleicher id behalten die
+  eingebaute Schreibweise. Namensregeln stehen in der Projektanweisung (oben). Import: Datei im Projekt, Claude liest sie und
+  speichert per `rezept_anlegen` in Gruppen mit `quelle: import`.
 - **3** „Rezept einfügen“ (Notlösung) und einfacher Editor (Notiz, Status, Schritte). 3–5 $.
 - **4** Neue Startseite (Kacheln, Suche über alles, „Weiter mit“). 3–5 $.
 - **5** Umzug Vorlagen → Back-Rezepte, Back-Rezeptansicht. 5–8 $.

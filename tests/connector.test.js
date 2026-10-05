@@ -105,7 +105,8 @@ test('Gültige Rezepte: genau das, was die App selbst daraus macht (und von ihr 
     assert.deepEqual(rezeptJs.bereinigeRezept(ich.rezept), ich.rezept);
   }
   const r = pruefeRezept(curry(), katalog);
-  assert.deepEqual(r.neu.map((z) => [z.id, z.art]), [['zwiebel', 'gemuese'], ['wasser', 'sonstiges'], ['salz', 'sonstiges']]);
+  assert.deepEqual(r.neu, []); // Zwiebel, Wasser, Salz sind eingebaut
+  assert.equal(r.rezept.zutaten[1].zutat, 'zwiebel');
   assert.equal(r.rezept.zutaten[0].zutat, 'roteLinsen-alt'); // vorhandene Zutat über den Namen gefunden
   assert.equal(r.rezept.zutaten[4].zutat, 'butter'); // eingebaute
   assert.deepEqual(r.rezept.schrittzutaten[2], [{ zutat: 'roteLinsen-alt' }, { zutat: 'wasser', menge: 600 }]);
@@ -134,7 +135,7 @@ test('Unsinn wird mit verständlichem Grund abgewiesen, nie still repariert', ()
   assert.match(grund(curry({ zutaten: [{ name: 'Salz', menge: -1 }] })), /Zutat 1: menge/);
   assert.match(grund(curry({ zutaten: [{ name: 'Salz', regel: 'quadratisch' }] })), /regel/);
   assert.match(grund(curry({ zutaten: [{ name: 'Salz', einheit: 'x'.repeat(21) }] })), /einheit/);
-  assert.match(grund(curry({ zutaten: [{ name: 'Salz', art: 'stein' }] })), /art/);
+  assert.match(grund(curry({ zutaten: [{ name: 'Sternanis', art: 'stein' }] })), /art/);
   assert.match(grund(curry({ zutaten: [{ name: 'Salz', id: 'x' }] })), /unbekannte Felder id/);
   assert.match(grund(curry({ zutaten: [{ zutat: 'erfunden' }] })), /unbekannte Zutat/);
   assert.match(grund(curry({ zutaten: [{ name: 'Salz' }, { name: 'salz' }] })), /doppelt/);
@@ -179,9 +180,10 @@ test('Gespeichertes Rezept → Form für Claude (Namen statt ids) → wieder ges
 });
 
 test('Katalog: eingebaute gelten mit festem Namen, kaputte Einträge fallen weg', () => {
-  const k = katalogAus([{ id: 'butter', name: 'Kräuterbutter' }, { id: 'a b', name: 'X' }, { id: 'ok', name: '!!' }, null, { id: 'ingwer', name: 'Ingwer' }]);
+  const k = katalogAus([{ id: 'butter', name: 'Kräuterbutter' }, { id: 'a b', name: 'X' }, { id: 'ok', name: '!!' }, null, { id: 'ingwer', name: 'Scharfer Ingwer' }, { id: 'sternanis', name: 'Sternanis' }]);
   assert.equal(k.find((z) => z.id === 'butter').name, 'Butter');
-  assert.deepEqual(k.slice(EINGEBAUT.length), [{ id: 'ingwer', name: 'Ingwer' }]);
+  assert.equal(k.find((z) => z.id === 'ingwer').name, 'Ingwer'); // eingebaute behalten ihren Namen
+  assert.deepEqual(k.slice(EINGEBAUT.length), [{ id: 'sternanis', name: 'Sternanis' }]);
   assert.equal(katalogAus(null).length, EINGEBAUT.length);
 });
 
@@ -308,11 +310,11 @@ test('rezept_anlegen: speichert geprüft, legt neue Zutaten an, kein zweites Rez
   assert.deepEqual([gut.gespeichert, gut.version, gut.name], [true, 1, 'Linsencurry']);
   assert.match(kaputt.fehler.join(' '), /portionen/);
   assert.match(doppelt.fehler.join(' '), /doppelt/);
-  assert.deepEqual(r.daten.neue_zutaten, ['Rote Linsen', 'Zwiebel', 'Wasser', 'Salz']);
+  assert.deepEqual(r.daten.neue_zutaten, ['Rote Linsen']);
   // An die Datenbank geht genau ein Speichern mit den geprüften Daten
   const speichern = db.aufrufe.filter((a) => a[0] === 'rezept_speichern');
   assert.equal(speichern.length, 1);
-  assert.deepEqual(speichern[0][1].zutaten.map((z) => z.id), ['rotelinsen', 'zwiebel', 'wasser', 'salz']);
+  assert.deepEqual(speichern[0][1].zutaten.map((z) => z.id), ['rotelinsen']);
   assert.deepEqual(speichern[0][1].rezepte, [{ daten: pruefeRezept(curry(), katalogAus([{ id: 'ingwer', name: 'Ingwer' }])).rezept }]);
 
   // Wiederholung (z. B. nach Netzfehler): kein Doppel, Hinweis mit id und version
@@ -323,13 +325,13 @@ test('rezept_anlegen: speichert geprüft, legt neue Zutaten an, kein zweites Rez
 
   // Neue Zutat nur einmal, auch wenn zwei Rezepte sie brauchen; abgewiesene Rezepte legen keine Zutaten an
   const zwei = await rufe(db, 'rezept_anlegen', { rezepte: [
-    curry({ name: 'A', zutaten: [{ name: 'Kurkuma', art: 'gewuerz' }], schritte: ['a'], schrittzutaten: [[]] }),
-    curry({ name: 'B', zutaten: [{ name: 'kurkuma' }], schritte: ['b'], schrittzutaten: [[{ name: 'Kurkuma' }]] }),
+    curry({ name: 'A', zutaten: [{ name: 'Sternanis', art: 'gewuerz' }], schritte: ['a'], schrittzutaten: [[]] }),
+    curry({ name: 'B', zutaten: [{ name: 'sternanis' }], schritte: ['b'], schrittzutaten: [[{ name: 'Sternanis' }]] }),
     curry({ name: 'C', zutaten: [{ name: 'Safran' }], schritte: ['c'], schrittzutaten: [[]], status: 'x' }),
   ] });
-  assert.deepEqual(zwei.daten.neue_zutaten, ['Kurkuma']);
+  assert.deepEqual(zwei.daten.neue_zutaten, ['Sternanis']);
   assert.equal(db.zutaten.has('safran'), false);
-  assert.deepEqual(db.zutaten.get('kurkuma'), { id: 'kurkuma', name: 'Kurkuma', art: 'gewuerz' });
+  assert.deepEqual(db.zutaten.get('sternanis'), { id: 'sternanis', name: 'Sternanis', art: 'gewuerz' });
 });
 
 test('rezept_anlegen: falsche Form, zu viele, nicht erreichbar', async () => {
