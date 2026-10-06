@@ -47,9 +47,9 @@ export const QUELLEN = ['claude', 'import']; // 'hand' gibt es nur am Handy
 export const ZUTAT_ARTEN = ['mehl', 'saat', 'zusatz', 'gemuese', 'obst', 'fleisch', 'milchprodukt', 'gewuerz', 'vorrat', 'sonstiges'];
 /** = Grenzen in js/rezepte/rezept.js */
 export const GRENZEN = {
-  name: 80, einheit: 20, zutaten: 80, schritte: 60, schritt: 500, notiz: 2000, schrittzutaten: 20, zahl: 100_000, portionen: 1000,
+  name: 80, einheit: 20, zutaten: 80, schritte: 60, schritt: 500, notiz: 2000, schrittzutaten: 20, geraet: 40, zahl: 100_000, portionen: 1000,
 };
-/** = EINGEBAUT in js/rezepte/katalog.js (Mehle, Saaten, Zusätze mit festen ids) */
+/** = EINGEBAUT in js/rezepte/katalog.js (Mehle, Saaten, Zusätze mit festen ids, dazu KOCH_ZUTATEN) */
 export const EINGEBAUT = [
   ['tipo00', 'Tipo 00', 'mehl'], ['weizen550', 'Weizen 550', 'mehl'], ['weizenvollkorn', 'Weizenvollkorn', 'mehl'],
   ['dinkelvollkorn', 'Dinkelvollkorn', 'mehl'], ['roggen1150', 'Roggen 1150', 'mehl'], ['roggenvollkorn', 'Roggenvollkorn', 'mehl'],
@@ -59,6 +59,34 @@ export const EINGEBAUT = [
   ['milch', 'Milch', 'zusatz'], ['ei', 'Ei', 'zusatz'], ['butter', 'Butter', 'zusatz'], ['zucker', 'Zucker', 'zusatz'],
   ['honig', 'Honig', 'zusatz'],
 ].map(([id, name, art]) => ({ id, name, art }));
+/** = KOCH_ZUTATEN in js/rezepte/katalog.js (id folgt aus dem Namen) */
+const KOCH_ZUTATEN = [
+  // Öle und Fette
+  ['Olivenöl', 'vorrat'], ['Rapsöl', 'vorrat'], ['Sesamöl', 'vorrat'],
+  // Zwiebeln, Knoblauch, Ingwer
+  ['Zwiebel', 'gemuese'], ['Rote Zwiebel', 'gemuese'], ['Frühlingszwiebel', 'gemuese'], ['Knoblauch', 'gemuese'], ['Ingwer', 'gemuese'],
+  // Würzsaucen
+  ['Sojasauce', 'vorrat'], ['Worcestersauce', 'vorrat'], ['Fischsauce', 'vorrat'], ['Tomatenmark', 'vorrat'], ['Senf', 'vorrat'], ['Sambal Oelek', 'vorrat'],
+  // Säuren
+  ['Zitronensaft', 'vorrat'], ['Limettensaft', 'vorrat'], ['Apfelessig', 'vorrat'], ['Balsamico', 'vorrat'],
+  // Grundgewürze
+  ['Salz', 'gewuerz'], ['Pfeffer', 'gewuerz'], ['Paprikapulver', 'gewuerz'], ['Kreuzkümmel', 'gewuerz'], ['Currypulver', 'gewuerz'], ['Kurkuma', 'gewuerz'], ['Oregano', 'gewuerz'], ['Zimt', 'gewuerz'], ['Chiliflocken', 'gewuerz'],
+  // Dosenware
+  ['Gehackte Tomaten', 'vorrat'], ['Passierte Tomaten', 'vorrat'], ['Kokosmilch', 'vorrat'], ['Kichererbsen', 'vorrat'], ['Kidneybohnen', 'vorrat'], ['Mais', 'vorrat'],
+  // Häufiges Gemüse
+  ['Karotte', 'gemuese'], ['Paprika', 'gemuese'], ['Tomate', 'gemuese'], ['Kartoffel', 'gemuese'], ['Zucchini', 'gemuese'], ['Champignon', 'gemuese'], ['Lauch', 'gemuese'], ['Brokkoli', 'gemuese'], ['Spinat', 'gemuese'],
+  // Sonstiges
+  ['Wasser', 'vorrat'], ['Gemüsebrühe', 'vorrat'],
+  // Oft bei uns: Beilagen und Grundlagen
+  ['Vollkornreis', 'vorrat'], ['Basmatireis', 'vorrat'], ['Vollkornpasta', 'vorrat'], ['Spätzle', 'vorrat'], ['Gnocchi', 'vorrat'], ['Rote Linsen', 'vorrat'], ['Berglinsen', 'vorrat'], ['Cashew', 'vorrat'], ['Pinienkern', 'vorrat'], ['Currypaste', 'vorrat'], ['Vegetarisches Hack', 'vorrat'],
+  // Oft bei uns: Gemüse und Obst
+  ['Butternutkürbis', 'gemuese'], ['Zuckerschote', 'gemuese'], ['Rucola', 'gemuese'], ['Romanasalat', 'gemuese'], ['Blumenkohl', 'gemuese'], ['Schalotte', 'gemuese'], ['Limette', 'obst'], ['Zitrone', 'obst'],
+  // Oft bei uns: Milch, Fleisch
+  ['Sahne', 'milchprodukt'], ['Hähnchenbrust', 'fleisch'], ['Rinderhack', 'fleisch'],
+  // Oft bei uns: Gewürze und Kräuter
+  ['Garam Masala', 'gewuerz'], ['Thymian', 'gewuerz'], ['Rosmarin', 'gewuerz'], ['Basilikum', 'gewuerz'], ['Petersilie', 'gewuerz'], ['Koriander', 'gewuerz'],
+].map(([name, art]) => ({ id: zutatId(name), name, art }));
+EINGEBAUT.push(...KOCH_ZUTATEN);
 
 /** = zutatId in js/rezepte/katalog.js: „Weizen 550“ → "weizen550", „Kokos-Milch“ → "kokosmilch". */
 export function zutatId(name) {
@@ -106,7 +134,7 @@ const zutatName = (katalog, id) => katalog.find((z) => z.id === id)?.name ?? id;
 
 // ---------- Prüfen ----------
 
-const FELDER = ['name', 'kategorie', 'portionen', 'portionsart', 'zutaten', 'schritte', 'schrittzutaten', 'status', 'notiz', 'quelle'];
+const FELDER = ['name', 'kategorie', 'portionen', 'portionsart', 'zutaten', 'schritte', 'schrittzutaten', 'schrittgeraete', 'status', 'notiz', 'quelle'];
 
 function kategorieVon(x) {
   if (typeof x !== 'string') return null;
@@ -224,6 +252,24 @@ export function pruefeRezept(roh, katalog, { bekannt = [], pflicht = true } = {}
     });
   }
 
+  // Gerät je Schritt (optional): gleiche Länge wie die Schritte, leerer Text = kein Gerät
+  let schrittgeraete = null;
+  const sg = roh.schrittgeraete;
+  if (sg !== undefined && sg !== null) {
+    if (!Array.isArray(sg) || !Array.isArray(roh.schritte) || sg.length !== roh.schritte.length) {
+      f('schrittgeraete braucht genau so viele Einträge wie es Schritte gibt (leerer Text = kein Gerät).');
+    } else {
+      schrittgeraete = sg.map((g, i) => {
+        const t = g === null ? '' : sauber(g);
+        if (t === null || t.length > GRENZEN.geraet) {
+          f(`Schritt ${i + 1}: Gerät ist kein kurzer Text (höchstens ${GRENZEN.geraet} Zeichen).`);
+          return '';
+        }
+        return t;
+      });
+    }
+  }
+
   const quelle = roh.quelle ?? 'claude';
   if (!QUELLEN.includes(quelle)) f(`quelle: ${QUELLEN.join(' | ')}.`);
   const status = roh.status ?? (quelle === 'import' ? 'testen' : 'erprobt');
@@ -244,6 +290,8 @@ export function pruefeRezept(roh, katalog, { bekannt = [], pflicht = true } = {}
       schritte,
       // wie `bereinigeRezept`: ganz ohne Einträge fehlt das Feld (Rückfall Namenssuche)
       ...(schrittzutaten && schrittzutaten.some((e) => e.length) ? { schrittzutaten } : {}),
+      // ebenso: kein einziges Gerät = Feld fehlt
+      ...(schrittgeraete && schrittgeraete.some(Boolean) ? { schrittgeraete } : {}),
       status,
       notiz,
       quelle,
@@ -269,6 +317,7 @@ export function fuerClaude(id, version, d, katalog) {
       ? d.schrittzutaten.map((je) => (Array.isArray(je) ? je : []).map((e) => (
         e.menge === undefined ? { name: name(e.zutat) } : { name: name(e.zutat), menge: e.menge })))
       : null,
+    schrittgeraete: Array.isArray(d.schrittgeraete) ? d.schrittgeraete : null,
     status: d.status ?? 'erprobt', notiz: d.notiz ?? '', quelle: d.quelle ?? 'hand',
   };
 }
@@ -295,6 +344,12 @@ const REZEPT_FELDER = {
   portionsart: { type: 'string', enum: PORTIONSARTEN },
   zutaten: { type: 'array', items: ZUTAT_SCHEMA, minItems: 1, maxItems: GRENZEN.zutaten },
   schritte: { type: 'array', items: { type: 'string', maxLength: GRENZEN.schritt }, minItems: 1, maxItems: GRENZEN.schritte, description: 'Kurz, ein Handgriff pro Schritt.' },
+  schrittgeraete: {
+    type: 'array',
+    maxItems: GRENZEN.schritte,
+    description: 'Optional: je Schritt (gleiche Reihenfolge, gleiche Länge wie schritte) das Gerät, z. B. „Wok“, „Beschichtete Pfanne“, „Ofen 200 °C Umluft“, „Airfryer“; leerer Text = kein Gerät. Kurz, Gerät und Einstellung zusammen.',
+    items: { type: 'string', maxLength: GRENZEN.geraet },
+  },
   schrittzutaten: {
     type: 'array',
     description: 'Je Schritt (gleiche Reihenfolge) die Zutaten dieses Schritts; leere Liste, wenn keine. Ohne menge gilt die ganze Menge; wird eine Zutat auf mehrere Schritte verteilt, bei jedem die Teilmenge (gleiche Einheit).',
@@ -351,7 +406,7 @@ export const WERKZEUGE = [
   },
   {
     name: 'rezept_aktualisieren',
-    description: 'Ändert ein vorhandenes Rezept. Nötig: id und version aus rezepte_finden. Nur die angegebenen Felder werden ersetzt (notiz ersetzt die alte Notiz ganz). Wer zutaten oder schritte ändert, liefert schrittzutaten neu mit. Wurde das Rezept inzwischen anders geändert, bleibt es unverändert und die Änderung wird eine Kopie.',
+    description: 'Ändert ein vorhandenes Rezept. Nötig: id und version aus rezepte_finden. Nur die angegebenen Felder werden ersetzt (notiz ersetzt die alte Notiz ganz). Wer zutaten oder schritte ändert, liefert schrittzutaten neu mit (und schrittgeraete, falls das Rezept Geräte hat). Wurde das Rezept inzwischen anders geändert, bleibt es unverändert und die Änderung wird eine Kopie.',
     inputSchema: {
       type: 'object',
       properties: { id: { type: 'string' }, version: { type: 'integer', minimum: 1 }, ...REZEPT_FELDER },
@@ -364,7 +419,7 @@ export const WERKZEUGE = [
 
 const ANLEITUNG = 'Kochbuch der Familie (nur Koch-Rezepte). Vor dem Speichern zutaten_liste abfragen und diese Namen benutzen. '
   + 'Vorher mit rezepte_finden prüfen, ob es das Rezept schon gibt; dann rezept_aktualisieren statt neu anlegen. '
-  + 'Mengen für die angegebenen Portionen, Schritte kurz, zu jedem Schritt schrittzutaten. Löschen geht nicht.';
+  + 'Mengen für die angegebenen Portionen, Schritte kurz, zu jedem Schritt schrittzutaten und, wenn bekannt, das Gerät (schrittgeraete). Löschen geht nicht.';
 
 /** Fehler, den Claude sieht (isError), statt eines Protokollfehlers. */
 class Hinweis extends Error {}
@@ -472,15 +527,21 @@ async function rezeptAktualisieren(db, a) {
     throw new Hinweis('Wer zutaten oder schritte ändert, muss schrittzutaten neu mitliefern.');
   }
 
+
   const [katalog, gelesen] = await Promise.all([katalogLaden(db), mitDb(db, (d) => d.rezeptLesen(id))]);
   if (!gelesen) throw new Hinweis('Kein Rezept mit dieser id (vielleicht gelöscht). Dann mit rezept_anlegen neu anlegen.');
   const alt = gelesen.daten ?? {};
   if (alt.art !== 'kochen') throw new Hinweis('Back-Rezepte kann der Connector noch nicht ändern.');
+  // Geräte gehören zu den Schritten: Ändern sich die Schritte, müssen sie mitkommen (sonst verrutschen sie)
+  if (aenderung.schritte !== undefined && aenderung.schrittgeraete === undefined
+    && Array.isArray(alt.schrittgeraete) && alt.schrittgeraete.some(Boolean)) {
+    throw new Hinweis('Wer schritte ändert, muss schrittgeraete neu mitliefern (je Schritt ein Eintrag, leer = kein Gerät).');
+  }
 
   // Bisheriger Stand (mit Katalog-ids) plus Änderungen; geprüft wird das Ganze
   const zusammen = {
     name: alt.name, kategorie: alt.kategorie, portionen: alt.portionen, portionsart: alt.portionsart,
-    zutaten: alt.zutaten, schritte: alt.schritte, schrittzutaten: alt.schrittzutaten,
+    zutaten: alt.zutaten, schritte: alt.schritte, schrittzutaten: alt.schrittzutaten, schrittgeraete: alt.schrittgeraete,
     status: alt.status, notiz: alt.notiz,
     quelle: QUELLEN.includes(alt.quelle) ? alt.quelle : 'claude',
     ...aenderung,

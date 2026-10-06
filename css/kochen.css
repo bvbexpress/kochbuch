@@ -172,6 +172,25 @@
   color: var(--zahl);
 }
 
+/* Gerät: kleines Kennzeichen (am Schritt und als Liste oben im Rezept) */
+.geraet-tag {
+  justify-self: start;
+  display: inline-block;
+  padding: 1px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--holz);
+  color: var(--holz);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.geraete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
 /* Aktueller Schritt: Moos-Rahmen, zarte Tönung, größere Schrift */
 .schritt.jetzt .schritt-knopf {
   border: 3px solid var(--akzent);
@@ -205,7 +224,8 @@
   color: var(--text-leise);
 }
 
-.schritt.erledigt .schritt-mengen {
+.schritt.erledigt .schritt-mengen,
+.schritt.erledigt .geraet-tag {
   display: none;
 }
 

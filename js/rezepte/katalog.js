@@ -1,7 +1,8 @@
 // katalog.js – gemeinsamer Zutatenkatalog (Sammlung "zutaten").
 //
 // Teigrechner, Rezepte und später der Vorrat verweisen per `id` auf eine Zutat, nie per Freitext.
-// Eingebaut sind die Mehle, Saaten und Zusatzzutaten aus teig/zutaten.js (mit ihren festen ids).
+// Eingebaut sind die Mehle, Saaten und Zusatzzutaten aus teig/zutaten.js (mit ihren festen ids) und
+// etwa 75 Standardzutaten zum Kochen (KOCH_ZUTATEN).
 // Alles andere entsteht beim Speichern eines Rezepts: unbekannter Name = neuer Eintrag.
 //
 // Die id einer neuen Zutat folgt aus dem Namen (`zutatId`): „Kokosmilch“ → "kokosmilch". Legen zwei
@@ -37,11 +38,103 @@ export function bereinigeZutatenName(name) {
 
 export const gueltigeZutatId = (id) => typeof id === 'string' && ID_MUSTER.test(id);
 
-/** Eingebaute Zutaten: Mehle, Saaten, Zusätze. */
+/**
+ * Standardzutaten zum Kochen mit einheitlichen Namen: Grundzutat im Singular, die Form steckt in der Einheit
+ * („Knoblauch“, 2 Zehen). Die id folgt aus dem Namen (`zutatId`). Reihenfolge = Kopie in supabase/functions/kochbuch/index.ts.
+ */
+export const KOCH_ZUTATEN = [
+  // Öle und Fette
+  ['Olivenöl', 'vorrat'],
+  ['Rapsöl', 'vorrat'],
+  ['Sesamöl', 'vorrat'],
+  // Zwiebeln, Knoblauch, Ingwer
+  ['Zwiebel', 'gemuese'],
+  ['Rote Zwiebel', 'gemuese'],
+  ['Frühlingszwiebel', 'gemuese'],
+  ['Knoblauch', 'gemuese'],
+  ['Ingwer', 'gemuese'],
+  // Würzsaucen
+  ['Sojasauce', 'vorrat'],
+  ['Worcestersauce', 'vorrat'],
+  ['Fischsauce', 'vorrat'],
+  ['Tomatenmark', 'vorrat'],
+  ['Senf', 'vorrat'],
+  ['Sambal Oelek', 'vorrat'],
+  // Säuren
+  ['Zitronensaft', 'vorrat'],
+  ['Limettensaft', 'vorrat'],
+  ['Apfelessig', 'vorrat'],
+  ['Balsamico', 'vorrat'],
+  // Grundgewürze
+  ['Salz', 'gewuerz'],
+  ['Pfeffer', 'gewuerz'],
+  ['Paprikapulver', 'gewuerz'],
+  ['Kreuzkümmel', 'gewuerz'],
+  ['Currypulver', 'gewuerz'],
+  ['Kurkuma', 'gewuerz'],
+  ['Oregano', 'gewuerz'],
+  ['Zimt', 'gewuerz'],
+  ['Chiliflocken', 'gewuerz'],
+  // Dosenware
+  ['Gehackte Tomaten', 'vorrat'],
+  ['Passierte Tomaten', 'vorrat'],
+  ['Kokosmilch', 'vorrat'],
+  ['Kichererbsen', 'vorrat'],
+  ['Kidneybohnen', 'vorrat'],
+  ['Mais', 'vorrat'],
+  // Häufiges Gemüse
+  ['Karotte', 'gemuese'],
+  ['Paprika', 'gemuese'],
+  ['Tomate', 'gemuese'],
+  ['Kartoffel', 'gemuese'],
+  ['Zucchini', 'gemuese'],
+  ['Champignon', 'gemuese'],
+  ['Lauch', 'gemuese'],
+  ['Brokkoli', 'gemuese'],
+  ['Spinat', 'gemuese'],
+  // Sonstiges
+  ['Wasser', 'vorrat'],
+  ['Gemüsebrühe', 'vorrat'],
+  // Oft bei uns: Beilagen und Grundlagen
+  ['Vollkornreis', 'vorrat'],
+  ['Basmatireis', 'vorrat'],
+  ['Vollkornpasta', 'vorrat'],
+  ['Spätzle', 'vorrat'],
+  ['Gnocchi', 'vorrat'],
+  ['Rote Linsen', 'vorrat'],
+  ['Berglinsen', 'vorrat'],
+  ['Cashew', 'vorrat'],
+  ['Pinienkern', 'vorrat'],
+  ['Currypaste', 'vorrat'],
+  ['Vegetarisches Hack', 'vorrat'],
+  // Oft bei uns: Gemüse und Obst
+  ['Butternutkürbis', 'gemuese'],
+  ['Zuckerschote', 'gemuese'],
+  ['Rucola', 'gemuese'],
+  ['Romanasalat', 'gemuese'],
+  ['Blumenkohl', 'gemuese'],
+  ['Schalotte', 'gemuese'],
+  ['Limette', 'obst'],
+  ['Zitrone', 'obst'],
+  // Oft bei uns: Milch, Fleisch
+  ['Sahne', 'milchprodukt'],
+  ['Hähnchenbrust', 'fleisch'],
+  ['Rinderhack', 'fleisch'],
+  // Oft bei uns: Gewürze und Kräuter
+  ['Garam Masala', 'gewuerz'],
+  ['Thymian', 'gewuerz'],
+  ['Rosmarin', 'gewuerz'],
+  ['Basilikum', 'gewuerz'],
+  ['Petersilie', 'gewuerz'],
+  ['Koriander', 'gewuerz'],
+];
+
+/** Eingebaute Zutaten: Mehle, Saaten, Zusätze, Standardzutaten zum Kochen. */
 export const EINGEBAUT = [
   ...MEHLE.map((m) => ({ id: m.id, name: m.name, art: 'mehl' })),
   ...SAATEN.map((s) => ({ id: s.id, name: s.name, art: 'saat' })),
   ...ZUSAETZE.map((z) => ({ id: z.id, name: z.name, art: 'zusatz' })),
+  ...KOCH_ZUTATEN.map(([name, art]) => ({ id: zutatId(name), name, art })),
 ];
 
 /** Geprüfter Katalogeintrag { id, name, art } oder null. */

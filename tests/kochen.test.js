@@ -8,7 +8,7 @@ import { alleZutaten } from '../js/rezepte/katalog.js';
 import { skaliere } from '../js/rezepte/rechner.js';
 import {
   ordneRezepte, portionenText, rezeptFavoriten, schalteRezeptFavorit, gesehen, markiereGesehen,
-  mengenInSchritten, SUCHE_AB,
+  mengenInSchritten, geraeteListe, SUCHE_AB,
 } from '../js/rezepte/liste.js';
 
 const neuerSpeicher = () => erstelleSpeicher(speicherImArbeitsspeicher());
@@ -180,6 +180,21 @@ test('Zutaten je Schritt: Namen werden zu ids, leere Schritte nehmen ihre Eintr�
     [{ zutat: 'spaghetti' }, { zutat: 'wasser' }],  // doppelt nur einmal
     [{ zutat: 'wasser', menge: 500 }],               // fremde Zutat und negative Menge weg
   ]);
+});
+
+test('Gerät je Schritt: leere Schritte nehmen ihren Eintrag mit, ohne Gerät fehlt das Feld, Liste ohne Doppelte', () => {
+  const s = neuerSpeicher();
+  const mit = (schrittgeraete) => holeRezept(s, speichereRezept(s, { ...mitSchrittzutaten(), schrittgeraete }).id);
+  // Der zweite Schritt ist leer und fällt weg – sein Gerät („Ofen“) mit ihm
+  const r = mit(['Wok', 'Ofen', '  Wok  ', 7]);
+  assert.deepEqual(r.schritte.length, 3);
+  assert.deepEqual(r.schrittgeraete, ['Wok', 'Wok', '']);
+  assert.deepEqual(geraeteListe(mit(['Wok', '', 'Ofen 200 °C Umluft', 'wok'])), ['Wok', 'Ofen 200 °C Umluft']);
+  assert.deepEqual(mit(['', '', '', '']).schrittgeraete, undefined);
+  assert.deepEqual(mit(undefined).schrittgeraete, undefined);
+  assert.deepEqual(mit('Wok').schrittgeraete, undefined);
+  assert.equal(mit(['x'.repeat(80), '', '', '']).schrittgeraete[0].length, 40);
+  assert.deepEqual(geraeteListe(mit(undefined)), []);
 });
 
 test('Zutaten je Schritt: ohne Einträge fehlt das Feld (Rückfall auf die Namenssuche)', () => {

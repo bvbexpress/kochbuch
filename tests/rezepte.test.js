@@ -9,7 +9,7 @@ import {
   bereinigeRezept, speichereRezept, alleRezepte, holeRezept, loeseNamenAuf, KOCH_KATEGORIEN,
 } from '../js/rezepte/rezept.js';
 import {
-  zutatId, alleZutaten, zutatenNamen, zutatName, findeOderNeu, EINGEBAUT,
+  zutatId, alleZutaten, zutatenNamen, zutatName, findeOderNeu, EINGEBAUT, KOCH_ZUTATEN, ARTEN, bereinigeZutatenName,
 } from '../js/rezepte/katalog.js';
 import { faktorFuer, skaliereMenge, skaliere, mengeText } from '../js/rezepte/rechner.js';
 import { formatMenge } from '../js/kern/zahlen.js';
@@ -129,24 +129,38 @@ test('Katalog: Mehle, Saaten, Zusätze sind der Anfang; eigene kommen alphabetis
   const s = neuerSpeicher();
   assert.ok(alleZutaten(s).some((z) => z.id === 'weizen550' && z.art === 'mehl'));
   assert.ok(alleZutaten(s).some((z) => z.id === 'ei' && z.art === 'zusatz'));
-  s.speichere('zutaten', { id: 'zwiebel', name: 'Zwiebel', art: 'gemuese' });
+  s.speichere('zutaten', { id: 'sternanis', name: 'Sternanis', art: 'gewuerz' });
   s.speichere('zutaten', { id: 'apfel', name: 'Apfel', art: 'obst' });
   s.speichere('zutaten', { id: 'kaputt', name: 5 });
   s.speichere('zutaten', { id: 'milch', name: 'Falsch' }); // eingebaut gewinnt
   const eigene = alleZutaten(s).slice(EINGEBAUT.length).map((z) => z.name);
-  assert.deepEqual(eigene, ['Apfel', 'Zwiebel']);
+  assert.deepEqual(eigene, ['Apfel', 'Sternanis']);
   assert.equal(alleZutaten(s).find((z) => z.id === 'milch').name, 'Milch');
-  assert.ok(zutatenNamen(s).includes('Zwiebel'));
+  assert.ok(zutatenNamen(s).includes('Sternanis'));
   assert.deepEqual(zutatenNamen(s), [...zutatenNamen(s)].sort((a, b) => a.localeCompare(b, 'de')));
+});
+
+test('Katalog: Standardzutaten zum Kochen, Grundzutat im Singular, gültige Arten', () => {
+  assert.ok(KOCH_ZUTATEN.length >= 40);
+  for (const [name, art] of KOCH_ZUTATEN) {
+    assert.ok(ARTEN.includes(art), name);
+    assert.equal(name, bereinigeZutatenName(name), name);
+  }
+  const namen = EINGEBAUT.map((z) => z.name);
+  for (const n of ['Knoblauch', 'Zwiebel', 'Olivenöl', 'Sojasauce', 'Kokosmilch']) assert.ok(namen.includes(n), n);
+  for (const n of ['Knoblauchzehe', 'Zwiebeln', 'Karotten']) assert.ok(!namen.includes(n), `${n} gehört in die Einheit/Singular`);
+  // Salz und Wasser sind Zutaten wie alle anderen (Rezepte verweisen darauf)
+  assert.equal(findeOderNeu(EINGEBAUT, 'salz').neu, false);
+  assert.equal(findeOderNeu(EINGEBAUT, 'Wasser').neu, false);
 });
 
 test('findeOderNeu: vorhandene Zutat wird gefunden, Unbekanntes ergibt neuen Eintrag', () => {
   const liste = EINGEBAUT;
   assert.deepEqual(findeOderNeu(liste, 'milch'), { eintrag: { id: 'milch', name: 'Milch', art: 'zusatz' }, neu: false });
   assert.equal(findeOderNeu(liste, ' Weizen  550 ').eintrag.id, 'weizen550');
-  const neu = findeOderNeu(liste, 'Kokosmilch', 'gewuerz');
-  assert.deepEqual(neu, { eintrag: { id: 'kokosmilch', name: 'Kokosmilch', art: 'gewuerz' }, neu: true });
-  assert.equal(findeOderNeu(liste, 'Kokosmilch', 'quatsch').eintrag.art, 'sonstiges');
+  const neu = findeOderNeu(liste, 'Sternanis', 'gewuerz');
+  assert.deepEqual(neu, { eintrag: { id: 'sternanis', name: 'Sternanis', art: 'gewuerz' }, neu: true });
+  assert.equal(findeOderNeu(liste, 'Sternanis', 'quatsch').eintrag.art, 'sonstiges');
   assert.equal(findeOderNeu(liste, '???'), null);
   assert.equal(zutatName(liste, 'milch'), 'Milch');
   assert.equal(zutatName(liste, 'unbekannt'), 'unbekannt');
@@ -159,17 +173,17 @@ test('Rezept mit Namen speichern: Zutaten bekommen ids, neue landen im Katalog',
   const r = speichereRezept(s, {
     art: 'kochen', name: 'Dal', portionen: 2,
     zutaten: [
-      { name: 'Rote Linsen', art: 'vorrat', menge: 200, einheit: 'g' },
+      { name: 'Tempeh', art: 'vorrat', menge: 200, einheit: 'g' },
       { name: 'milch', menge: 100, einheit: 'ml' },
-      { name: 'Rote  Linsen', menge: 1, einheit: 'EL' },
+      { name: 'TEMPEH', menge: 1, einheit: 'EL' },
     ],
   });
   assert.match(r.id, /^[0-9a-f-]{36}$/);
-  assert.deepEqual(r.zutaten.map((z) => z.zutat), ['rotelinsen', 'milch', 'rotelinsen']);
+  assert.deepEqual(r.zutaten.map((z) => z.zutat), ['tempeh', 'milch', 'tempeh']);
   assert.equal(s.alle('zutaten').length, 1, 'nur eine neue Zutat, Milch gibt es schon');
   assert.deepEqual(
     (({ id, name, art }) => ({ id, name, art }))(s.alle('zutaten')[0]),
-    { id: 'rotelinsen', name: 'Rote Linsen', art: 'vorrat' },
+    { id: 'tempeh', name: 'Tempeh', art: 'vorrat' },
   );
   assert.equal(holeRezept(s, r.id).name, 'Dal');
   assert.equal(alleRezepte(s, 'backen').length, 0);

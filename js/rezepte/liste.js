@@ -67,6 +67,22 @@ export function portionenText(portionen, art = 'personen') {
   return `${formatMenge(portionen)} ${einsen ? einzahl[art] ?? einzahl.personen : mehrzahl[art] ?? mehrzahl.personen}`;
 }
 
+/**
+ * Alle Geräte, die das Rezept braucht, in der Reihenfolge ihres ersten Auftretens (ohne Doppelte,
+ * Groß-/Kleinschreibung egal). Ohne Geräte: leere Liste.
+ */
+export function geraeteListe(rezept) {
+  const gesehen = new Set();
+  const liste = [];
+  for (const g of rezept.schrittgeraete ?? []) {
+    const schluessel = g.toLowerCase();
+    if (!g || gesehen.has(schluessel)) continue;
+    gesehen.add(schluessel);
+    liste.push(g);
+  }
+  return liste;
+}
+
 // ---------- Mengen direkt in den Schritten ----------
 
 /** Kleinbuchstaben, Umlaute ausgeschrieben, nur Buchstaben und Ziffern je Wort. */

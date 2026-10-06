@@ -390,7 +390,7 @@ begin
   if octet_length(d::text) > 100000 then return 'zu groß'; end if;
   select k into v_feld from jsonb_object_keys(d) k
     where k <> all (array['art', 'name', 'kategorie', 'portionen', 'portionsart', 'zutaten', 'schritte',
-      'schrittzutaten', 'status', 'notiz', 'quelle', 'teig', 'mehl', 'modus', 'teiglinge'])
+      'schrittzutaten', 'schrittgeraete', 'status', 'notiz', 'quelle', 'teig', 'mehl', 'modus', 'teiglinge'])
     limit 1;
   if v_feld is not null then return 'unbekanntes Feld ' || v_feld; end if;
 
@@ -457,6 +457,15 @@ begin
         v_schritt := v_schritt || (v_e->>'zutat');
       end loop;
     end loop;
+  end if;
+
+  -- Gerät je Schritt (optional): gleiche Länge wie die Schritte, Texte bis 40 Zeichen, leer = kein Gerät
+  if coalesce(jsonb_typeof(d->'schrittgeraete'), 'null') <> 'null' then
+    if jsonb_typeof(d->'schrittgeraete') <> 'array'
+      or jsonb_array_length(d->'schrittgeraete') <> jsonb_array_length(coalesce(d->'schritte', '[]'))
+      or exists (select from jsonb_array_elements(d->'schrittgeraete') g
+        where jsonb_typeof(g) <> 'string' or char_length(g #>> '{}') > 40)
+    then return 'schrittgeraete'; end if;
   end if;
 
   -- Teigwerte nur bei Back-Rezepten (Einzelheiten prüft die App mit `bereinigeTeig`)
