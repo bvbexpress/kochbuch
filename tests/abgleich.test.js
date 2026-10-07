@@ -185,17 +185,26 @@ function aufbau({
       return antworten.shift() ?? true;
     },
   });
-  const wurzel = testWurzel();
-  let gezeichnet = 0;
-  bereich.verbinde(wurzel, () => gezeichnet++);
-  return { speicher, anmeldung, server, bereich, wurzel, uhr, protokoll, gezeichnet: () => gezeichnet };
+  const version = testWurzel();
+  const ziel = { ...testWurzel(), innerHTML: '' };
+  const punkt = { hidden: true };
+  bereich.verbindeVerwaltung(version, ziel, punkt);
+  // Alles Sichtbare steht in der Verwaltung: öffnen und lesen
+  const html = () => {
+    if (!ziel.innerHTML) bereich.oeffneVerwaltung();
+    return ziel.innerHTML;
+  };
+  const tippe = (aktion) => ziel.loese('click', {
+    target: { closest: (sel) => (sel === '[data-verwaltung]' ? { dataset: { verwaltung: aktion } } : null) },
+  });
+  return { speicher, anmeldung, server, bereich, version, ziel, punkt, html, tippe, uhr, protokoll };
 }
 
 /** Absenden des Anmelde-Formulars nachstellen. */
-function sendeFormular(wurzel, email, passwort, verwalter = false) {
+function sendeFormular(ziel, email, passwort, verwalter = false) {
   const knopf = { disabled: false, textContent: 'Anmelden' };
   let verhindert = false;
-  wurzel.loese('submit', {
+  ziel.loese('submit', {
     target: {
       matches: (s) => s === '[data-anmelden]',
       elements: { email: { value: email }, passwort: { value: passwort }, verwalter: { checked: verwalter } },
@@ -215,141 +224,166 @@ function speicherInhalt(speicher) {
 
 const warte = () => new Promise((r) => setTimeout(r, 0));
 
-test('Nicht angemeldet: Formular mit E-Mail und Passwort für den Schlüsselbund, sonst nichts', () => {
-  const { bereich } = aufbau();
-  const html = bereich.html();
-  assert.match(html, /data-klappe="abgleich"/);
-  assert.match(html, /autocomplete="username"/);
-  assert.match(html, /type="password" name="passwort" autocomplete="current-password"/);
-  assert.match(html, /<input type="checkbox" name="verwalter" >/, 'Häkchen Verwalter, nicht gesetzt');
-  assert.doesNotMatch(html, /bitte ansehen/);
-  assert.doesNotMatch(html, / open/, 'zu Beginn zugeklappt');
+test('Nicht angemeldet: Formular mit E-Mail und Passwort für den Schlüsselbund, nur in der Verwaltung', () => {
+  const { html, ziel } = aufbau();
+  assert.equal(ziel.innerHTML, '', 'auf der Seite nichts davon zu sehen');
+  const h = html();
+  assert.match(h, /autocomplete="username"/);
+  assert.match(h, /type="password" name="passwort" autocomplete="current-password"/);
+  assert.match(h, /<input type="checkbox" name="verwalter" >/, 'Häkchen Verwalter, nicht gesetzt');
+  assert.match(h, /Dieses Handy ist nicht angemeldet/);
+  assert.doesNotMatch(h, /bitte ansehen/);
 });
 
-test('Anmelden ohne Häkchen: E-Mail und Passwort gehen an die Anmeldung, danach verschwindet die Klappe', async () => {
-  const { bereich, wurzel, anmeldung, speicher, gezeichnet } = aufbau();
-  const f = sendeFormular(wurzel, ' ich@example.org ', 'geheim');
+test('Anmelden ohne Häkchen: E-Mail und Passwort gehen an die Anmeldung, danach ist das Formular weg', async () => {
+  const { html, ziel, anmeldung, speicher, punkt } = aufbau();
+  html();
+  const f = sendeFormular(ziel, ' ich@example.org ', 'geheim');
   assert.ok(f.verhindert(), 'Seite lädt nicht neu');
   assert.equal(f.knopf.disabled, true);
   await warte();
   assert.deepEqual(anmeldung.versuche, [{ email: 'ich@example.org', passwort: 'geheim' }]);
-  assert.ok(gezeichnet() > 0);
-  assert.equal(bereich.html(), '', 'anderes Handy: keine Klappe, kein Knopf');
+  assert.doesNotMatch(ziel.innerHTML, /data-anmelden/, 'anderes Handy: kein Formular mehr');
+  assert.match(ziel.innerHTML, /Dieses Handy ist angemeldet/);
   assert.equal(istVerwalter(speicher), false);
+  assert.equal(punkt.hidden, true, 'anderes Handy: nie ein Punkt');
   assert.ok(!JSON.stringify(speicherInhalt(speicher)).includes('geheim'), 'Passwort nirgends gespeichert');
 });
 
 test('Anmelden mit Häkchen: Verwalter-Handy, Status wird gleich geladen', async () => {
   const server = testServer([{ konto: 'k1', name: 'Handy 1', letzter_abgleich: new Date(JETZT).toISOString() }]);
-  const { bereich, wurzel, speicher } = aufbau({ server });
-  sendeFormular(wurzel, 'ich@example.org', 'geheim', true);
+  const { html, ziel, speicher, punkt } = aufbau({ server });
+  html();
+  sendeFormular(ziel, 'ich@example.org', 'geheim', true);
   await warte();
   await warte();
   assert.equal(istVerwalter(speicher), true);
   assert.equal(server.anfragen, 1);
-  assert.match(bereich.html(), /Handy 1 \(dieses Handy\): heute abgeglichen/);
-  assert.doesNotMatch(bereich.html(), /data-anmelden|data-abgleich=/, 'kein Formular, kein Umschalt-Knopf');
+  assert.match(ziel.innerHTML, /Handy 1 \(dieses Handy\): heute abgeglichen/);
+  assert.doesNotMatch(ziel.innerHTML, /data-anmelden/, 'kein Formular mehr');
+  assert.equal(punkt.hidden, true, 'alles in Ordnung: kein Punkt');
 });
 
 test('Häkchen zählt nur bei erfolgreicher Anmeldung', async () => {
-  const { wurzel, speicher } = aufbau({ anmeldung: testAnmeldung({ antwort: { ok: false, grund: 'falsch' } }) });
-  sendeFormular(wurzel, 'ich@example.org', 'falsch', true);
+  const { html, ziel, speicher } = aufbau({ anmeldung: testAnmeldung({ antwort: { ok: false, grund: 'falsch' } }) });
+  html();
+  sendeFormular(ziel, 'ich@example.org', 'falsch', true);
   await warte();
   assert.equal(istVerwalter(speicher), false);
 });
 
 test('Anmelden scheitert: verständlicher Satz, E-Mail bleibt im Feld, Passwort nicht', async () => {
   const anmeldung = testAnmeldung({ antwort: { ok: false, grund: 'falsch' } });
-  const { bereich, wurzel } = aufbau({ anmeldung });
-  sendeFormular(wurzel, 'ich@example.org', 'falsch');
+  const { html, ziel } = aufbau({ anmeldung });
+  html();
+  sendeFormular(ziel, 'ich@example.org', 'falsch');
   await warte();
-  const html = bereich.html();
-  assert.match(html, /E-Mail oder Passwort stimmt nicht\./);
-  assert.match(html, /value="ich@example\.org"/);
-  assert.doesNotMatch(html, /value="falsch"/);
+  const h = ziel.innerHTML;
+  assert.match(h, /E-Mail oder Passwort stimmt nicht\./);
+  assert.match(h, /value="ich@example\.org"/);
+  assert.doesNotMatch(h, /value="falsch"/);
 
   for (const [grund, satz] of [['netz', /kein Netz/], ['zuoft', /Zu viele Versuche/], ['server', /antwortet gerade nicht/]]) {
     const b = aufbau({ anmeldung: testAnmeldung({ antwort: { ok: false, grund } }) });
-    sendeFormular(b.wurzel, 'a@b.de', 'x');
+    b.html();
+    sendeFormular(b.ziel, 'a@b.de', 'x');
     await warte();
-    assert.match(b.bereich.html(), satz);
+    assert.match(b.ziel.innerHTML, satz);
   }
 });
 
-test('Anderes Handy (kein Verwalter): nie ein Status, nie „bitte ansehen“, keine Server-Anfrage', async () => {
+test('Anderes Handy (kein Verwalter): nie ein Status, nie ein Punkt, keine Server-Anfrage', async () => {
   const server = testServer([mitglied('k2', 'Handy 2', 10)]);
-  const { bereich, wurzel } = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }), server });
+  const { html, bereich, punkt } = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }), server, gesichert: null });
   bereich.start();
-  wurzel.loese('toggle', { target: { dataset: { klappe: 'abgleich' }, open: true } });
+  const h = html();
   await warte();
   assert.equal(server.anfragen, 0);
-  assert.equal(bereich.html(), '');
+  assert.equal(bereich.punkt(), false);
+  assert.equal(punkt.hidden, true);
+  assert.doesNotMatch(h, /Handy 2|abgeglichen/);
 });
 
-test('Abgelehnt auf einem anderen Handy: nur das Formular, keine Meldung', () => {
-  const { bereich } = aufbau({ anmeldung: testAnmeldung({ zustand: 'abgelehnt' }) });
-  const html = bereich.html();
-  assert.match(html, /data-anmelden/);
-  assert.match(html, /name="verwalter" >/, 'Häkchen nicht gesetzt');
-  assert.doesNotMatch(html, /abgemeldet|bitte ansehen/);
+test('Abgelehnt auf einem anderen Handy: nur das Formular, kein Punkt', () => {
+  const { html, bereich, punkt } = aufbau({ anmeldung: testAnmeldung({ zustand: 'abgelehnt' }) });
+  const h = html();
+  assert.match(h, /data-anmelden/);
+  assert.match(h, /name="verwalter" >/, 'Häkchen nicht gesetzt');
+  assert.doesNotMatch(h, /bitte ansehen/);
+  assert.equal(bereich.punkt(), false);
+  assert.equal(punkt.hidden, true);
 });
 
-test('Verwalter-Handy: Status beim Start laden, „bitte ansehen“ im Titel, wenn ein Handy lange nicht abglich', async () => {
+test('Verwalter-Handy: Status beim Start laden, Punkt, wenn ein Handy lange nicht abglich', async () => {
   const server = testServer([
     { konto: 'k1', name: 'Handy 1', letzter_abgleich: new Date(JETZT).toISOString() },
     { konto: 'k2', name: 'Handy 2', letzter_abgleich: new Date(JETZT - 5 * TAG).toISOString() },
   ]);
-  const { bereich, gezeichnet } = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }), server, verwalter: true });
-  assert.match(bereich.html(), /wird geladen/);
+  const { html, ziel, bereich, punkt } = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }), server, verwalter: true });
+  assert.equal(punkt.hidden, true, 'noch nicht geladen: kein Grund zur Sorge');
   bereich.start();
+  html();
+  assert.match(ziel.innerHTML, /wird geladen/);
   await warte();
   assert.equal(server.anfragen, 1);
-  assert.ok(gezeichnet() > 0, 'nach dem Laden neu gezeichnet');
-  const html = bereich.html();
-  assert.match(html, /bitte ansehen/);
-  assert.match(html, /Handy 1 \(dieses Handy\): heute abgeglichen/);
-  assert.match(html, /<li class="achtung">Handy 2: seit 5 Tagen nicht abgeglichen<\/li>/);
+  assert.equal(punkt.hidden, false, 'nach dem Laden: Punkt neben der Versionsnummer');
+  const h = ziel.innerHTML;
+  assert.match(h, /Handy 1 \(dieses Handy\): heute abgeglichen/);
+  assert.match(h, /<li class="achtung">Handy 2: seit 5 Tagen nicht abgeglichen<\/li>/);
 });
 
-test('Verwalter-Handy: Server nicht erreichbar → ruhiger Satz; Neu-Laden höchstens einmal pro Minute', async () => {
+test('Verwalter-Handy: Server nicht erreichbar → ruhiger Satz, kein Punkt; Neu-Laden höchstens einmal pro Minute', async () => {
   const server = testServer([mitglied('k1', 'Handy 1', 0)]);
   server.netz = false;
   const uhr = { jetzt: JETZT };
-  const { bereich, wurzel } = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }), server, verwalter: true, uhr });
-  const aufklappen = () => wurzel.loese('toggle', { target: { dataset: { klappe: 'abgleich' }, open: true } });
-  aufklappen();
+  const { bereich, ziel, punkt } = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }), server, verwalter: true, uhr });
+  const oeffnen = () => bereich.oeffneVerwaltung();
+  oeffnen();
   await warte();
-  assert.match(bereich.html(), /Server gerade nicht erreichbar/);
-  assert.doesNotMatch(bereich.html(), /bitte ansehen/, 'Netzprobleme sind kein Grund zur Sorge');
-  assert.match(bereich.html(), / open/, 'bleibt beim Neuzeichnen aufgeklappt');
+  assert.match(ziel.innerHTML, /Server gerade nicht erreichbar/);
+  assert.doesNotMatch(ziel.innerHTML, /bitte ansehen/);
+  assert.equal(punkt.hidden, true, 'Netzprobleme sind kein Grund zur Sorge');
 
   server.netz = true;
-  aufklappen();
+  oeffnen();
   await warte();
   assert.equal(server.anfragen, 1, 'nicht gleich wieder');
   uhr.jetzt += 61_000;
-  aufklappen();
+  oeffnen();
   await warte();
   assert.equal(server.anfragen, 2);
-  assert.doesNotMatch(bereich.html(), /nicht erreichbar/);
+  assert.doesNotMatch(ziel.innerHTML, /nicht erreichbar/);
 });
 
-test('Verwalter-Handy abgemeldet: Hinweis, wartende Änderungen und das Formular', () => {
-  const { bereich, speicher } = aufbau({ anmeldung: testAnmeldung({ zustand: 'abgelehnt' }), verwalter: true });
+test('Verwalter-Handy abgemeldet: Hinweis, wartende Änderungen, Formular und Punkt', () => {
+  const { html, speicher, punkt } = aufbau({ anmeldung: testAnmeldung({ zustand: 'abgelehnt' }), verwalter: true });
   speichereEigeneVorlage(speicher, { name: 'Brot', teig: ladeVorlage(VORLAGEN[0]).teig, mehl: 500 });
-  const html = bereich.html();
-  assert.match(html, /bitte ansehen/);
-  assert.match(html, /Dieses Handy ist abgemeldet/);
-  assert.match(html, /1 Änderung wartet aufs Hochladen/);
-  assert.match(html, /data-anmelden/);
-  assert.match(html, /name="verwalter" checked/, 'beim Neu-Anmelden bleibt es Verwalter');
+  const h = html();
+  assert.match(h, /Dieses Handy ist abgemeldet/);
+  assert.match(h, /1 Änderung wartet aufs Hochladen/);
+  assert.match(h, /data-anmelden/);
+  assert.match(h, /name="verwalter" checked/, 'beim Neu-Anmelden bleibt es Verwalter');
+  assert.equal(punkt.hidden, false);
+});
+
+test('Verwalter-Handy nie angemeldet: Punkt; nach dem Anmelden weg', async () => {
+  const server = testServer([{ konto: 'k1', name: 'Handy 1', letzter_abgleich: new Date(JETZT).toISOString() }]);
+  const { bereich, html, ziel, punkt } = aufbau({ verwalter: true, server });
+  bereich.start();
+  assert.equal(bereich.punkt(), true);
+  assert.equal(punkt.hidden, false);
+  html();
+  sendeFormular(ziel, 'ich@example.org', 'geheim', true);
+  await warte();
+  await warte();
+  assert.equal(punkt.hidden, true);
 });
 
 test('Namen vom Server werden maskiert', async () => {
   const server = testServer([{ konto: 'k2', name: '<img src=x onerror=alert(1)>', letzter_abgleich: null }]);
-  const { bereich } = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }), server, verwalter: true });
+  const { bereich, html } = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }), server, verwalter: true });
   await bereich.ladeMitglieder();
-  assert.doesNotMatch(bereich.html(), /<img/);
+  assert.doesNotMatch(html(), /<img/);
 });
 
 // ---------- Vermerk an Konflikt-Kopien ----------
@@ -417,17 +451,7 @@ test('Bearbeiten und Speichern der Kopie entfernt den Vermerk ebenfalls', () => 
 
 // ---------- Versteckte Verwaltung: langes Drücken auf die Versionsnummer ----------
 
-/** Seite mit Versionsnummer und Platz für die Verwaltung. */
-function mitVerwaltung(optionen) {
-  const a = aufbau(optionen);
-  const version = testWurzel();
-  const ziel = { ...testWurzel(), innerHTML: '' };
-  a.bereich.verbindeVerwaltung(version, ziel);
-  const tippe = (aktion) => ziel.loese('click', {
-    target: { closest: (s) => (s === '[data-verwaltung]' ? { dataset: { verwaltung: aktion } } : null) },
-  });
-  return { ...a, version, ziel, tippe };
-}
+const mitVerwaltung = aufbau; // Seite mit Versionsnummer, Punkt und Platz für die Verwaltung
 
 test('Verwaltung: unsichtbar; kurzes Tippen öffnet nichts, langes Drücken schon', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
@@ -453,34 +477,49 @@ test('Verwaltung: unsichtbar; kurzes Tippen öffnet nichts, langes Drücken scho
 
 test('Verwaltung: Verwalter-Handy nachträglich ein- und ausschalten', async () => {
   const server = testServer([{ konto: 'k1', name: 'Handy 1', letzter_abgleich: new Date(JETZT).toISOString() }]);
-  const { bereich, speicher, ziel, tippe, gezeichnet } = mitVerwaltung({
+  const { bereich, speicher, ziel, tippe } = mitVerwaltung({
     anmeldung: testAnmeldung({ zustand: 'angemeldet' }), server,
   });
   bereich.oeffneVerwaltung();
-  assert.equal(bereich.html(), '', 'anderes Handy: keine Klappe');
+  assert.doesNotMatch(ziel.innerHTML, /Handy 1/, 'anderes Handy: kein Status');
 
   tippe('verwalter');
   await warte();
   assert.equal(istVerwalter(speicher), true);
   assert.match(ziel.innerHTML, /Verwalter-Handy: an/);
-  assert.match(bereich.html(), /Handy 1 \(dieses Handy\): heute abgeglichen/);
-  assert.ok(gezeichnet() > 0, 'Startseite neu gezeichnet');
+  assert.match(ziel.innerHTML, /Handy 1 \(dieses Handy\): heute abgeglichen/);
 
   tippe('verwalter');
   assert.equal(istVerwalter(speicher), false);
   assert.match(ziel.innerHTML, /Verwalter-Handy: aus/);
-  assert.equal(bereich.html(), '');
+  assert.doesNotMatch(ziel.innerHTML, /Handy 1/);
 
   tippe('schliessen');
   assert.equal(ziel.innerHTML, '');
 });
 
-test('Verwaltung: nicht angemeldet → kein Abmelden-Knopf, Hinweis wo man sich anmeldet', () => {
+test('Verwaltung: nicht angemeldet → kein Abmelden-Knopf, dafür das Anmelde-Formular', () => {
   const { bereich, ziel } = mitVerwaltung();
   bereich.oeffneVerwaltung();
   assert.doesNotMatch(ziel.innerHTML, /data-verwaltung="abmelden"/);
   assert.match(ziel.innerHTML, /nicht angemeldet/);
+  assert.match(ziel.innerHTML, /data-anmelden/);
   assert.match(ziel.innerHTML, /data-verwaltung="verwalter"/);
+});
+
+test('Verwaltung: Hintergrund-Aktualisierung zeichnet nicht über das, was gerade getippt wird', async (t) => {
+  const server = testServer([mitglied('k1', 'Handy 1', 0)]);
+  const { bereich, ziel } = mitVerwaltung({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }), server, verwalter: true });
+  bereich.oeffneVerwaltung();
+  await warte();
+  const feld = { matches: (sel) => sel === 'input' };
+  globalThis.document = { activeElement: feld };
+  t.after(() => delete globalThis.document);
+  ziel.contains = (x) => x === feld;
+  ziel.innerHTML = 'ANGETIPPT';
+  bereich.nachAbgleich();
+  await warte();
+  assert.equal(ziel.innerHTML, 'ANGETIPPT', 'Eingabe bleibt stehen');
 });
 
 test('Abmelden: erst abgleichen, dann fragen; Daten und offene Änderungen bleiben', async () => {
@@ -501,8 +540,8 @@ test('Abmelden: erst abgleichen, dann fragen; Daten und offene Änderungen bleib
   assert.equal(speicher.hole('teigvorlagen', brot.id).name, 'Brot', 'Vorlage bleibt');
   assert.equal(speicher.offene('teigvorlagen').length, 1, 'bleibt offen → geht nach der nächsten Anmeldung hoch');
   assert.equal(speicher.syncStand(), 0, 'nach der nächsten Anmeldung alles neu herunterladen');
-  assert.equal(ziel.innerHTML, '', 'Verwaltung zu');
-  assert.match(bereich.html(), /data-anmelden/, 'Formular zum Neu-Anmelden ist wieder da');
+  assert.match(ziel.innerHTML, /data-anmelden/, 'Verwaltung bleibt offen, das Formular zum Neu-Anmelden steht gleich da');
+  assert.doesNotMatch(ziel.innerHTML, /data-verwaltung="abmelden"/);
 });
 
 test('Abmelden: alles hochgeladen → einfache Frage; „Abbrechen“ ändert nichts', async () => {
@@ -526,8 +565,8 @@ test('Nicht angemeldet: nie bereit', () => {
 });
 
 test('Anmelden stößt den ersten Abgleich an', async () => {
-  const { wurzel, protokoll } = aufbau();
-  sendeFormular(wurzel, 'ich@example.org', 'geheim');
+  const { ziel, protokoll } = aufbau();
+  sendeFormular(ziel, 'ich@example.org', 'geheim');
   await warte();
   assert.equal(protokoll.abgleiche, 1);
 });
@@ -555,16 +594,30 @@ test('Sicherung: Text und Warnung erst nach mehr als 30 Tagen (oder nie)', () =>
     .some((z) => /Sicherung/.test(z.text)), false, 'ohne Angabe keine Zeile');
 });
 
-test('Sicherung: „bitte ansehen“ nur auf dem Verwalter-Handy, wenn die letzte Sicherung zu alt ist', () => {
+test('Sicherung: Punkt nur auf dem Verwalter-Handy, wenn die letzte Sicherung zu alt ist', () => {
   const alt = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }), verwalter: true, gesichert: JETZT - 40 * TAG });
-  assert.match(alt.bereich.html(), /bitte ansehen/);
-  assert.match(alt.bereich.html(), /Letzte Sicherung: vor 40 Tagen/);
+  assert.equal(alt.bereich.punkt(), true);
+  assert.equal(alt.punkt.hidden, false);
+  assert.match(alt.html(), /Letzte Sicherung: vor 40 Tagen/);
   const nie = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }), verwalter: true, gesichert: null });
-  assert.match(nie.bereich.html(), /bitte ansehen/);
+  assert.equal(nie.bereich.punkt(), true);
   const frisch = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }), verwalter: true });
-  assert.doesNotMatch(frisch.bereich.html(), /bitte ansehen/);
+  assert.equal(frisch.bereich.punkt(), false);
   const anderes = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }), gesichert: null });
-  assert.equal(anderes.bereich.html(), '', 'anderes Handy: nichts zu sehen');
+  assert.equal(anderes.bereich.punkt(), false, 'anderes Handy: nie ein Punkt');
+  assert.match(anderes.html(), /Noch nie gesichert/, 'in der Verwaltung steht es trotzdem');
+});
+
+test('Sicherung: nach „Alles sichern“ verschwindet der Punkt', async () => {
+  const server = testServer([{ konto: 'k1', name: 'Handy 1', letzter_abgleich: new Date(JETZT).toISOString() }]);
+  const { bereich, punkt, tippe } = mitVerwaltung({
+    anmeldung: testAnmeldung({ zustand: 'angemeldet' }), verwalter: true, gesichert: null, server,
+  });
+  bereich.oeffneVerwaltung();
+  assert.equal(punkt.hidden, false);
+  tippe('sichern');
+  await warte();
+  assert.equal(punkt.hidden, true);
 });
 
 test('Verwaltung: „Alles sichern“ gibt die Datei weiter und merkt sich den Zeitpunkt', async () => {

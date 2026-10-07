@@ -5,7 +5,7 @@
   <!-- viewport-fit=cover: nutzt auf dem iPhone auch den Bereich um die Notch -->
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Kochbuch</title>
-  <meta name="description" content="Teigrechner für Brot, Pizza und Focaccia">
+  <meta name="description" content="Koch- und Backbuch mit Teigrechner">
 
   <!-- Sagt dem Browser, dass die Seite hell und dunkel kann (Formularfelder, Scrollbalken) -->
   <meta name="color-scheme" content="light dark">
@@ -40,7 +40,10 @@
 
   <!-- Langes Drücken auf die Versionsnummer öffnet die versteckte Verwaltung (js/kern/abgleich.js) -->
   <footer class="fuss leise">
-    <small id="version" class="version">Version –</small>
+    <div id="versionszeile" class="versionszeile">
+      <small id="version" class="version">Version –</small>
+      <span id="punkt" class="punkt" role="img" aria-label="Bitte in der Verwaltung nachsehen" hidden>•</span>
+    </div>
     <div id="verwaltung"></div>
   </footer>
 </body>

@@ -53,14 +53,7 @@ export function startKochen(ziel, { zurueck, beiOeffnen: oeffnen, rueckgaengig: 
   });
 }
 
-/** Einstieg auf der Startseite (bis es die Kacheln gibt): Knopf „Kochen“, nur wenn es Rezepte gibt. */
-export function kochenEinstiegHtml() {
-  const anzahl = kochrezepte().length;
-  if (!anzahl) return '';
-  return `<button type="button" class="knopf knopf-voll" data-k="kochen">Kochen · ${anzahl} ${anzahl === 1 ? 'Rezept' : 'Rezepte'}</button>`;
-}
-
-/** Von der Startseite aus öffnen. */
+/** Von der Startseite aus öffnen (Kachel „Kochen“ mit `data-k="kochen"`). */
 function zeigeKochen() {
   beiOeffnen();
   seite = 'liste';

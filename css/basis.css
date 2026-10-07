@@ -301,6 +301,60 @@ details.klappe > .klappe-inhalt {
   -webkit-touch-callout: none;
 }
 
+/* Versionsnummer mit kleinem Punkt (nur Verwalter-Handy, wenn etwas nachzusehen ist) */
+.versionszeile {
+  display: inline-flex;
+  align-items: center;
+}
+
+.punkt {
+  margin-left: -8px;
+  color: var(--holz);
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.punkt[hidden] {
+  display: none;
+}
+
+/* Startseite: zwei große Kacheln */
+.kacheln {
+  display: grid;
+  gap: var(--abstand);
+  margin-top: var(--abstand);
+}
+
+.kachel {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 8px;
+  min-height: 34vh;
+  padding: var(--abstand);
+  font: inherit;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--holz);
+  background: var(--flaeche);
+  border: 1px solid var(--linie);
+  border-radius: var(--radius);
+  box-shadow: var(--schatten);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform var(--dauer) var(--kurve), background-color var(--dauer) var(--kurve);
+}
+
+.kachel:active {
+  transform: scale(0.97);
+  background-color: var(--akzent-weich);
+}
+
+.kachel-zeichen {
+  font-size: 3.2rem;
+  line-height: 1;
+}
+
 /* Versteckte Verwaltung unter der Versionsnummer */
 .verwaltung {
   display: grid;

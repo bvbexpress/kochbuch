@@ -35,6 +35,8 @@ import {
   MODI,
   SUCHE_AB,
   STANDARD_TEIGLINGE,
+  LEERER_TEIG,
+  LEERES_MEHL,
   vorbelegung,
   neueVorlage,
   vermerkText,
@@ -55,7 +57,7 @@ import { erstelleWischen } from './wischen.js';
 import { speicher } from '../kern/speicher.js';
 import { leseZahl, formatGramm, formatGrammFein, formatProzent } from '../kern/zahlen.js';
 import { text } from '../kern/html.js';
-import { startKochen, kochenEinstiegHtml, zeichneKochen } from '../rezepte/kochen.js';
+import { startKochen, zeichneKochen } from '../rezepte/kochen.js';
 
 const HINWEISE = {
   'starter-zu-viel': 'Mehr Starter als Mehl – bitte den Starter-Anteil verringern.',
@@ -77,9 +79,10 @@ const NEUER_ZUSATZ = 10;              // % vom Mehl für eine neu gewählte Zusa
 const EIGENE = '__eigene';             // Auswahl-Eintrag „Eigene Sorte …“
 
 let wurzel;   // das HTML-Element, in dem der Teigrechner steht
-let ansicht = 'liste'; // 'liste' (Startseite), 'rechner' oder 'kochen' (Rezepte, rezepte/kochen.js)
+let ansicht = 'start'; // 'start' (Kacheln), 'liste' (Backen), 'rechner' oder 'kochen' (Rezepte, rezepte/kochen.js)
 // { vorlageId, teig, mehl, modus, teiglinge, geaendert, anpassung } – mehl = zugegebenes Mehl.
 // geaendert = die Vorlage selbst wurde verändert (nicht nur die Menge).
+// vorlageId = null: Teigrechner (Schnellrechnung ohne Rezept, nichts wird gespeichert).
 let zustand = null;
 let katalog;  // { mehle, saaten, zusaetze, wasserVon, verhaeltnisVon, art } – aus den Einstellungen
 let suche = ''; // Suchtext der Vorlagenliste
@@ -91,16 +94,13 @@ let meldung = null; // einmalige Rückmeldung (wird beim nächsten Zeichnen ange
 let wischen = null; // Wisch-Geste der Vorlagenliste (wischen.js)
 let nachholen = false; // Daten vom Server kamen während eines Wischens an
 let rueckgaengig = null; // Leiste „Rückgängig“: { leiste, zeitgeber, f }
-let abgleich = null; // Bereich „Abgleich“ (kern/abgleich.js), unten auf der Startseite
 
-/** abgleich: optional, aus `erstelleAbgleichBereich` (ohne ihn fehlt die Klappe). */
-export function zeigeTeigrechner(ziel, { abgleich: bereich = null } = {}) {
+export function zeigeTeigrechner(ziel) {
   wurzel = ziel;
-  abgleich = bereich;
   ladeKatalog();
-  // Die App startet immer mit der Liste (Startseite), nie in der zuletzt benutzten Vorlage
+  // Die App startet immer mit den zwei Kacheln (Startseite), nie in der zuletzt benutzten Vorlage
   zustand = null;
-  ansicht = 'liste';
+  ansicht = 'start';
   zeichne();
 
   // Ein Zuhörer für alle Felder statt einer pro Feld ("Event-Delegation")
@@ -108,15 +108,11 @@ export function zeigeTeigrechner(ziel, { abgleich: bereich = null } = {}) {
   wurzel.addEventListener('change', beiAuswahl);
   wurzel.addEventListener('click', beiKlick);
   // Kochen (Etappe 3): eigene Oberfläche in rezepte/kochen.js, hier nur Einstieg und Rückweg
-  startKochen(wurzel, { zurueck: () => zeige('liste'), beiOeffnen: () => { ansicht = 'kochen'; }, rueckgaengig: zeigeRueckgaengig });
+  startKochen(wurzel, { zurueck: () => zeige('start'), beiOeffnen: () => { ansicht = 'kochen'; }, rueckgaengig: zeigeRueckgaengig });
   wischen = erstelleWischen(wurzel, {
     beiEnde() {
       if (nachholen) datenAktualisiert();
     },
-  });
-  // Der Abgleich-Bereich zeichnet nur die Startseite neu (z. B. wenn der Status geladen ist)
-  abgleich?.verbinde(wurzel, () => {
-    if (ansicht === 'liste' && !tipptGerade() && !wischen?.zieht()) zeichne();
   });
   // Offene Klappen merken, damit sie nach dem Neuzeichnen offen bleiben
   wurzel.addEventListener('toggle', (e) => {
@@ -212,8 +208,8 @@ function aktuelleVorlage() {
 /** Wechselt zwischen Liste und Rechner und springt nach oben. */
 function zeige(neu) {
   ansicht = neu;
-  if (neu === 'liste') speicherKarte = null;
-  if (neu === 'rechner') neuKarte = null;
+  if (neu === 'liste' || neu === 'start') speicherKarte = null;
+  if (neu === 'rechner' || neu === 'start') neuKarte = null;
   zeichne();
   window.scrollTo(0, 0);
 }
@@ -221,7 +217,8 @@ function zeige(neu) {
 function zeichne() {
   if (ansicht === 'kochen') zeichneKochen({ scroll: true });
   else if (ansicht === 'rechner' && zustand) zeichneRechner();
-  else zeichneListe();
+  else if (ansicht === 'liste') zeichneListe();
+  else zeichneStart();
 }
 
 function meldungHtml() {
@@ -230,21 +227,36 @@ function meldungHtml() {
   return hinweis ? `<p class="karte hinweis-ok" role="status">${text(hinweis)}</p>` : '';
 }
 
-// ---------- Startseite: Vorlagenliste ----------
+// ---------- Startseite: zwei Kacheln ----------
+
+function zeichneStart() {
+  ansicht = 'start';
+  wurzel.innerHTML = `
+    <header class="seiten-kopf"><h1 class="kopf-titel">Kochbuch</h1></header>
+    ${meldungHtml()}
+    <nav class="kacheln" aria-label="Bereiche">
+      <button type="button" class="kachel" data-k="kochen"><span class="kachel-zeichen" aria-hidden="true">🍳</span>Kochen</button>
+      <button type="button" class="kachel" data-aktion="backen"><span class="kachel-zeichen" aria-hidden="true">🥖</span>Backen</button>
+    </nav>`;
+}
+
+// ---------- Backen: Vorlagenliste ----------
 
 function zeichneListe() {
   ansicht = 'liste';
   const ordnung = ordnungJetzt();
   wurzel.innerHTML = `
-    <header class="seiten-kopf"><h1 class="kopf-titel">Kochbuch</h1></header>
+    <header class="seiten-kopf">
+      <button type="button" class="knopf-zurueck" data-aktion="zurueck-start" aria-label="Zurück zur Startseite">‹</button>
+      <h1 class="kopf-titel">Backen</h1>
+    </header>
     ${meldungHtml()}
+    ${neuKarte ? '' : '<button type="button" class="knopf knopf-voll" data-aktion="teigrechner">Teigrechner</button>'}
     ${neuKarte ? neuKarteHtml() : ''}
     ${ordnung.anzahl >= SUCHE_AB || suche ? suchfeldHtml(suche) : ''}
     <div class="vorlagen-gruppen" data-liste>${listeHtml(ordnung)}</div>
     ${neuKarte ? '' : '<button type="button" class="knopf knopf-voll" data-aktion="neu-karte">+ Neue Vorlage</button>'}
-    ${neuKarte ? '' : kochenEinstiegHtml()}
-    ${einstellungenKlappe()}
-    ${abgleich ? abgleich.html() : ''}`;
+`;
 }
 
 function ordnungJetzt() {
@@ -333,12 +345,26 @@ function oeffneVorlage(id) {
   zeige('rechner');
 }
 
+/** Teigrechner: Schnellrechnung ohne Rezept (bleibt bis zum Schließen der App, wie er eingestellt ist). */
+function oeffneTeigrechner() {
+  if (zustand?.vorlageId !== null) {
+    zustand = {
+      vorlageId: null, teig: structuredClone(LEERER_TEIG), mehl: LEERES_MEHL, modus: 'mehl',
+      teiglinge: { ...STANDARD_TEIGLINGE }, geaendert: false, anpassung: neueAnpassung(),
+    };
+  }
+  zeige('rechner');
+}
+
+/** Ist die Vorlage verändert (und kann gespeichert werden)? Der Teigrechner speichert nichts. */
+const vorlageGeaendert = () => zustand.geaendert && zustand.vorlageId !== null;
+
 // ---------- Rechner ----------
 
 function zeichneRechner() {
   const { teig, mehl } = zustand;
   const vorlage = aktuelleVorlage();
-  const titel = vorlage ? vorlage.name : 'Eigener Teig';
+  const titel = zustand.vorlageId === null ? 'Teigrechner' : vorlage ? vorlage.name : 'Eigener Teig';
 
   const mehrereMehle = teig.mehlsorten.length > 1;
   const mehlZeilen = teig.mehlsorten
@@ -377,9 +403,9 @@ function zeichneRechner() {
 
   wurzel.innerHTML = `
     <header class="seiten-kopf">
-      <button type="button" class="knopf-zurueck" data-aktion="zurueck" aria-label="Zurück zur Vorlagenliste">‹</button>
+      <button type="button" class="knopf-zurueck" data-aktion="zurueck" aria-label="Zurück">‹</button>
       <h1 class="kopf-titel">${text(titel)}
-        <small class="geaendert" data-ausgabe="geaendert" ${zustand.geaendert ? '' : 'hidden'}>geändert</small></h1>
+        <small class="geaendert" data-ausgabe="geaendert" ${vorlageGeaendert() ? '' : 'hidden'}>geändert</small></h1>
     </header>
     ${meldungHtml()}
     ${vermerkKarte(vorlage)}
@@ -408,13 +434,14 @@ function zeichneRechner() {
     </section>
 
     <button type="button" class="knopf knopf-voll" data-aktion="speichern-karte"
-            ${zustand.geaendert && !speicherKarte ? '' : 'hidden'}>Änderungen speichern …</button>
+            ${vorlageGeaendert() && !speicherKarte ? '' : 'hidden'}>Änderungen speichern …</button>
 
     ${mehlKlappe()}
     ${saatenKlappe()}
     ${zusatzKlappe()}
     ${auffrischKlappe()}
-    ${vorlageKlappe(vorlage)}`;
+    ${vorlageKlappe(vorlage)}
+    ${einstellungenKlappe()}`;
 
   aktualisiere();
 }
@@ -653,7 +680,8 @@ function vorlageKlappe(vorlage) {
       ${modusKnoepfe('modus')}
       ${verlust}
       <div class="aktionen">
-        <button type="button" class="knopf" data-aktion="speichern-karte">Speichern, umbenennen …</button>
+        ${zustand.vorlageId === null ? ''
+          : '<button type="button" class="knopf" data-aktion="speichern-karte">Speichern, umbenennen …</button>'}
         ${weg}
       </div>`);
 }
@@ -797,9 +825,9 @@ function aktualisiere() {
 /** Markierung „geändert“ und Knopf „Änderungen speichern“ ein-/ausblenden. */
 function zeigeGeaendert() {
   const marke = wurzel.querySelector('[data-ausgabe="geaendert"]');
-  if (marke) marke.hidden = !zustand.geaendert;
+  if (marke) marke.hidden = !vorlageGeaendert();
   const knopf = wurzel.querySelector('.knopf[data-aktion="speichern-karte"]');
-  if (knopf) knopf.hidden = !zustand.geaendert || speicherKarte !== null;
+  if (knopf) knopf.hidden = !vorlageGeaendert() || speicherKarte !== null;
 }
 
 /** Ergebnis der Starter-Auffrischung in die Seite schreiben. */
@@ -1039,6 +1067,9 @@ function beiKlick(ereignis) {
   const knopf = ziel.closest('[data-aktion]');
   const aktion = knopf?.dataset.aktion;
   if (aktion === 'zurueck') zurueck();
+  if (aktion === 'zurueck-start') zeige('start');
+  if (aktion === 'backen') zeige('liste');
+  if (aktion === 'teigrechner') oeffneTeigrechner();
   if (aktion === 'neu-karte') oeffneNeuKarte();
   if (aktion === 'nk-modus' && neuKarte && MODI.includes(knopf.dataset.modus)) {
     neuKarte.modus = knopf.dataset.modus;
@@ -1070,8 +1101,8 @@ function beiKlick(ereignis) {
 
 /** Zurück zur Liste – mit ungespeicherten Änderungen erst fragen. */
 function zurueck() {
-  if (zustand.geaendert) return oeffneSpeicherKarte(true);
-  zeige('liste');
+  if (vorlageGeaendert()) return oeffneSpeicherKarte(true);
+  zeige(zustand.vorlageId === null ? 'start' : 'liste');
 }
 
 function entferneMehl(index) {
