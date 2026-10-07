@@ -1,16 +1,14 @@
-// abgleich.js – Bereich „Abgleich“ auf der Startseite (Etappe 2).
+// abgleich.js – Abgleich zwischen den Handys und versteckte Verwaltung (Etappe 2, ab Etappe 3, C nur noch dort).
 //
+// Alles liegt in der versteckten Verwaltung: langes Drücken auf die Versionsnummer ganz unten.
 // - Anmeldung einmal pro Handy: E-Mail + Passwort (der Schlüsselbund füllt aus), danach nie wieder.
-// - Verwalter-Handy: Häkchen beim Anmelden (Geräte-Einstellung). Nachträglich nur über die versteckte
-//   Verwaltung: langes Drücken auf die Versionsnummer ganz unten → „Abmelden“, „Verwalter-Handy an/aus“.
-// - Status nur auf dem Verwalter-Handy: Anmeldung, wartende Änderungen und
-//   wann jedes Handy zuletzt abgeglichen hat („Handy 2: seit 4 Tagen nicht abgeglichen“).
-//   Dazu, wann zuletzt gesichert wurde (ab 30 Tagen oder nie: „bitte ansehen“).
-//   Braucht etwas Aufmerksamkeit, steht das ruhig im Titel der Klappe – nur dort, nur auf diesem Handy.
-// - Auf allen anderen Handys verschwindet die Klappe nach der Anmeldung ganz. Sie kommt nur wieder,
-//   wenn Supabase die Anmeldung ablehnt (dann mit dem Formular, ohne Meldung).
-// - Versteckte Verwaltung: außerdem „Alles sichern“ (Datei) und „Aus Sicherung wiederherstellen“
-//   (kern/sicherung.js) – auf jedem Handy.
+//   Das Formular erscheint nur in der Verwaltung, solange das Handy nicht angemeldet ist.
+// - Verwalter-Handy: Häkchen beim Anmelden (Geräte-Einstellung) oder Schalter in der Verwaltung.
+// - Status nur auf dem Verwalter-Handy: wartende Änderungen und wann jedes Handy zuletzt abgeglichen hat
+//   („Handy 2: seit 4 Tagen nicht abgeglichen“), dazu die letzte Sicherung (ab 30 Tagen oder nie: „bitte ansehen“).
+//   Braucht etwas Aufmerksamkeit, steht nur ein kleiner Punkt „•“ neben der Versionsnummer – sonst nichts.
+//   Auf allen anderen Handys gibt es nie einen Punkt.
+// - Verwaltung außerdem: „Alles sichern“ (Datei) und „Aus Sicherung wiederherstellen“ (kern/sicherung.js), „Abmelden“.
 //
 // Abgeglichen wird über kern/ausloeser.js; die Oberfläche stößt es nur nach der Anmeldung
 // und vor dem Abmelden an.
@@ -127,7 +125,7 @@ export function statusZeilen({ zustand, offen, mitglieder, konto, jetzt, gesiche
   if (gesichert !== undefined) {
     const alt = sicherungAlt(gesichert, jetzt);
     zeilen.push({
-      text: `${sicherungText(gesichert, jetzt)}${alt ? ' Bitte „Alles sichern“: lange auf die Versionsnummer drücken.' : ''}`,
+      text: `${sicherungText(gesichert, jetzt)}${alt ? ' Bitte „Alles sichern“.' : ''}`,
       achtung: alt,
     });
   }
@@ -135,15 +133,15 @@ export function statusZeilen({ zustand, offen, mitglieder, konto, jetzt, gesiche
 }
 
 /**
- * Bereich „Abgleich“ für die Startseite und die versteckte Verwaltung.
+ * Abgleich-Bereich und versteckte Verwaltung.
  *   abgleichen – () => Promise: jetzt abgleichen (kern/ausloeser.js, prüft selbst `bereit()`)
  *   teilen     – ({ name, inhalt }) => Promise<boolean>: Sicherungsdatei weitergeben (false = abgebrochen)
  *   nachWiederherstellen – () => void: Daten haben sich geändert, Seite neu zeichnen
  *   fragen     – Ja/Nein-Frage (window.confirm)
  * Ergebnis:
- *   html()                    – HTML der Klappe (zu Beginn zugeklappt; '' auf angemeldeten Nicht-Verwalter-Handys)
- *   verbinde(wurzel, zeichne) – Tipper, Formular und Aufklappen verarbeiten; `zeichne` baut die Seite neu
- *   verbindeVerwaltung(version, ziel) – langes Drücken auf `version` öffnet die Verwaltung in `ziel`
+ *   verbindeVerwaltung(zeile, ziel, punkt) – langes Drücken auf `zeile` (Versionsnummer) öffnet die Verwaltung
+ *                               in `ziel`; `punkt` (optional) ist der kleine Punkt daneben
+ *   punkt()                   – braucht der Verwalter etwas Aufmerksamkeit? (nie auf anderen Handys)
  *   bereit()                  – darf jetzt abgeglichen werden?
  *   nachAbgleich(bericht)     – nach jedem Abgleich: Status auffrischen
  *   start()                   – beim App-Start: Status des Verwalter-Handys im Hintergrund laden
@@ -161,15 +159,36 @@ export function erstelleAbgleichBereich({
   let mitglieder;       // undefined = noch nicht geladen, null = nicht erreichbar, sonst Liste
   let geladenUm = 0;
   let laden = null;
-  let offen = false;    // Klappe aufgeklappt?
   let fehler = '';      // Rückmeldung unter dem Anmelde-Formular
   let email = '';       // bleibt nach einem Fehlversuch im Feld (nur im Arbeitsspeicher)
-  let zeichne = () => {};
-  let verwaltung = null; // { ziel, offen, laeuft, meldung } – versteckte Verwaltung unter der Versionsnummer
+  let verwaltung = null; // { ziel, punkt, offen, laeuft, meldung } – versteckte Verwaltung unter der Versionsnummer
 
   const bereit = () => anmeldung.zustand() === 'angemeldet';
 
   const anzahlOffen = () => Object.keys(SAMMLUNGEN).reduce((n, s) => n + speicher.offene(s).length, 0);
+
+  /** Statuszeilen des Verwalter-Handys (mit Sicherung). */
+  function zeilenJetzt() {
+    const zustand = anmeldung.zustand();
+    return statusZeilen({
+      zustand,
+      offen: anzahlOffen(),
+      mitglieder: zustand === 'angemeldet' ? mitglieder : false,
+      konto: anmeldung.konto(),
+      jetzt: jetzt(),
+      gesichert: letzteSicherung(speicher),
+    });
+  }
+
+  /** Nur das Verwalter-Handy zeigt den Punkt: abgemeldet oder eine Zeile mit „bitte ansehen“. */
+  function punkt() {
+    if (!istVerwalter(speicher)) return false;
+    return anmeldung.zustand() !== 'angemeldet' || zeilenJetzt().some((z) => z.achtung);
+  }
+
+  function zeichnePunkt() {
+    if (verwaltung?.punkt) verwaltung.punkt.hidden = !punkt();
+  }
 
   function ladeMitglieder({ erzwingen = false } = {}) {
     if (!istVerwalter(speicher) || anmeldung.zustand() !== 'angemeldet') return Promise.resolve();
@@ -183,14 +202,14 @@ export function erstelleAbgleichBereich({
       }
       geladenUm = jetzt();
       laden = null;
-      zeichne();
+      zeichneVerwaltung({ still: true });
     })();
     return laden;
   }
 
   function formular(verwalter) {
     return `<form class="anmelden" data-anmelden>
-        <p class="info">Einmal pro Handy anmelden. Danach haben beide Handys dieselben Vorlagen und Wasserwerte.</p>
+        <p class="info">Einmal pro Handy anmelden. Danach haben beide Handys dieselben Rezepte, Vorlagen und Wasserwerte.</p>
         <label class="feld"><span class="feld-name">E-Mail</span>
           <input class="eingabe eingabe-text" type="email" name="email" autocomplete="username"
                  autocapitalize="off" spellcheck="false" required value="${text(email)}"></label>
@@ -231,16 +250,10 @@ export function erstelleAbgleichBereich({
     } else {
       fehler = ANMELDE_FEHLER[ergebnis.grund] ?? ANMELDE_FEHLER.server;
     }
-    zeichne();
+    zeichneVerwaltung();
   }
 
   // ---------- versteckte Verwaltung (langes Drücken auf die Versionsnummer) ----------
-
-  const ZUSTAND_TEXT = {
-    angemeldet: 'Dieses Handy ist angemeldet.',
-    abgemeldet: 'Dieses Handy ist nicht angemeldet. Anmelden: Startseite → „Abgleich zwischen den Handys“.',
-    abgelehnt: 'Die Anmeldung gilt nicht mehr. Neu anmelden: Startseite → „Abgleich zwischen den Handys“.',
-  };
 
   function verwaltungHtml() {
     if (!verwaltung?.offen) return '';
@@ -251,24 +264,46 @@ export function erstelleAbgleichBereich({
       : `<button type="button" class="knopf" data-verwaltung="abmelden" ${laeuft ? 'disabled' : ''}>
           ${laeuft ? 'Wird abgeglichen …' : 'Abmelden'}</button>`;
     const meldung = verwaltung.meldung;
-    verwaltung.meldung = null;
+    // Verwalter: Status mit Sicherung; andere Handys nur der Zustand und die letzte Sicherung
+    const status = verwalter
+      ? statusHtml(zeilenJetzt())
+      : `<p class="info">${text(sicherungText(letzteSicherung(speicher), jetzt()))}</p>`;
+    const zustandText = zustand === 'angemeldet' ? 'Dieses Handy ist angemeldet.'
+      : zustand === 'abgelehnt' ? 'Die Anmeldung gilt nicht mehr. Bitte neu anmelden.'
+        : 'Dieses Handy ist nicht angemeldet.';
     return `<section class="karte verwaltung" aria-label="Verwaltung">
         <h2 class="karte-titel">Verwaltung</h2>
         ${meldung ? `<p class="hinweis" role="status">${text(meldung)}</p>` : ''}
-        <p class="info">${text(sicherungText(letzteSicherung(speicher), jetzt()))}</p>
+        ${status}
+        <p class="info">${text(zustandText)}</p>
+        ${zustand === 'angemeldet' ? '' : formular(verwalter)}
         <button type="button" class="knopf knopf-voll" data-verwaltung="sichern">Alles sichern</button>
         <p class="info">Rezepte, Vorlagen und Einstellungen als Datei. Im Teilen-Menü
           „In Dateien sichern“ wählen (z. B. iCloud Drive).</p>
         <button type="button" class="knopf" data-verwaltung="wiederherstellen">Aus Sicherung wiederherstellen</button>
         <input type="file" class="unsichtbar" data-verwaltung-datei tabindex="-1" aria-hidden="true">
         <p class="info">Holt nur zurück, was hier fehlt oder gelöscht ist. Vorhandenes bleibt, wie es ist.</p>
-        <p class="info">${text(ZUSTAND_TEXT[zustand] ?? '')}</p>
         <button type="button" class="knopf" data-verwaltung="verwalter" aria-pressed="${verwalter}">
           Verwalter-Handy: ${verwalter ? 'an' : 'aus'}</button>
-        <p class="info">Das Verwalter-Handy zeigt unten auf der Startseite, ob beide Handys abgleichen.</p>
+        <p class="info">Das Verwalter-Handy zeigt hier den Abgleich-Status und einen kleinen Punkt neben der
+          Versionsnummer, wenn etwas nachzusehen ist.</p>
         ${abmelden}
         <button type="button" class="knopf knopf-leise" data-verwaltung="schliessen">Schließen</button>
       </section>`;
+  }
+
+  /** Steht der Cursor gerade in der Verwaltung? Dann nicht neu zeichnen (sonst ist das Getippte weg). */
+  const tipptGerade = () => {
+    const feld = globalThis.document?.activeElement;
+    return Boolean(feld && verwaltung.ziel.contains?.(feld) && feld.matches?.('input'));
+  };
+
+  /** still: Auslöser im Hintergrund (Abgleich, Status geladen) – stört kein Tippen. */
+  function zeichneVerwaltung({ still = false } = {}) {
+    zeichnePunkt();
+    if (!verwaltung?.ziel) return;
+    if (still && verwaltung.offen && tipptGerade()) return;
+    verwaltung.ziel.innerHTML = verwaltungHtml();
   }
 
   async function sichern() {
@@ -285,7 +320,6 @@ export function erstelleAbgleichBereich({
       verwaltung.meldung = 'Gesichert.';
     }
     zeichneVerwaltung();
-    zeichne();
   }
 
   /** Datei gewählt: prüfen, nachfragen, nur Fehlendes zurückholen. */
@@ -318,11 +352,6 @@ export function erstelleAbgleichBereich({
       : `${ergebnis.wiederhergestellt === 1 ? '1 Eintrag' : `${ergebnis.wiederhergestellt} Einträge`} wiederhergestellt.`;
     nachWiederherstellen();
     zeichneVerwaltung();
-    zeichne();
-  }
-
-  function zeichneVerwaltung() {
-    if (verwaltung?.ziel) verwaltung.ziel.innerHTML = verwaltungHtml();
   }
 
   function schalteVerwalter() {
@@ -330,7 +359,6 @@ export function erstelleAbgleichBereich({
     mitglieder = undefined;
     ladeMitglieder({ erzwingen: true });
     zeichneVerwaltung();
-    zeichne();
   }
 
   /**
@@ -355,81 +383,49 @@ export function erstelleAbgleichBereich({
       await anmeldung.abmelden();
       speicher.setzeSyncStand(0); // nach der nächsten Anmeldung alles noch einmal herunterladen
       mitglieder = undefined;
-      verwaltung.offen = false;
+      verwaltung.meldung = null;
+      // Nicht schließen: Das Formular zum Neu-Anmelden steht gleich hier.
     }
     verwaltung.laeuft = false;
     zeichneVerwaltung();
-    zeichne();
   }
 
   return {
-    html() {
-      const zustand = anmeldung.zustand();
-      const verwalter = istVerwalter(speicher);
-      let inhalt;
-      let achtung = false;
-      if (verwalter) {
-        const zeilen = statusZeilen({
-          zustand,
-          offen: anzahlOffen(),
-          mitglieder: zustand === 'angemeldet' ? mitglieder : false,
-          konto: anmeldung.konto(),
-          jetzt: jetzt(),
-          gesichert: letzteSicherung(speicher),
-        });
-        achtung = zeilen.some((z) => z.achtung);
-        inhalt = `${statusHtml(zeilen)}${zustand === 'angemeldet' ? '' : formular(true)}`;
-      } else if (zustand === 'angemeldet') {
-        return ''; // anderes Handy: nichts zu sehen, nichts zu tun
-      } else {
-        inhalt = formular(false);
-      }
-      return `<details class="klappe" data-klappe="abgleich" ${offen ? 'open' : ''}>
-          <summary>Abgleich zwischen den Handys${achtung ? ' <span class="achtung">· bitte ansehen</span>' : ''}</summary>
-          <div class="klappe-inhalt">${inhalt}</div>
-        </details>`;
-    },
-
-    verbinde(wurzel, neuZeichnen) {
-      zeichne = neuZeichnen;
-      wurzel.addEventListener('toggle', (e) => {
-        if (e.target.dataset?.klappe !== 'abgleich') return;
-        offen = e.target.open;
-        if (offen) ladeMitglieder();
-      }, true);
-      wurzel.addEventListener('submit', (e) => {
-        if (!e.target.matches?.('[data-anmelden]')) return;
-        e.preventDefault();
-        anmelden(e.target);
-      });
-    },
-
-    verbindeVerwaltung(version, ziel) {
-      verwaltung = { ziel, offen: false, laeuft: false, meldung: null };
+    verbindeVerwaltung(zeile, ziel, punktElement = null) {
+      verwaltung = { ziel, punkt: punktElement, offen: false, laeuft: false, meldung: null };
       let zeitgeber = null;
       const abbrechen = () => {
         clearTimeout(zeitgeber);
         zeitgeber = null;
       };
-      version.addEventListener('pointerdown', () => {
+      zeile.addEventListener('pointerdown', () => {
         abbrechen();
         zeitgeber = setTimeout(() => {
           verwaltung.offen = true;
+          verwaltung.meldung = null;
+          ladeMitglieder();
           zeichneVerwaltung();
           ziel.scrollIntoView?.({ block: 'nearest' });
         }, LANG_DRUECKEN);
       });
-      for (const art of ['pointerup', 'pointercancel', 'pointerleave']) version.addEventListener(art, abbrechen);
-      version.addEventListener('contextmenu', (e) => e.preventDefault());
+      for (const art of ['pointerup', 'pointercancel', 'pointerleave']) zeile.addEventListener(art, abbrechen);
+      zeile.addEventListener('contextmenu', (e) => e.preventDefault());
+      ziel.addEventListener('submit', (e) => {
+        if (!e.target.matches?.('[data-anmelden]')) return;
+        e.preventDefault();
+        anmelden(e.target);
+      });
       ziel.addEventListener('change', (e) => {
         const feld = e.target;
         if (!feld?.matches?.('[data-verwaltung-datei]')) return;
         const datei = feld.files?.[0];
         feld.value = ''; // dieselbe Datei später noch einmal wählbar
+        verwaltung.meldung = null;
         wiederherstellen(datei);
       });
       ziel.addEventListener('click', (e) => {
         const aktion = e.target.closest?.('[data-verwaltung]')?.dataset.verwaltung;
+        if (aktion && aktion !== 'wiederherstellen') verwaltung.meldung = null;
         if (aktion === 'verwalter') schalteVerwalter();
         if (aktion === 'abmelden') abmelden();
         if (aktion === 'sichern') sichern();
@@ -439,14 +435,17 @@ export function erstelleAbgleichBereich({
           zeichneVerwaltung();
         }
       });
+      zeichnePunkt();
     },
 
     bereit,
 
+    punkt,
+
     nachAbgleich() {
-      geladenUm = 0; // „heute abgeglichen“ beim nächsten Aufklappen frisch
-      if (offen) ladeMitglieder();
-      zeichne();
+      geladenUm = 0; // „heute abgeglichen“ beim nächsten Öffnen frisch
+      if (verwaltung?.offen) ladeMitglieder();
+      zeichneVerwaltung({ still: true });
     },
 
     start() {
@@ -456,6 +455,8 @@ export function erstelleAbgleichBereich({
     /** Für Tests: Verwaltung öffnen wie nach langem Drücken. */
     oeffneVerwaltung() {
       verwaltung.offen = true;
+      verwaltung.meldung = null;
+      ladeMitglieder();
       zeichneVerwaltung();
     },
 

@@ -33,7 +33,7 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
 - **Schritt 10 – Bildschirm bleibt an**, solange die App offen ist (Wake Lock, nach Rückkehr in die App erneut anfordern).
 
 ### Schritt 12 – Vorlagen ausbauen *(fertig)*
-- **Startseite = Vorlagenliste**, gruppiert nach Kategorien (Brot, Brötchen, Pizza, Focaccia, Gebäck; alte eigene
+- **Startseite = Vorlagenliste** *(seit Etappe 3, C: das ist die Back-Liste hinter der Kachel „Backen“)*, gruppiert nach Kategorien (Brot, Brötchen, Pizza, Focaccia, Gebäck; alte eigene
   Vorlagen ohne Kategorie unter „Ohne Kategorie“ am Ende), Favoriten (Stern) oben, Suche ab 10 Vorlagen.
   Zeile zeigt dieselben Werte wie der Rechner (`zusammenfassung` in `startseite.js`).
 - Ein Tipper öffnet den **Rechner**: Name als Überschrift, Zurück-Pfeil. Die App startet **immer mit der Liste** (Startseite), nie in der zuletzt benutzten Vorlage (geändert nach Schritt 9; die Geräte-Einstellung `teig.stand` wird nicht mehr gelesen oder geschrieben).
@@ -123,6 +123,7 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
     Tests: `tests/anmeldung.test.js` mit nachgebautem Supabase (Schlüssel-Rotation, Elternschlüssel-Regel,
     abgebrochenes Erneuern, App-Neustart). Noch nicht in der Oberfläche eingebunden (kommt in E/F).
   - **E** *(fertig)* `kern/abgleich.js`: Klappe „Abgleich zwischen den Handys“ unten auf der Startseite (zugeklappt).
+    *(Seit Etappe 3, C: Klappe weg, Formular und Status stehen in der versteckten Verwaltung, dazu der Punkt neben der Versionsnummer.)*
     Nicht angemeldet: Formular E-Mail/Passwort (`autocomplete` für den Schlüsselbund), auf jedem Handy.
     Verwalter-Handy = Geräte-Einstellung `abgleich.verwalter`, **nur per Häkchen beim Anmelden** (kein Umschalt-Knopf).
     Andere Handys: nach der Anmeldung keine Klappe mehr (erst wieder mit Formular, falls Supabase ablehnt).
@@ -170,7 +171,7 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
 
 ### Etappe 3 – Rezepte *(Kochen läuft, Back-Teil in Arbeit)*
 
-**Aufbau der App** (neu geplant am 7.10.2026)
+**Aufbau der App** (neu geplant am 7.10.2026, umgesetzt in Schritt C)
 - **Startseite so schlank wie möglich:** nur die zwei großen Kacheln „Kochen“ und „Backen“, unten die Versionsnummer.
   **Keine** Suche über alle Rezepte, **kein** „Weiter mit“ (jede Liste hat ihre eigene Suche). Die App startet immer hier.
 - **Backen** öffnet **direkt die Back-Liste** (keine Zwischenebene), oben dauerhaft ein Knopf „Teigrechner“
@@ -393,9 +394,18 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
 - **B** „Alles sichern“ / „Wiederherstellen“, Teilen per Link raus. 4–6 $. ***(fertig, siehe „Sicherung“)***
 - **A** Ernährungsform (App, Connector, Datenbank-Prüfung, Tests, Projektanweisung + einmaliger Auftrag zum Nachtragen der
   vorhandenen Rezepte im claude.ai-Chat – kostet kein Guthaben). 3–5 $. ***(fertig, siehe „Rezept“; Einrichtung in Supabase/claude.ai durch den Nutzer)***
-- **C** (ersetzt alten Schritt 4) Startseite nur mit Kacheln, Wasserwerte in den Teigrechner, Abgleich-Status und Anmeldung in die
+- **C** ***(fertig, siehe unten)*** (ersetzt alten Schritt 4) Startseite nur mit Kacheln, Wasserwerte in den Teigrechner, Abgleich-Status und Anmeldung in die
   Verwaltung, Punkt neben der Versionsnummer (siehe „Aufbau der App“). Kochen-Einstieg unter der Vorlagenliste fällt weg.
   „Backen“ öffnet bis D die heutige Vorlagenliste. 4–6 $.
+  **Umsetzung C:** `ansicht.js` kennt vier Seiten: `start` (Kacheln „Kochen“ = `data-k="kochen"`, „Backen“ = `data-aktion="backen"`), `liste`
+  (Back-Liste, Überschrift „Backen“, Zurück-Pfeil, oben Knopf „Teigrechner“), `rechner`, `kochen`. Teigrechner = Rechner mit
+  `zustand.vorlageId === null` (Leerer Teig, nichts wird gespeichert, kein „Speichern“, Zurück geht zur Backen-Liste; der Stand bleibt
+  bis zum Schließen der App). Klappe „Einstellungen: Wasserwerte“ jetzt unten im Rechner (jede Vorlage und Teigrechner).
+  `abgleich.js`: kein `html()`/`verbinde()` mehr; `verbindeVerwaltung(zeile, ziel, punkt)` – langes Drücken auf die Zeile mit Version
+  **und** Punkt (`#versionszeile`), Formular (Anmelden, auch Verwalter-Häkchen) und Status stehen in der Verwaltung, `punkt()` für den
+  Punkt (nur Verwalter-Handy: abgemeldet, kein Haushalt, Handy ≥ `WARNEN_AB_TAGEN`, Sicherung > 30 Tage/nie; Netzprobleme nie).
+  Abmelden schließt die Verwaltung nicht (das Formular zum Neu-Anmelden steht gleich da). Hintergrund-Aktualisierung zeichnet die
+  Verwaltung nicht neu, solange darin getippt wird. Neue Handys melden sich über die Verwaltung an (langes Drücken auf die Version).
 - **D** (alter Schritt 5) Umzug Vorlagen → Back-Rezepte, Back-Rezeptansicht; vorher „Alles sichern“ anbieten. 5–8 $.
 - **E** (alter Schritt 6) „Im Teigrechner anpassen“, „Nur für heute“/„Ins Rezept übernehmen“, Teigrechner-Knopf mit
   „Als Rezept speichern“, kleines Bearbeiten (Name, Kategorie, Modus), Speichern-Karte und Klappe „Vorlage“ weg. 5–8 $.
@@ -446,9 +456,9 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 | `css/basis.css` | Farben (hell/dunkel), Schrift, Knöpfe, Felder |
 | `css/<bereich>.css` | Design eines Bereichs (z. B. `teig.css`, `kochen.css`) |
 | `js/app.js` | Start und (später) Navigation |
-| `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse, öffentlicher Schlüssel, Abfragen), `anmeldung.js` (Anmeldung, stilles Erneuern), `abgleich.js` (Klappe Abgleich: Anmelde-Formular, Status auf dem Verwalter-Handy, versteckte Verwaltung mit Sichern/Wiederherstellen), `sicherung.js` (Sicherungsdatei: erstellen, prüfen, wiederherstellen), `ausloeser.js` (wann abgeglichen wird) |
+| `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse, öffentlicher Schlüssel, Abfragen), `anmeldung.js` (Anmeldung, stilles Erneuern), `abgleich.js` (versteckte Verwaltung: Anmelde-Formular, Status und Punkt auf dem Verwalter-Handy, Sichern/Wiederherstellen), `sicherung.js` (Sicherungsdatei: erstellen, prüfen, wiederherstellen), `ausloeser.js` (wann abgeglichen wird) |
 | `js/rezepte/` | Rezepte (Etappe 3): `rezept.js` (Modell, Prüfung, Speichern), `katalog.js` (Zutatenkatalog), `rechner.js` (Skalieren), `liste.js` (Ordnen, Favoriten, Mengen in Schritten), `kochen.js` (Oberfläche Kochen) |
-| `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js` (inkl. Kategorien, Ordnen der Liste), `zutaten.js` (Mehle/Saaten/Zusatzzutaten), `pruefung.js` (Vorlagen von außen prüfen), `startseite.js` (HTML der Vorlagenliste), `ansicht.js` (Oberfläche, Navigation) |
+| `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js` (inkl. Kategorien, Ordnen der Liste), `zutaten.js` (Mehle/Saaten/Zusatzzutaten), `pruefung.js` (Vorlagen von außen prüfen), `startseite.js` (HTML der Vorlagenliste), `ansicht.js` (Oberfläche, Navigation inkl. Startseite mit Kacheln) |
 | `supabase/functions/` | Edge Functions: `kochbuch/index.ts` (Connector), im Dashboard eingefügt; nicht Teil der App |
 | `datenbank/schema.sql` | Supabase-Datenbank (Tabellen, Zugriffsschutz, Sync-Funktionen, Connector-Rolle); nicht Teil der App |
 | `datenbank/connector-pruefen.sql` | Kontrollabfrage: was die Connector-Rolle darf (im Dashboard ausführen) |
