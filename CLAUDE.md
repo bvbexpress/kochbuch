@@ -399,7 +399,7 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
   „Backen“ öffnet bis D die heutige Vorlagenliste. 4–6 $.
   **Umsetzung C:** `ansicht.js` kennt vier Seiten: `start` (Kacheln „Kochen“ = `data-k="kochen"`, „Backen“ = `data-aktion="backen"`), `liste`
   (Back-Liste, Überschrift „Backen“, Zurück-Pfeil, oben Knopf „Teigrechner“), `rechner`, `kochen`. Teigrechner = Rechner mit
-  `zustand.vorlageId === null` (Leerer Teig, nichts wird gespeichert, kein „Speichern“, Zurück geht zur Startseite; der Stand bleibt
+  `zustand.vorlageId === null` (Leerer Teig, nichts wird gespeichert, kein „Speichern“, Zurück geht zur Backen-Liste; der Stand bleibt
   bis zum Schließen der App). Klappe „Einstellungen: Wasserwerte“ jetzt unten im Rechner (jede Vorlage und Teigrechner).
   `abgleich.js`: kein `html()`/`verbinde()` mehr; `verbindeVerwaltung(zeile, ziel, punkt)` – langes Drücken auf die Zeile mit Version
   **und** Punkt (`#versionszeile`), Formular (Anmelden, auch Verwalter-Häkchen) und Status stehen in der Verwaltung, `punkt()` für den

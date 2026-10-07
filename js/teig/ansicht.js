@@ -1102,7 +1102,7 @@ function beiKlick(ereignis) {
 /** Zurück zur Liste – mit ungespeicherten Änderungen erst fragen. */
 function zurueck() {
   if (vorlageGeaendert()) return oeffneSpeicherKarte(true);
-  zeige(zustand.vorlageId === null ? 'start' : 'liste');
+  zeige('liste');
 }
 
 function entferneMehl(index) {
