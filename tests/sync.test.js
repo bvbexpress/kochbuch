@@ -472,3 +472,95 @@ test('Rezepte: gleichzeitige Änderung wird Kopie; dieselbe neue Zutat auf beide
   assert.equal(a.speicher.alle('zutaten').length, b.speicher.alle('zutaten').length);
   assert.equal(a.speicher.offene('zutaten').length + b.speicher.offene('zutaten').length, 0);
 });
+
+// ---------- Umzug Teigvorlagen → Back-Rezepte (Etappe 3, D) auf zwei Handys ----------
+
+import { zieheVorlagenUm, BACK_REZEPTE } from '../js/rezepte/umzug.js';
+import { VORLAGEN, ladeVorlage } from '../js/teig/vorlagen.js';
+
+const echteVorlage = (name, mehl = 500) => ({ name, teig: ladeVorlage(VORLAGEN[1]).teig, mehl, modus: 'mehl', kategorie: 'brot' });
+
+/** Zwei Handys mit denselben (abgeglichenen) Teigvorlagen, beide noch mit alter App (nichts umgezogen). */
+async function haushaltMitVorlagen() {
+  const h = haushalt();
+  h.a.speicher.speichere('teigvorlagen', echteVorlage('Roggenbrot'));
+  h.a.speicher.speichere('teigvorlagen', echteVorlage('Dinkelbrot', 400));
+  await h.a.sync.abgleichen();
+  await h.b.sync.abgleichen();
+  return h;
+}
+
+const namen = (h) => alleRezepte(h.speicher, 'backen').map((r) => r.name).sort();
+
+test('Umzug auf beiden Handys gleichzeitig: keine Doppel, keine Konflikt-Kopien, Vorlagen bleiben', async () => {
+  const { a, b, server } = await haushaltMitVorlagen();
+  const vorher = JSON.stringify(vorlagen(a));
+  assert.equal(zieheVorlagenUm(a.speicher).angelegt, 4);
+  assert.equal(zieheVorlagenUm(b.speicher).angelegt, 4);
+
+  const ergebnisA = await a.sync.abgleichen();
+  const ergebnisB = await b.sync.abgleichen();
+  await a.sync.abgleichen();
+  assert.equal(ergebnisA.ok && ergebnisB.ok, true);
+  assert.equal(ergebnisB.kopien, 0);
+  const erwartet = ['Dinkelbrot', 'Roggenbrot', 'Sauerteig-Focaccia', 'Weizenvollkorn-Sauerteigbrot'];
+  assert.deepEqual(namen(a), erwartet);
+  assert.deepEqual(namen(b), erwartet);
+  assert.equal(a.speicher.offene('rezepte').length + b.speicher.offene('rezepte').length, 0);
+  assert.equal([...server.zeilen.values()].filter((z) => z.sammlung === 'rezepte').length, 4);
+  // gleiche ids wie die Vorlagen, Vorlagen unverändert als Sicherung
+  for (const v of vorlagen(a)) assert.ok(a.speicher.hole('rezepte', v.id));
+  assert.equal(JSON.stringify(vorlagen(a)), vorher);
+});
+
+test('Umzug nach dem Abgleich (wie in app.js): Was das andere Handy schon umgezogen hat, wird nicht neu angelegt', async () => {
+  const { a, b } = await haushaltMitVorlagen();
+  zieheVorlagenUm(a.speicher);
+  await a.sync.abgleichen();
+  await b.sync.abgleichen();
+  assert.deepEqual(zieheVorlagenUm(b.speicher), { angelegt: 0, fehler: 0 });
+  assert.equal(b.speicher.offene('rezepte').length, 0);
+  assert.equal(namen(b).length, 4);
+});
+
+test('Darum erst nach dem Abgleich: mit veralteter Vorlage würde eine Konflikt-Kopie entstehen', async () => {
+  const { a, b } = await haushaltMitVorlagen();
+  const roggen = vorlagen(a).find((v) => v.name === 'Roggenbrot');
+  a.speicher.speichere('teigvorlagen', { ...roggen, mehl: 900 }); // A ändert, B hat es noch nicht
+  await a.sync.abgleichen();
+  zieheVorlagenUm(a.speicher);
+  await a.sync.abgleichen();
+
+  // richtig: B gleicht erst ab, dann Umzug → nichts doppelt
+  await b.sync.abgleichen();
+  zieheVorlagenUm(b.speicher);
+  const ergebnis = await b.sync.abgleichen();
+  assert.equal(ergebnis.kopien, 0);
+  assert.equal(b.speicher.hole('rezepte', roggen.id).mehl, 900);
+
+  // falsch (nur zur Begründung): Umzug vor dem Abgleich mit altem Stand
+  const c = haushalt();
+  c.a.speicher.speichere('teigvorlagen', { ...roggen, mehl: 900 });
+  c.b.speicher.speichere('teigvorlagen', roggen);
+  zieheVorlagenUm(c.a.speicher);
+  zieheVorlagenUm(c.b.speicher);
+  await c.a.sync.abgleichen();
+  await c.b.sync.abgleichen();
+  assert.equal(alleRezepte(c.b.speicher, 'backen').filter((r) => r.konflikt).length, 1);
+});
+
+test('Gelöschtes Back-Rezept kommt durch den Umzug nicht zurück – auch nicht auf dem anderen Handy', async () => {
+  const { a, b } = await haushaltMitVorlagen();
+  zieheVorlagenUm(a.speicher);
+  const focaccia = BACK_REZEPTE.find((e) => e.vorlage === 'focaccia').id;
+  const roggen = vorlagen(a).find((v) => v.name === 'Roggenbrot').id;
+  a.speicher.loesche('rezepte', focaccia);
+  a.speicher.loesche('rezepte', roggen);
+  await a.sync.abgleichen();
+  assert.equal(zieheVorlagenUm(a.speicher).angelegt, 0);
+
+  await b.sync.abgleichen();
+  assert.equal(zieheVorlagenUm(b.speicher).angelegt, 0);
+  assert.deepEqual(namen(b), ['Dinkelbrot', 'Weizenvollkorn-Sauerteigbrot']);
+  assert.ok(b.speicher.hole('teigvorlagen', roggen), 'die Vorlage selbst bleibt als Sicherung');
+});

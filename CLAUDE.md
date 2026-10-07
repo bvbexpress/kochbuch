@@ -169,7 +169,7 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   (`entferneAusListe` in `ansicht.js`; Löschen = Grabstein, Rückgängig stellt den alten Inhalt als neue Änderung wieder her).
   Während eines Wischens zeichnet `datenAktualisiert()` nicht neu, sondern holt es danach nach.
 
-### Etappe 3 – Rezepte *(Kochen läuft, Back-Teil in Arbeit)*
+### Etappe 3 – Rezepte *(Kochen läuft, Back-Rezepte seit D, E offen)*
 
 **Aufbau der App** (neu geplant am 7.10.2026, umgesetzt in Schritt C)
 - **Startseite so schlank wie möglich:** nur die zwei großen Kacheln „Kochen“ und „Backen“, unten die Versionsnummer.
@@ -406,7 +406,23 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
   Punkt (nur Verwalter-Handy: abgemeldet, kein Haushalt, Handy ≥ `WARNEN_AB_TAGEN`, Sicherung > 30 Tage/nie; Netzprobleme nie).
   Abmelden schließt die Verwaltung nicht (das Formular zum Neu-Anmelden steht gleich da). Hintergrund-Aktualisierung zeichnet die
   Verwaltung nicht neu, solange darin getippt wird. Neue Handys melden sich über die Verwaltung an (langes Drücken auf die Version).
-- **D** (alter Schritt 5) Umzug Vorlagen → Back-Rezepte, Back-Rezeptansicht; vorher „Alles sichern“ anbieten. 5–8 $.
+- **D** ***(fertig)*** (alter Schritt 5) Umzug Vorlagen → Back-Rezepte, Back-Rezeptansicht; vorher „Alles sichern“ anbieten. 5–8 $.
+  **Umsetzung D:** `js/rezepte/umzug.js` (`zieheVorlagenUm`): jede eigene Teigvorlage → Back-Rezept mit **derselben id** (Konflikt-Vermerk
+  zieht mit), die zwei eingebauten Vorlagen → Back-Rezepte mit **festen UUIDs** (`BACK_REZEPTE`: „Weizenvollkorn-Sauerteigbrot“,
+  „Sauerteig-Focaccia“, erprobt, mit Schritten, Geräten, Notiz; **Inhalt nie nachträglich im Code ändern**, sonst legen zwei App-Stände
+  Verschiedenes an). Angelegt wird nur, was es unter der id noch gar nicht gibt (`speicher.kennt`, auch Grabsteine: Gelöschtes kommt
+  nicht zurück). Inhalt folgt nur aus Vorlage bzw. Code → beide Handys erzeugen dasselbe, der Abgleich sieht „inhaltlich gleich“.
+  **Wann** (`app.js`): angemeldet erst nach dem ersten erfolgreichen Abgleich der Sitzung (Vorlagen aktuell, Umgezogenes vom anderen
+  Handy schon da; sonst würde eine veraltete Vorlage eine Konflikt-Kopie erzeugen, Test in `sync.test.js`), danach erneut, wenn Daten
+  herunterkamen (Vorlagen von einem Handy mit alter Version); nicht angemeldet sofort beim Start. `teigvorlagen` bleibt unverändert
+  (nur noch Archiv, Sync und Sicherung). Favoriten der eingebauten Vorlagen gehen auf ihr Rezept über (Back-Favoriten bleiben
+  `teig.favoriten`), Umgezogenes gilt als gesehen. Ausgeblendet gibt es nicht mehr (Back-Rezepte löscht man, Wischen mit „Rückgängig“).
+  „Alles sichern“ vorher: kein Zwang in der App (der Umzug löscht nichts), sondern Anleitung an den Nutzer vor dem Update.
+  **Back-Rezeptansicht:** Das Back-Rezept öffnet im Rechner (Menge, Teig, Klappen wie bisher, Speichern-Karte schreibt ins Rezept:
+  „Rezept aktualisieren“ / „Als neues speichern“ = Kopie inkl. Schritte und Notiz); darunter `js/rezepte/backen.js`: weitere Zutaten
+  (skalieren mit dem Mehl), Status, Notiz, Geräte, Schritte zum Abhaken (Attribute `data-b…`). Gemeinsame HTML-Bausteine mit Kochen in
+  `js/rezepte/teile.js`. Liste zeigt „Neu“ und „Noch testen“. „+ Neues Rezept“ legt ein Back-Rezept ohne Schritte an. Bis E bleibt
+  die Speichern-Karte (Teig ändern ginge sonst nicht mehr).
 - **E** (alter Schritt 6) „Im Teigrechner anpassen“, „Nur für heute“/„Ins Rezept übernehmen“, Teigrechner-Knopf mit
   „Als Rezept speichern“, kleines Bearbeiten (Name, Kategorie, Modus), Speichern-Karte und Klappe „Vorlage“ weg. 5–8 $.
 - Summe 21–33 $: A–D (16–25 $) sicher, E nur bei Restguthaben. Sparvariante E: nur „Ins Rezept übernehmen“ (ohne „Nur für heute“).
@@ -457,7 +473,7 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 | `css/<bereich>.css` | Design eines Bereichs (z. B. `teig.css`, `kochen.css`) |
 | `js/app.js` | Start und (später) Navigation |
 | `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse, öffentlicher Schlüssel, Abfragen), `anmeldung.js` (Anmeldung, stilles Erneuern), `abgleich.js` (versteckte Verwaltung: Anmelde-Formular, Status und Punkt auf dem Verwalter-Handy, Sichern/Wiederherstellen), `sicherung.js` (Sicherungsdatei: erstellen, prüfen, wiederherstellen), `ausloeser.js` (wann abgeglichen wird) |
-| `js/rezepte/` | Rezepte (Etappe 3): `rezept.js` (Modell, Prüfung, Speichern), `katalog.js` (Zutatenkatalog), `rechner.js` (Skalieren), `liste.js` (Ordnen, Favoriten, Mengen in Schritten), `kochen.js` (Oberfläche Kochen) |
+| `js/rezepte/` | Rezepte (Etappe 3): `rezept.js` (Modell, Prüfung, Speichern), `katalog.js` (Zutatenkatalog), `rechner.js` (Skalieren), `liste.js` (Ordnen, Favoriten, Mengen in Schritten), `kochen.js` (Oberfläche Kochen), `backen.js` (Rezept-Teil der Back-Rezepte im Rechner), `teile.js` (gemeinsame HTML-Bausteine), `umzug.js` (Vorlagen → Back-Rezepte, eingebaute Back-Rezepte) |
 | `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js` (inkl. Kategorien, Ordnen der Liste), `zutaten.js` (Mehle/Saaten/Zusatzzutaten), `pruefung.js` (Vorlagen von außen prüfen), `startseite.js` (HTML der Vorlagenliste), `ansicht.js` (Oberfläche, Navigation inkl. Startseite mit Kacheln) |
 | `supabase/functions/` | Edge Functions: `kochbuch/index.ts` (Connector), im Dashboard eingefügt; nicht Teil der App |
 | `datenbank/schema.sql` | Supabase-Datenbank (Tabellen, Zugriffsschutz, Sync-Funktionen, Connector-Rolle); nicht Teil der App |

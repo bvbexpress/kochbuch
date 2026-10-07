@@ -10,6 +10,7 @@ import { erstelleServer } from './kern/server.js';
 import { erstelleSync } from './kern/sync.js';
 import { erstelleAusloeser } from './kern/ausloeser.js';
 import { erstelleAbgleichBereich } from './kern/abgleich.js';
+import { zieheVorlagenUm } from './rezepte/umzug.js';
 
 // Abgleich zwischen den Handys (Etappe 2): Anmeldung und Status in der versteckten Verwaltung
 // (langes Drücken auf die Versionsnummer), abgeglichen wird beim Start, bei Rückkehr in die App, wenn das Netz wieder da ist und kurz nach dem Speichern.
@@ -23,15 +24,25 @@ const abgleich = erstelleAbgleichBereich({
   abgleichen: () => ausloeser.jetzt(),
   nachWiederherstellen: datenAktualisiert,
 });
+// Umzug Teigvorlagen → Back-Rezepte (Etappe 3, D, siehe rezepte/umzug.js). Angemeldet erst nach dem ersten
+// erfolgreichen Abgleich: Dann sind die Vorlagen aktuell, und was das andere Handy schon umgezogen hat, ist da.
+// Danach erneut, wenn neue Daten kamen (Vorlagen von einem Handy mit alter App-Version). Ohne Wirkung, wenn alles da ist.
+let umgezogen = false;
+function umzug() {
+  umgezogen = true;
+  return zieheVorlagenUm(speicher).angelegt > 0;
+}
 const ausloeser = erstelleAusloeser({
   sync,
   bereit: abgleich.bereit,
   nachAbgleich(bericht) {
-    if (bericht.heruntergeladen > 0 || bericht.kopien > 0) datenAktualisiert();
+    const neu = bericht.ok && (!umgezogen || bericht.heruntergeladen > 0) && umzug();
+    if (neu || bericht.heruntergeladen > 0 || bericht.kopien > 0) datenAktualisiert();
     abgleich.nachAbgleich(bericht);
   },
 });
 
+if (!abgleich.bereit()) umzug(); // nicht angemeldet: gleich, es gibt ohnehin keinen Abgleich
 zeigeTeigrechner(document.getElementById('inhalt'));
 abgleich.verbindeVerwaltung(
   document.getElementById('versionszeile'), document.getElementById('verwaltung'), document.getElementById('punkt'),

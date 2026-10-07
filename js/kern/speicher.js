@@ -96,6 +96,11 @@ export function erstelleSpeicher(backend, jetzt = () => Date.now()) {
       return d ? ohneSync(d) : null;
     },
 
+    /** Gibt es hier einen Datensatz mit dieser id – auch einen gelöschten (Grabstein)? */
+    kennt(sammlung, id) {
+      return sammlungLesen(sammlung).some((x) => x.id === id);
+    },
+
     /** Legt einen Datensatz an oder ändert ihn. Gibt den gespeicherten Datensatz zurück. */
     speichere(sammlung, daten) {
       const liste = sammlungLesen(sammlung);
