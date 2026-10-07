@@ -14,8 +14,9 @@ import { alleZutaten, zutatName } from './katalog.js';
 import { skaliere, mengeText } from './rechner.js';
 import {
   SUCHE_AB, ordneRezepte, rezeptFavoriten, schalteRezeptFavorit, gesehen, markiereGesehen,
-  portionenText, mengenInSchritten, geraeteListe, ernaehrungAnzeige,
+  portionenText, mengenInSchritten, ernaehrungAnzeige,
 } from './liste.js';
+import { schritteHtml, statusHtml, notizHtml, geraeteHtml, vermerkHtml } from './teile.js';
 import { vermerkText } from '../teig/vorlagen.js';
 
 const MAX_PORTIONEN = 99;
@@ -140,12 +141,10 @@ function rezeptHtml(r) {
   const mengen = skaliert.schritte
     ? skaliert.schritte.map((je) => je.map((m) => ({ ...m, name: zutatName(katalog, m.zutat) })))
     : mengenInSchritten(r.schritte, skaliert.zutaten, katalog);
-  const jetzt = r.schritte.findIndex((_, i) => !haken.has(i)); // erster offener Schritt = der aktuelle
   const stern = rezeptFavoriten(speicher).includes(r.id);
   const vermerk = vermerkText(r, alleRezepte(speicher));
   const geaendert = Math.abs(portionen - r.portionen) > 0.005;
   const art = r.portionsart;
-  const geraete = geraeteListe(r);
   const ernaehrung = ernaehrungAnzeige(r);
 
   const zutatenZeilen = skaliert.zutaten.map((z) => `
@@ -154,25 +153,6 @@ function rezeptHtml(r) {
         <span>${text(zutatName(katalog, z.zutat))}</span>
       </li>`).join('');
 
-  const schritte = r.schritte.map((s, i) => {
-    const fertig = haken.has(i);
-    const chips = mengen[i].map((m) => (m.menge === null
-      ? `<span class="menge-chip">${text(m.name)}, <span class="leise">nach Geschmack</span></span>`
-      : `<span class="menge-chip"><b class="zahl">${text(mengeText(m.menge, m.einheit))}</b> ${text(m.name)}</span>`)).join('');
-    const geraet = r.schrittgeraete?.[i] ?? '';
-    const klasse = fertig ? 'erledigt' : i === jetzt ? 'jetzt' : '';
-    return `<li class="schritt ${klasse}">
-        <button type="button" class="schritt-knopf" data-kschritt="${i}" aria-pressed="${fertig}" ${i === jetzt ? 'aria-current="step"' : ''}>
-          <span class="schritt-nr" aria-hidden="true">${fertig ? '✓' : i + 1}</span>
-          <span class="schritt-inhalt">
-            ${geraet ? `<span class="geraet-tag">${text(geraet)}</span>` : ''}
-            <span class="schritt-text">${text(s)}</span>
-            ${chips ? `<span class="schritt-mengen">${chips}</span>` : ''}
-          </span>
-        </button>
-      </li>`;
-  }).join('');
-
   return `
     <header class="seiten-kopf">
       <button type="button" class="knopf-zurueck" data-k="zurueck" aria-label="Zurück">‹</button>
@@ -180,13 +160,7 @@ function rezeptHtml(r) {
       <button type="button" class="stern" data-kstern="${text(r.id)}" aria-pressed="${stern}"
               aria-label="${stern ? 'Aus den Favoriten nehmen' : 'Als Favorit markieren'}">${stern ? '★' : '☆'}</button>
     </header>
-    ${vermerk ? `<section class="karte vermerk-karte" aria-label="Gleichzeitig geändert">
-        <p>${text(vermerk)}</p>
-        <div class="aktionen">
-          <button type="button" class="knopf knopf-voll" data-k="behalten">Diese behalten</button>
-          <button type="button" class="knopf knopf-leise" data-k="loeschen">Diese löschen</button>
-        </div>
-      </section>` : ''}
+    ${vermerkHtml(vermerk, 'k')}
     <section class="karte" aria-label="Portionen und Status">
       <div class="portionen" role="group" aria-label="Portionen">
         <button type="button" class="knopf portionen-knopf" data-k="minus" aria-label="Eine Portion weniger" ${portionen <= 1 ? 'disabled' : ''}>−</button>
@@ -196,26 +170,16 @@ function rezeptHtml(r) {
         </div>
         <button type="button" class="knopf portionen-knopf" data-k="plus" aria-label="Eine Portion mehr" ${portionen >= MAX_PORTIONEN ? 'disabled' : ''}>+</button>
       </div>
-      <div class="umschaltgruppe status" role="group" aria-label="Status">
-        <button type="button" class="knopf" data-kstatus="erprobt" aria-pressed="${r.status === 'erprobt'}">Erprobt</button>
-        <button type="button" class="knopf" data-kstatus="testen" aria-pressed="${r.status === 'testen'}">Noch testen</button>
-      </div>
+      ${statusHtml(r.status, 'k')}
     </section>
-    <section class="karte notiz" aria-label="Notiz">
-      <label class="feld"><span class="feld-name">Notiz</span>
-        <textarea class="eingabe notiz-feld" data-knotiz rows="2" maxlength="2000"
-                  placeholder="z. B. weniger Salz …" autocomplete="off">${text(r.notiz)}</textarea></label>
-    </section>
+    ${notizHtml(r.notiz, 'k')}
     ${ernaehrung ? `<p class="ernaehrung-zeile"><span aria-hidden="true">${ernaehrung.zeichen}</span> ${text(ernaehrung.text)}</p>` : ''}
-    ${geraete.length ? `<p class="geraete" aria-label="Geräte"><span class="leise">Geräte:</span> ${geraete.map((g) => `<span class="geraet-tag">${text(g)}</span>`).join(' ')}</p>` : ''}
+    ${geraeteHtml(r)}
     <details class="klappe" data-kklappe="zutaten" ${zutatenOffen ? 'open' : ''}>
       <summary>Zutaten (${r.zutaten.length})</summary>
       <div class="klappe-inhalt"><ul class="zutaten-liste">${zutatenZeilen || '<li class="leise">Keine Zutaten.</li>'}</ul></div>
     </details>
-    <section aria-label="Schritte">
-      <ol class="schritte">${schritte || '<li class="info">Keine Schritte.</li>'}</ol>
-      ${haken.size ? '<button type="button" class="knopf knopf-leise haken-weg" data-k="haken-weg">Alle Haken entfernen</button>' : ''}
-    </section>`;
+    ${schritteHtml(r, { mengen, haken, p: 'k' })}`;
 }
 
 function oeffneRezept(id) {

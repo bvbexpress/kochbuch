@@ -1,8 +1,10 @@
-// ansicht.js – Oberfläche des Teigrechners.
-// Zwei Ansichten: die Vorlagenliste (Startseite) und der Rechner für eine Vorlage.
+// ansicht.js – Oberfläche: Startseite mit Kacheln, Backen (Liste der Back-Rezepte) und der Rechner.
+// Ein Back-Rezept öffnet im Rechner (Menge, Teig, Klappen), darunter Status, Notiz und Schritte
+// (rezepte/backen.js). Der Teigrechner ist derselbe Rechner ohne Rezept.
 // Liest Eingaben, ruft den Rechner auf und schreibt die Grammzahlen in die Seite.
 // Gerechnet wird hier nichts – das macht ausschließlich rechner.js.
-// Gespeichert wird hier nichts direkt – das läuft über vorlagen.js bzw. speicher.js.
+// Gespeichert wird hier nichts direkt – das läuft über rezepte/rezept.js bzw. speicher.js.
+// Seit Etappe 3, D sind die Teigvorlagen Back-Rezepte (rezepte/umzug.js); `teigvorlagen` liest hier niemand mehr.
 
 import {
   berechne,
@@ -17,19 +19,11 @@ import {
   mehlHinweise,
 } from './rechner.js';
 import {
-  alleVorlagen,
   ladeVorlage,
-  speichereEigeneVorlage,
-  loescheEigeneVorlage,
-  holeEigeneVorlage,
-  stelleEigeneVorlageWiederHer,
   bereinigeKategorie,
-  modusVon,
   ordneVorlagen,
   favoriten,
-  ausgeblendet,
   schalteFavorit,
-  blendeAus,
   KATEGORIEN,
   OHNE_KATEGORIE,
   MODI,
@@ -40,7 +34,6 @@ import {
   vorbelegung,
   neueVorlage,
   vermerkText,
-  entferneVermerk,
 } from './vorlagen.js';
 import {
   mehle,
@@ -58,6 +51,11 @@ import { speicher } from '../kern/speicher.js';
 import { leseZahl, formatGramm, formatGrammFein, formatProzent } from '../kern/zahlen.js';
 import { text } from '../kern/html.js';
 import { startKochen, zeichneKochen } from '../rezepte/kochen.js';
+import {
+  startBacken, backenTeilHtml, aktualisiereBacken, speichereNotizJetzt,
+} from '../rezepte/backen.js';
+import { alleRezepte, holeRezept, speichereRezept, SAMMLUNG as REZEPTE } from '../rezepte/rezept.js';
+import { gesehen, markiereGesehen } from '../rezepte/liste.js';
 
 const HINWEISE = {
   'starter-zu-viel': 'Mehr Starter als Mehl – bitte den Starter-Anteil verringern.',
@@ -81,17 +79,18 @@ const EIGENE = '__eigene';             // Auswahl-Eintrag „Eigene Sorte …“
 let wurzel;   // das HTML-Element, in dem der Teigrechner steht
 let ansicht = 'start'; // 'start' (Kacheln), 'liste' (Backen), 'rechner' oder 'kochen' (Rezepte, rezepte/kochen.js)
 // { vorlageId, teig, mehl, modus, teiglinge, geaendert, anpassung } – mehl = zugegebenes Mehl.
-// geaendert = die Vorlage selbst wurde verändert (nicht nur die Menge).
+// vorlageId = id des Back-Rezepts (Name aus der Zeit der Teigvorlagen).
+// geaendert = der Teig des Rezepts wurde verändert (nicht nur die Menge).
 // vorlageId = null: Teigrechner (Schnellrechnung ohne Rezept, nichts wird gespeichert).
 let zustand = null;
 let katalog;  // { mehle, saaten, zusaetze, wasserVon, verhaeltnisVon, art } – aus den Einstellungen
-let suche = ''; // Suchtext der Vorlagenliste
+let suche = ''; // Suchtext der Back-Liste
 let speicherKarte = null; // offene Karte „Speichern“: { name, kategorie, zurueck }
-let neuKarte = null; // offene Karte „Neue Vorlage“: { name, kategorie, modus, basis } – basis = id oder ''
+let neuKarte = null; // offene Karte „Neues Rezept“: { name, kategorie, modus, basis } – basis = id oder ''
 const offeneKlappen = new Set(); // welche einklappbaren Bereiche offen sind
 let aufHinweis = null; // einmaliger Hinweis in der Starter-Auffrischung
 let meldung = null; // einmalige Rückmeldung (wird beim nächsten Zeichnen angezeigt und gelöscht)
-let wischen = null; // Wisch-Geste der Vorlagenliste (wischen.js)
+let wischen = null; // Wisch-Geste der Back-Liste (wischen.js)
 let nachholen = false; // Daten vom Server kamen während eines Wischens an
 let rueckgaengig = null; // Leiste „Rückgängig“: { leiste, zeitgeber, f }
 
@@ -109,6 +108,8 @@ export function zeigeTeigrechner(ziel) {
   wurzel.addEventListener('click', beiKlick);
   // Kochen (Etappe 3): eigene Oberfläche in rezepte/kochen.js, hier nur Einstieg und Rückweg
   startKochen(wurzel, { zurueck: () => zeige('start'), beiOeffnen: () => { ansicht = 'kochen'; }, rueckgaengig: zeigeRueckgaengig });
+  // Rezept-Teil der Back-Rezepte (Status, Notiz, Schritte): rezepte/backen.js
+  startBacken(wurzel, { neuZeichnen: zeichneAnOrt });
   wischen = erstelleWischen(wurzel, {
     beiEnde() {
       if (nachholen) datenAktualisiert();
@@ -144,7 +145,7 @@ export function datenAktualisiert() {
   if (nachholen) return;
   ladeKatalog();
   if (ansicht === 'rechner' && zustand && !zustand.geaendert && !speicherKarte) {
-    const vorlage = aktuelleVorlage();
+    const vorlage = aktuellesRezept();
     const neu = vorlage && vorlageZustand(vorlage);
     if (neu && (neu.modus !== zustand.modus || JSON.stringify(neu.teig) !== JSON.stringify(zustand.teig))) {
       zustand = { ...neu, mehl: zustand.mehl, teiglinge: zustand.teiglinge };
@@ -200,9 +201,14 @@ function setzeAuffrischung(aenderung) {
   speicher.setzeEinstellung(AUFFRISCHUNG, { ...auffrischung(), ...aenderung });
 }
 
-function aktuelleVorlage() {
-  if (!zustand) return null;
-  return alleVorlagen(speicher).find((v) => v.id === zustand.vorlageId) ?? null;
+/** Alle Back-Rezepte (die Liste unter „Backen“). */
+const backRezepte = () => alleRezepte(speicher, 'backen');
+
+/** Das Back-Rezept, das im Rechner offen ist (null: Teigrechner, oder am anderen Handy gelöscht). */
+function aktuellesRezept() {
+  if (!zustand?.vorlageId) return null;
+  const r = holeRezept(speicher, zustand.vorlageId);
+  return r?.art === 'backen' ? r : null;
 }
 
 /** Wechselt zwischen Liste und Rechner und springt nach oben. */
@@ -212,6 +218,13 @@ function zeige(neu) {
   if (neu === 'rechner' || neu === 'start') neuKarte = null;
   zeichne();
   window.scrollTo(0, 0);
+}
+
+/** Neu zeichnen, ohne dass die Seite springt (Haken, Status im Back-Rezept). */
+function zeichneAnOrt() {
+  const y = window.scrollY;
+  zeichne();
+  window.scrollTo(0, y);
 }
 
 function zeichne() {
@@ -240,7 +253,7 @@ function zeichneStart() {
     </nav>`;
 }
 
-// ---------- Backen: Vorlagenliste ----------
+// ---------- Backen: Liste der Back-Rezepte ----------
 
 function zeichneListe() {
   ansicht = 'liste';
@@ -255,24 +268,16 @@ function zeichneListe() {
     ${neuKarte ? neuKarteHtml() : ''}
     ${ordnung.anzahl >= SUCHE_AB || suche ? suchfeldHtml(suche) : ''}
     <div class="vorlagen-gruppen" data-liste>${listeHtml(ordnung)}</div>
-    ${neuKarte ? '' : '<button type="button" class="knopf knopf-voll" data-aktion="neu-karte">+ Neue Vorlage</button>'}
+    ${neuKarte ? '' : '<button type="button" class="knopf knopf-voll" data-aktion="neu-karte">+ Neues Rezept</button>'}
 `;
 }
 
 function ordnungJetzt() {
-  return ordneVorlagen(alleVorlagen(speicher), {
-    favoriten: favoriten(speicher),
-    ausgeblendet: ausgeblendet(speicher),
-    suche,
-  });
+  return ordneVorlagen(backRezepte(), { favoriten: favoriten(speicher), suche });
 }
 
 function listeHtml(ordnung) {
-  return vorlagenListeHtml(ordnung, {
-    sterne: new Set(favoriten(speicher)),
-    suche,
-    ausgeblendetOffen: offeneKlappen.has('ausgeblendet'),
-  });
+  return vorlagenListeHtml(ordnung, { sterne: new Set(favoriten(speicher)), suche, bekannt: gesehen(speicher) });
 }
 
 /** Nur die Liste neu aufbauen (beim Tippen in der Suche bleibt das Suchfeld unberührt). */
@@ -281,19 +286,19 @@ function zeichneListeNeu() {
   if (ziel) ziel.innerHTML = listeHtml(ordnungJetzt());
 }
 
-/** Karte „Neue Vorlage“: Name, Kategorie, Modus (vorbelegt nach Kategorie), Ausgangsbasis. */
+/** Karte „Neues Rezept“: Name, Kategorie, Modus (vorbelegt nach Kategorie), Ausgangsbasis (Teig). */
 function neuKarteHtml() {
   const k = neuKarte;
   const kategorien = [...KATEGORIEN, { id: '', name: OHNE_KATEGORIE }]
     .map((x) => `<option value="${x.id}" ${(k.kategorie ?? '') === x.id ? 'selected' : ''}>${text(x.name)}</option>`)
     .join('');
-  const basen = alleVorlagen(speicher)
+  const basen = backRezepte()
     .sort((a, b) => a.name.localeCompare(b.name, 'de'))
     .map((v) => `<option value="${text(v.id)}" ${k.basis === v.id ? 'selected' : ''}>Kopie von „${text(v.name)}“</option>`)
     .join('');
   const tl = k.modus === 'teiglinge';
-  return `<section class="karte speichern" aria-label="Neue Vorlage">
-      <h2 class="karte-titel">Neue Vorlage</h2>
+  return `<section class="karte speichern" aria-label="Neues Rezept">
+      <h2 class="karte-titel">Neues Back-Rezept</h2>
       <label class="feld"><span class="feld-name">Name</span>
         <input class="eingabe eingabe-text" data-nk="name" autocomplete="off" maxlength="80" value="${text(k.name)}"></label>
       <label class="feld"><span class="feld-name">Kategorie</span>
@@ -321,23 +326,43 @@ function oeffneNeuKarte() {
   wurzel.querySelector('[data-nk="name"]')?.focus();
 }
 
-/** Neue Vorlage speichern und direkt im Rechner öffnen. */
+/** Neues Back-Rezept speichern und direkt öffnen. Teig aus der Basis, Schritte gibt es noch keine. */
 function legeNeueVorlageAn() {
   const name = neuKarte.name.trim();
   if (!name) {
-    window.alert('Bitte einen Namen für die Vorlage eingeben.');
+    window.alert('Bitte einen Namen für das Rezept eingeben.');
     return wurzel.querySelector('[data-nk="name"]')?.focus();
   }
-  const basis = neuKarte.basis ? alleVorlagen(speicher).find((v) => v.id === neuKarte.basis) ?? null : null;
-  const gespeichert = speichereEigeneVorlage(speicher, neueVorlage({ ...neuKarte, name, basis }));
+  const basis = neuKarte.basis ? holeRezept(speicher, neuKarte.basis) : null;
+  const gespeichert = speichereBackRezept(neueVorlage({ ...neuKarte, name, basis }), { zutaten: [], schritte: [] });
   if (!gespeichert) return meldeFehler();
-  const vorlage = alleVorlagen(speicher).find((v) => v.id === gespeichert.id);
-  ladeUndZeige(vorlage, `„${name}“ angelegt.`);
+  markiereGesehen(speicher, gespeichert.id);
+  ladeUndZeige(holeRezept(speicher, gespeichert.id), `„${name}“ angelegt.`);
+}
+
+/**
+ * Back-Rezept speichern: Name, Kategorie, Teig, Menge, Modus aus `werte`, alles andere (Schritte, Notiz …) aus `rest`.
+ * Teiglinge-Angabe nur im Teiglinge-Modus (wie bei den Vorlagen). Gibt das gespeicherte Rezept zurück oder null.
+ */
+function speichereBackRezept({ name, kategorie, teig, mehl, modus, teiglinge }, rest) {
+  const { teiglinge: alteTeiglinge, kategorie: alteKategorie, ...ohne } = rest; // kommen aus `werte`
+  const gruppe = bereinigeKategorie(kategorie);
+  return speichereRezept(speicher, {
+    ...ohne,
+    art: 'backen',
+    name,
+    ...(gruppe ? { kategorie: gruppe } : {}),
+    teig: structuredClone(teig),
+    mehl,
+    modus,
+    ...(modus === 'teiglinge' ? { teiglinge: { ...teiglinge } } : {}),
+  });
 }
 
 function oeffneVorlage(id) {
-  const vorlage = alleVorlagen(speicher).find((v) => v.id === id);
-  if (!vorlage) return;
+  const vorlage = holeRezept(speicher, id);
+  if (vorlage?.art !== 'backen') return;
+  markiereGesehen(speicher, id);
   // Gleiche Vorlage nochmal geöffnet: den aktuellen Stand (z. B. die Menge) behalten
   if (zustand?.vorlageId !== id) {
     zustand = vorlageZustand(vorlage);
@@ -356,14 +381,14 @@ function oeffneTeigrechner() {
   zeige('rechner');
 }
 
-/** Ist die Vorlage verändert (und kann gespeichert werden)? Der Teigrechner speichert nichts. */
+/** Ist der Teig des Rezepts verändert (und kann gespeichert werden)? Der Teigrechner speichert nichts. */
 const vorlageGeaendert = () => zustand.geaendert && zustand.vorlageId !== null;
 
 // ---------- Rechner ----------
 
 function zeichneRechner() {
   const { teig, mehl } = zustand;
-  const vorlage = aktuelleVorlage();
+  const vorlage = aktuellesRezept();
   const titel = zustand.vorlageId === null ? 'Teigrechner' : vorlage ? vorlage.name : 'Eigener Teig';
 
   const mehrereMehle = teig.mehlsorten.length > 1;
@@ -436,6 +461,8 @@ function zeichneRechner() {
     <button type="button" class="knopf knopf-voll" data-aktion="speichern-karte"
             ${vorlageGeaendert() && !speicherKarte ? '' : 'hidden'}>Änderungen speichern …</button>
 
+    ${vorlage ? backenTeilHtml(vorlage, teig) : ''}
+
     ${mehlKlappe()}
     ${saatenKlappe()}
     ${zusatzKlappe()}
@@ -446,9 +473,9 @@ function zeichneRechner() {
   aktualisiere();
 }
 
-/** Vermerk an einer Konflikt-Kopie: direkt an der Vorlage, behalten oder löschen. */
+/** Vermerk an einer Konflikt-Kopie: direkt am Rezept, behalten oder löschen. */
 function vermerkKarte(vorlage) {
-  const hinweis = vorlage && !vorlage.eingebaut ? vermerkText(vorlage, alleVorlagen(speicher)) : null;
+  const hinweis = vorlage ? vermerkText(vorlage, alleRezepte(speicher)) : null;
   if (!hinweis) return '';
   return `<section class="karte vermerk-karte" aria-label="Hinweis zu dieser Vorlage">
       <p>${text(hinweis)} Welche brauchst du noch?</p>
@@ -645,7 +672,7 @@ function auffrischKlappe() {
       <p class="info" data-ausgabe="auf-hydration"></p>`);
 }
 
-/** Umschalter Mehl / Teiglinge (in den Vorlagen-Einstellungen und beim Speichern). */
+/** Umschalter Mehl / Teiglinge (in der Klappe „Rezept“ und beim Speichern). */
 function modusKnoepfe(aktion) {
   const tl = imTeiglingeModus();
   return `<div class="umschaltgruppe" role="group" aria-label="Menge angeben als">
@@ -656,9 +683,8 @@ function modusKnoepfe(aktion) {
     </div>`;
 }
 
-/** Einstellungen der Vorlage: Modus, Verlust, Speichern, Ausblenden/Löschen. */
+/** Einstellungen des Rezepts: Modus, Verlust, Speichern, Löschen. Im Teigrechner nur Modus und Verlust. */
 function vorlageKlappe(vorlage) {
-  const eigene = vorlage && !vorlage.eingebaut;
   const verlust = imTeiglingeModus()
     ? `<ul class="zutaten">
          <li class="zeile">
@@ -670,31 +696,27 @@ function vorlageKlappe(vorlage) {
            </span>
          </li>
        </ul>` : '';
-  const weg = !vorlage ? ''
-    : eigene
-      ? `<button type="button" class="knopf knopf-leise" data-aktion="loeschen">„${text(vorlage.name)}“ löschen</button>`
-      : '<button type="button" class="knopf knopf-leise" data-aktion="ausblenden">Vorlage ausblenden</button>';
+  const weg = vorlage
+    ? `<button type="button" class="knopf knopf-leise" data-aktion="loeschen">„${text(vorlage.name)}“ löschen</button>` : '';
 
-  return klappe('vorlage', 'Vorlage: Menge, Speichern', `
+  return klappe('vorlage', vorlage ? 'Rezept: Menge, Speichern' : 'Menge angeben als', `
       <p class="info">Menge angeben als</p>
       ${modusKnoepfe('modus')}
       ${verlust}
       <div class="aktionen">
-        ${zustand.vorlageId === null ? ''
-          : '<button type="button" class="knopf" data-aktion="speichern-karte">Speichern, umbenennen …</button>'}
+        ${vorlage ? '<button type="button" class="knopf" data-aktion="speichern-karte">Speichern, umbenennen …</button>' : ''}
         ${weg}
       </div>`);
 }
 
-/** Karte „Vorlage speichern“: Name, Kategorie, Modus; aktualisieren oder als neue speichern. */
+/** Karte „Rezept speichern“: Name, Kategorie, Modus; aktualisieren oder als neues speichern. */
 function speicherKarteHtml(vorlage) {
-  const eigene = vorlage && !vorlage.eingebaut;
   const k = speicherKarte;
   const optionen = [...KATEGORIEN, { id: '', name: OHNE_KATEGORIE }]
     .map((x) => `<option value="${x.id}" ${(k.kategorie ?? '') === x.id ? 'selected' : ''}>${text(x.name)}</option>`)
     .join('');
-  return `<section class="karte speichern" aria-label="Vorlage speichern">
-      <h2 class="karte-titel">${k.zurueck ? 'Änderungen speichern?' : 'Vorlage speichern'}</h2>
+  return `<section class="karte speichern" aria-label="Rezept speichern">
+      <h2 class="karte-titel">${k.zurueck ? 'Änderungen speichern?' : 'Rezept speichern'}</h2>
       <label class="feld"><span class="feld-name">Name</span>
         <input class="eingabe eingabe-text" data-sp="name" autocomplete="off" maxlength="80" value="${text(k.name)}"></label>
       <label class="feld"><span class="feld-name">Kategorie</span>
@@ -702,12 +724,12 @@ function speicherKarteHtml(vorlage) {
       <p class="feld-name">Menge angeben als</p>
       ${modusKnoepfe('sp-modus')}
       <div class="aktionen">
-        ${eigene ? '<button type="button" class="knopf knopf-voll" data-aktion="sp-aktualisieren">Vorlage aktualisieren</button>' : ''}
-        <button type="button" class="knopf ${eigene ? '' : 'knopf-voll'}" data-aktion="sp-neu">Als neue speichern</button>
+        ${vorlage ? '<button type="button" class="knopf knopf-voll" data-aktion="sp-aktualisieren">Rezept aktualisieren</button>' : ''}
+        <button type="button" class="knopf ${vorlage ? '' : 'knopf-voll'}" data-aktion="sp-neu">Als neues speichern</button>
         ${k.zurueck ? '<button type="button" class="knopf knopf-leise" data-aktion="sp-verwerfen">Änderungen verwerfen</button>' : ''}
         <button type="button" class="knopf knopf-leise" data-aktion="sp-abbrechen">Abbrechen</button>
       </div>
-      ${eigene ? '' : '<p class="info">Eingebaute Vorlagen bleiben unverändert – Änderungen werden eine neue, eigene Vorlage.</p>'}
+      ${vorlage ? '' : '<p class="info">Das Rezept gibt es nicht mehr – die Änderungen werden ein neues Rezept.</p>'}
     </section>`;
 }
 
@@ -742,7 +764,7 @@ function einstellungenKlappe() {
       <p class="info">Wasseranteil der Zusatzzutaten: so viel davon zählt zur Hydration.</p>
       <ul class="zutaten">${katalog.zusaetze.map((s) => zeile(s, 'zusatz', 'wasser', '%')).join('')}</ul>
       <p class="info">Änderungen gelten ab dem nächsten Tauschen, Mischen oder Hinzufügen.
-        Gespeicherte Vorlagen behalten ihre Werte.</p>`);
+        Gespeicherte Rezepte behalten ihre Werte.</p>`);
 }
 
 /** Text, der in einem Eingabefeld steht. */
@@ -818,6 +840,7 @@ function aktualisiere() {
 
   zeigeAnpassung(e);
   zeigeAuffrischung();
+  aktualisiereBacken(aktuellesRezept(), mehl, teig, e);
   synchronisiereFelder();
   zeigeGeaendert();
 }
@@ -874,7 +897,7 @@ function setzeAusgabe(name, wert) {
 
 // ---------- Eingaben ----------
 
-// Diese Felder ändern nur die Menge, nicht die Vorlage – dafür fragt die App nicht nach dem Speichern
+// Diese Felder ändern nur die Menge, nicht das Rezept – dafür fragt die App nicht nach dem Speichern
 const NUR_MENGE = new Set(['mehl', 'tl-anzahl', 'tl-gewicht']);
 
 function beiEingabe(ereignis) {
@@ -1058,11 +1081,6 @@ function beiKlick(ereignis) {
   }
   const weg = ziel.closest('[data-weg]');
   if (weg) return entferneAusListe(weg.dataset.weg);
-  const einblenden = ziel.closest('[data-einblenden]');
-  if (einblenden) {
-    blendeAus(speicher, einblenden.dataset.einblenden, false);
-    return zeichneListeNeu();
-  }
 
   const knopf = ziel.closest('[data-aktion]');
   const aktion = knopf?.dataset.aktion;
@@ -1096,11 +1114,11 @@ function beiKlick(ereignis) {
   if (aktion === 'sp-abbrechen') schliesseSpeicherKarte();
   if (aktion === 'loeschen') loescheVorlage();
   if (aktion === 'vermerk-weg') behalteVorlage();
-  if (aktion === 'ausblenden') blendeVorlageAus();
 }
 
 /** Zurück zur Liste – mit ungespeicherten Änderungen erst fragen. */
 function zurueck() {
+  speichereNotizJetzt();
   if (vorlageGeaendert()) return oeffneSpeicherKarte(true);
   zeige('liste');
 }
@@ -1181,12 +1199,12 @@ function wechsleHefeart() {
   geaendertUndNeu();
 }
 
-// ---------- Eigene Vorlagen: speichern, löschen, ausblenden ----------
+// ---------- Back-Rezepte: speichern, löschen ----------
 
 function oeffneSpeicherKarte(zurueckDanach) {
-  const vorlage = aktuelleVorlage();
+  const vorlage = aktuellesRezept();
   speicherKarte = {
-    name: !vorlage ? '' : vorlage.eingebaut ? `${vorlage.name} (eigene)` : vorlage.name,
+    name: vorlage?.name ?? '',
     kategorie: vorlage?.kategorie ?? null,
     zurueck: zurueckDanach,
   };
@@ -1203,7 +1221,7 @@ function schliesseSpeicherKarte() {
 function nameAusKarte() {
   const name = speicherKarte.name.trim();
   if (!name) {
-    window.alert('Bitte einen Namen für die Vorlage eingeben.');
+    window.alert('Bitte einen Namen für das Rezept eingeben.');
     wurzel.querySelector('[data-sp="name"]')?.focus();
   }
   return name;
@@ -1230,24 +1248,30 @@ function nachDemSpeichern(gespeichert, rueckmeldung) {
   zeige(zurueckDanach ? 'liste' : 'rechner');
 }
 
+/** Als neues Rezept: Teig von hier, Schritte, Notiz usw. vom bisherigen Rezept (eine Kopie). */
 function speichereAlsNeu() {
   const name = nameAusKarte();
   if (!name) return;
-  nachDemSpeichern(speichereEigeneVorlage(speicher, vorlagenDaten(name)), `„${name}“ gespeichert.`);
+  speichereNotizJetzt();
+  const { id, erstellt, geaendert, ...rest } = aktuellesRezept() ?? { zutaten: [], schritte: [] };
+  const gespeichert = speichereBackRezept(vorlagenDaten(name), rest);
+  if (gespeichert) markiereGesehen(speicher, gespeichert.id);
+  nachDemSpeichern(gespeichert, `„${name}“ gespeichert.`);
 }
 
 function speichereAenderungen() {
-  const vorlage = aktuelleVorlage();
-  if (!vorlage || vorlage.eingebaut) return;
+  const vorlage = aktuellesRezept();
+  if (!vorlage) return;
   const name = nameAusKarte();
   if (!name) return;
-  nachDemSpeichern(speichereEigeneVorlage(speicher, { id: vorlage.id, ...vorlagenDaten(name) }),
+  speichereNotizJetzt();
+  nachDemSpeichern(speichereBackRezept(vorlagenDaten(name), holeRezept(speicher, vorlage.id)),
     `„${name}“ aktualisiert.`);
 }
 
 /** Änderungen verwerfen: Die Vorlage gilt wieder wie gespeichert. */
 function verwerfeAenderungen() {
-  const vorlage = aktuelleVorlage();
+  const vorlage = aktuellesRezept();
   if (vorlage) {
     zustand = vorlageZustand(vorlage);
   } else {
@@ -1262,53 +1286,37 @@ function vergissStand() {
 }
 
 function loescheVorlage() {
-  const vorlage = aktuelleVorlage();
-  if (!vorlage || vorlage.eingebaut) return;
-  if (!window.confirm(`Vorlage „${vorlage.name}“ wirklich löschen?`)) return;
-  loescheEigeneVorlage(speicher, vorlage.id);
+  const vorlage = aktuellesRezept();
+  if (!vorlage) return;
+  if (!window.confirm(`Rezept „${vorlage.name}“ wirklich löschen?`)) return;
+  speicher.loesche(REZEPTE, vorlage.id);
   vergissStand();
   meldung = `„${vorlage.name}“ gelöscht.`;
   zeige('liste');
 }
 
-/** Konflikt-Kopie behalten: Vermerk weg, sie bleibt als ganz normale Vorlage. */
+/** Konflikt-Kopie behalten: Speichern entfernt den Vermerk, sie bleibt als ganz normales Rezept. */
 function behalteVorlage() {
-  const vorlage = aktuelleVorlage();
-  if (!vorlage || vorlage.eingebaut) return;
-  if (!entferneVermerk(speicher, vorlage.id)) return meldeFehler();
-  zeichne();
+  speichereNotizJetzt();
+  const vorlage = aktuellesRezept();
+  if (!vorlage) return;
+  if (!speichereRezept(speicher, vorlage)) return meldeFehler();
+  zeichneAnOrt();
 }
 
-function blendeVorlageAus() {
-  const vorlage = aktuelleVorlage();
-  if (!vorlage || !vorlage.eingebaut) return;
-  blendeAus(speicher, vorlage.id);
-  vergissStand();
-  meldung = `„${vorlage.name}“ ausgeblendet. Unten bei „Ausgeblendet“ wieder einblenden.`;
-  zeige('liste');
-}
-
-// ---------- Vorlagenliste: wischen → löschen / ausblenden, mit „Rückgängig“ ----------
+// ---------- Back-Liste: wischen → löschen, mit „Rückgängig“ ----------
 
 const RUECKGAENGIG_DAUER = 6000; // so lange bleibt „Rückgängig“ stehen (ms)
 
-/** Eigene Vorlage löschen, eingebaute ausblenden – ohne Nachfrage, dafür mit „Rückgängig“. */
+/** Back-Rezept löschen – ohne Nachfrage, dafür mit „Rückgängig“ (der alte Inhalt kommt als neue Änderung zurück). */
 function entferneAusListe(id) {
-  const vorlage = alleVorlagen(speicher).find((v) => v.id === id);
-  if (!vorlage) return;
-  let zurueckholen;
-  if (vorlage.eingebaut) {
-    blendeAus(speicher, id);
-    zurueckholen = () => blendeAus(speicher, id, false);
-  } else {
-    const alt = holeEigeneVorlage(speicher, id);
-    if (!alt || !loescheEigeneVorlage(speicher, id)) return meldeFehler();
-    zurueckholen = () => stelleEigeneVorlageWiederHer(speicher, alt);
-  }
+  const rezept = holeRezept(speicher, id);
+  const alt = speicher.hole(REZEPTE, id);
+  if (!rezept || !alt || !speicher.loesche(REZEPTE, id)) return meldeFehler();
   if (zustand?.vorlageId === id) vergissStand();
   zeichneListeNeu();
-  zeigeRueckgaengig(`„${vorlage.name}“ ${vorlage.eingebaut ? 'ausgeblendet' : 'gelöscht'}`, () => {
-    if (!zurueckholen()) return meldeFehler();
+  zeigeRueckgaengig(`„${rezept.name}“ gelöscht`, () => {
+    if (!speicher.speichere(REZEPTE, alt)) return meldeFehler();
     if (ansicht === 'liste') zeichneListeNeu();
   });
 }

@@ -344,3 +344,28 @@ export function mehlHinweise(teig, artVon) {
 function summe(zahlen) {
   return zahlen.reduce((a, b) => a + (b || 0), 0);
 }
+
+/**
+ * Teigmengen je Schritt eines Back-Rezepts (`schrittteig`, siehe rezepte/rezept.js): je Schritt [{ name, gramm }].
+ * e = Ergebnis von `berechne` für den eingestellten Teig; ohne e ist gramm null (nur die Namen, z. B. für den Aufbau).
+ * Mehl, Saaten und Zusatzzutaten stehen je Sorte einzeln da. Teile, die der Teig nicht hat (0 %), fehlen.
+ * Teilmengen über `anteil` (0,9 = 90 %) – sie folgen damit immer der eingestellten Mehlmenge.
+ */
+export function teigInSchritten(schrittteig, teig, e = null) {
+  if (!Array.isArray(schrittteig)) return null;
+  const g = (wert, anteil) => (e ? wert * anteil : null);
+  const einzeln = { wasser: 'Wasser', starter: 'Starter', salz: 'Salz', oel: 'Öl', quellwasser: 'Quellwasser' };
+  return schrittteig.map((je) => je.flatMap(({ teil, anteil = 1 }) => {
+    if (teil === 'mehl') {
+      return (teig.mehlsorten ?? []).map((s, i) => ({ name: s.name, gramm: g(e?.mehlsorten[i]?.gramm ?? 0, anteil) }));
+    }
+    if (teil === 'saaten') return (teig.saaten ?? []).map((s, i) => ({ name: s.name, gramm: g(e?.saaten[i]?.gramm ?? 0, anteil) }));
+    if (teil === 'zusaetze') return (teig.zusaetze ?? []).map((z, i) => ({ name: z.name, gramm: g(e?.zusaetze[i]?.gramm ?? 0, anteil) }));
+    if (teil === 'hefe') {
+      return teig.hefe > 0 ? [{ name: teig.hefeArt === 'trocken' ? 'Trockenhefe' : 'Frischhefe', gramm: g(e?.hefe, anteil) }] : [];
+    }
+    if (teil === 'quellwasser') return (teig.saaten ?? []).length ? [{ name: einzeln.quellwasser, gramm: g(e?.quellwasser, anteil) }] : [];
+    if (teil === 'wasser') return [{ name: einzeln.wasser, gramm: g(e?.wasser, anteil) }];
+    return teig[teil] > 0 && einzeln[teil] ? [{ name: einzeln[teil], gramm: g(e?.[teil], anteil) }] : [];
+  }));
+}
