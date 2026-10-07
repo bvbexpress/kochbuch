@@ -228,42 +228,9 @@ export function ordneVorlagen(vorlagen, { favoriten: sterne = [], ausgeblendet: 
   };
 }
 
-/** Nur die eigenen (gespeicherten) Vorlagen – z. B. zum Teilen und Sichern. */
+/** Nur die eigenen (gespeicherten) Vorlagen. */
 export function eigeneVorlagen(speicher) {
   return alleVorlagen(speicher).filter((v) => !v.eingebaut);
-}
-
-/**
- * Vergleicht Vorlagen von außen (aus einem Link) mit den eigenen.
- * Gibt je Vorlage { vorlage, status } zurück; Status wie `speicher.vergleiche`.
- */
-export function pruefeUebernahme(speicher, vorlagen) {
-  return vorlagen.map((vorlage) => ({ vorlage, status: speicher.vergleiche(SAMMLUNG, vorlage) }));
-}
-
-/**
- * Übernimmt Vorlagen von außen. Neuere Version gewinnt, Gleiches oder Älteres bleibt unberührt.
- * Mit `alsKopie` werden sie stattdessen als zusätzliche Vorlagen mit neuer id gespeichert.
- * Gibt zurück: { neu, aktualisiert, uebersprungen, fehler } (Anzahlen).
- */
-export function uebernehmeVorlagen(speicher, vorlagen, { alsKopie = false } = {}) {
-  const ergebnis = { neu: 0, aktualisiert: 0, uebersprungen: 0, fehler: 0 };
-  for (const v of vorlagen) {
-    if (alsKopie) {
-      const kopie = speichereEigeneVorlage(speicher, {
-        name: `${v.name} (Kopie)`, teig: v.teig, mehl: v.mehl, teiglinge: v.teiglinge,
-        modus: modusVon(v), kategorie: v.kategorie,
-      });
-      ergebnis[kopie ? 'neu' : 'fehler']++;
-      continue;
-    }
-    const status = speicher.uebernimm(SAMMLUNG, v);
-    if (status === 'neu') ergebnis.neu++;
-    else if (status === 'neuer') ergebnis.aktualisiert++;
-    else if (status === null) ergebnis.fehler++;
-    else ergebnis.uebersprungen++;
-  }
-  return ergebnis;
 }
 
 /**

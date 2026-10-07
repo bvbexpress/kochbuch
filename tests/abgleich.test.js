@@ -13,6 +13,7 @@ import {
   istVerwalter,
   setzeVerwalter,
   WARNEN_AB_TAGEN,
+  sicherungText,
 } from '../js/kern/abgleich.js';
 import {
   VORLAGEN,
@@ -25,7 +26,7 @@ import {
   ordneVorlagen,
 } from '../js/teig/vorlagen.js';
 import { vorlagenListeHtml } from '../js/teig/startseite.js';
-import { erstelleLink, liesLink } from '../js/teig/teilen.js';
+import { merkeSicherung, letzteSicherung } from '../js/kern/sicherung.js';
 
 const TAG = 24 * 60 * 60 * 1000;
 const JETZT = new Date(2026, 9, 3, 12, 0).getTime(); // 3.10.2026, 12 Uhr (Uhr des Handys)
@@ -157,10 +158,12 @@ function testWurzel() {
 
 function aufbau({
   anmeldung = testAnmeldung(), server = testServer(), verwalter = false, uhr = { jetzt: JETZT }, antworten = [],
+  gesichert = JETZT, teilen = async () => true,
 } = {}) {
   const speicher = neuerSpeicher();
   if (verwalter) setzeVerwalter(speicher, true);
-  const protokoll = { abgleiche: 0, sicherungen: 0, fragen: [] };
+  if (gesichert !== null) merkeSicherung(speicher, gesichert);
+  const protokoll = { abgleiche: 0, sicherungen: [], fragen: [], neuGezeichnet: 0 };
   const bereich = erstelleAbgleichBereich({
     speicher,
     anmeldung,
@@ -170,11 +173,12 @@ function aufbau({
       protokoll.abgleiche++;
       return null;
     },
-    sicherung: {
-      anzahl: () => speicher.alle('teigvorlagen').length,
-      erstellen: async () => {
-        protokoll.sicherungen++;
-      },
+    teilen: async (datei) => {
+      protokoll.sicherungen.push(datei);
+      return teilen(datei);
+    },
+    nachWiederherstellen: () => {
+      protokoll.neuGezeichnet++;
     },
     fragen: (frage) => {
       protokoll.fragen.push(frage);
@@ -411,14 +415,6 @@ test('Bearbeiten und Speichern der Kopie entfernt den Vermerk ebenfalls', () => 
   assert.equal(alleVorlagen(speicher).find((x) => x.id === kopie.id).konflikt, null);
 });
 
-test('Vermerk geht nicht in Teilen-Links', async () => {
-  const speicher = neuerSpeicher();
-  const { kopie } = konfliktKopie(speicher);
-  const v = alleVorlagen(speicher).find((x) => x.id === kopie.id);
-  const gelesen = await liesLink(await erstelleLink([v], 'https://beispiel.test/kochbuch/'));
-  assert.equal('konflikt' in gelesen.vorlagen[0], false);
-});
-
 // ---------- Versteckte Verwaltung: langes Drücken auf die Versionsnummer ----------
 
 /** Seite mit Versionsnummer und Platz für die Verwaltung. */
@@ -524,44 +520,6 @@ test('Abmelden: alles hochgeladen → einfache Frage; „Abbrechen“ ändert ni
   assert.match(ziel.innerHTML, /data-verwaltung="abmelden"/, 'Verwaltung bleibt offen');
 });
 
-// ---------- Umzug: Sicherung vor dem ersten Abgleich (nur Verwalter-Handy) ----------
-
-const eigeneVorlage = (speicher) =>
-  speichereEigeneVorlage(speicher, { name: 'Brot', teig: ladeVorlage(VORLAGEN[0]).teig, mehl: 500 });
-
-test('Umzug: Verwalter-Handy mit eigenen Vorlagen gleicht erst nach „Abgleich starten“ ab', async () => {
-  const { bereich, speicher, wurzel, protokoll } = aufbau({
-    anmeldung: testAnmeldung({ zustand: 'angemeldet' }), verwalter: true,
-  });
-  eigeneVorlage(speicher);
-  assert.equal(bereich.bereit(), false);
-  const html = bereich.html();
-  assert.match(html, /bitte ansehen/);
-  assert.match(html, /Vor dem ersten Abgleich: deine Vorlage als Link sichern/);
-
-  const klick = (umzug) => wurzel.loese('click', {
-    target: { closest: (s) => (s === '[data-umzug]' ? { dataset: { umzug } } : null) },
-  });
-  klick('sichern');
-  assert.equal(protokoll.sicherungen, 1);
-  assert.equal(bereich.bereit(), false, 'Sicherung allein startet noch nichts');
-
-  klick('starten');
-  assert.equal(bereich.bereit(), true);
-  assert.equal(protokoll.abgleiche, 1);
-  assert.doesNotMatch(bereich.html(), /Vor dem ersten Abgleich/);
-});
-
-test('Umzug: anderes Handy oder keine eigenen Vorlagen → sofort bereit, keine Karte', () => {
-  const a = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }) });
-  eigeneVorlage(a.speicher);
-  assert.equal(a.bereich.bereit(), true);
-
-  const b = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }), verwalter: true });
-  assert.equal(b.bereich.bereit(), true);
-  assert.doesNotMatch(b.bereich.html(), /Vor dem ersten Abgleich/);
-});
-
 test('Nicht angemeldet: nie bereit', () => {
   const { bereich } = aufbau();
   assert.equal(bereich.bereit(), false);
@@ -574,15 +532,134 @@ test('Anmelden stößt den ersten Abgleich an', async () => {
   assert.equal(protokoll.abgleiche, 1);
 });
 
-test('Nach einem erfolgreichen Abgleich nie mehr Sicherung vorab – auch nicht nach dem Umschalten', () => {
-  const { bereich, speicher, protokoll } = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }) });
-  eigeneVorlage(speicher);
-  bereich.nachAbgleich({ ok: false });
-  setzeVerwalter(speicher, true);
-  assert.equal(bereich.bereit(), false, 'gescheiterter Abgleich zählt nicht');
-  setzeVerwalter(speicher, false);
-  bereich.nachAbgleich({ ok: true });
-  setzeVerwalter(speicher, true);
+test('Angemeldet: sofort bereit (kein Umzug mehr vorab), auch auf dem Verwalter-Handy mit eigenen Vorlagen', () => {
+  const { bereich, speicher } = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }), verwalter: true });
+  speichereEigeneVorlage(speicher, { name: 'Brot', teig: ladeVorlage(VORLAGEN[0]).teig, mehl: 500 });
   assert.equal(bereich.bereit(), true);
-  assert.equal(protokoll.sicherungen, 0);
+});
+
+// ---------- Sicherung: Status auf dem Verwalter-Handy, „Alles sichern“, „Wiederherstellen“ ----------
+
+test('Sicherung: Text und Warnung erst nach mehr als 30 Tagen (oder nie)', () => {
+  assert.equal(sicherungText(null, JETZT), 'Noch nie gesichert.');
+  assert.equal(sicherungText(JETZT, JETZT), 'Letzte Sicherung: heute.');
+  assert.equal(sicherungText(JETZT - TAG, JETZT), 'Letzte Sicherung: gestern.');
+  assert.equal(sicherungText(JETZT - 12 * TAG, JETZT), 'Letzte Sicherung: vor 12 Tagen.');
+  const zeile = (gesichert) => statusZeilen({ zustand: 'angemeldet', offen: 0, mitglieder: false, jetzt: JETZT, gesichert })
+    .find((z) => /gesichert|Sicherung/.test(z.text));
+  assert.equal(zeile(JETZT - 30 * TAG).achtung, false);
+  assert.equal(zeile(JETZT - 31 * TAG).achtung, true);
+  assert.match(zeile(JETZT - 31 * TAG).text, /Alles sichern/);
+  assert.equal(zeile(null).achtung, true);
+  assert.equal(statusZeilen({ zustand: 'angemeldet', offen: 0, mitglieder: false, jetzt: JETZT })
+    .some((z) => /Sicherung/.test(z.text)), false, 'ohne Angabe keine Zeile');
+});
+
+test('Sicherung: „bitte ansehen“ nur auf dem Verwalter-Handy, wenn die letzte Sicherung zu alt ist', () => {
+  const alt = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }), verwalter: true, gesichert: JETZT - 40 * TAG });
+  assert.match(alt.bereich.html(), /bitte ansehen/);
+  assert.match(alt.bereich.html(), /Letzte Sicherung: vor 40 Tagen/);
+  const nie = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }), verwalter: true, gesichert: null });
+  assert.match(nie.bereich.html(), /bitte ansehen/);
+  const frisch = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }), verwalter: true });
+  assert.doesNotMatch(frisch.bereich.html(), /bitte ansehen/);
+  const anderes = aufbau({ anmeldung: testAnmeldung({ zustand: 'angemeldet' }), gesichert: null });
+  assert.equal(anderes.bereich.html(), '', 'anderes Handy: nichts zu sehen');
+});
+
+test('Verwaltung: „Alles sichern“ gibt die Datei weiter und merkt sich den Zeitpunkt', async () => {
+  const uhr = { jetzt: JETZT };
+  const { bereich, speicher, ziel, tippe, protokoll } = mitVerwaltung({ gesichert: null, uhr });
+  speichereEigeneVorlage(speicher, { name: 'Brot', teig: ladeVorlage(VORLAGEN[0]).teig, mehl: 500 });
+  bereich.oeffneVerwaltung();
+  assert.match(ziel.innerHTML, /Noch nie gesichert/);
+  assert.match(ziel.innerHTML, /data-verwaltung="sichern"/);
+  assert.match(ziel.innerHTML, /data-verwaltung="wiederherstellen"/);
+  uhr.jetzt += 5 * TAG;
+  tippe('sichern');
+  await warte();
+  assert.equal(protokoll.sicherungen.length, 1);
+  assert.match(protokoll.sicherungen[0].name, /^kochbuch-sicherung-\d{4}-\d{2}-\d{2}\.json$/);
+  assert.match(protokoll.sicherungen[0].inhalt, /"Brot"/);
+  assert.equal(letzteSicherung(speicher), JETZT + 5 * TAG);
+  assert.match(ziel.innerHTML, /Gesichert\./);
+  assert.match(ziel.innerHTML, /Letzte Sicherung: heute/);
+});
+
+test('Verwaltung: Teilen-Menü geschlossen oder Fehler → Zeitpunkt bleibt', async () => {
+  const zu = mitVerwaltung({ gesichert: null, teilen: async () => false });
+  zu.bereich.oeffneVerwaltung();
+  zu.tippe('sichern');
+  await warte();
+  assert.equal(letzteSicherung(zu.speicher), null);
+  assert.doesNotMatch(zu.ziel.innerHTML, /Gesichert\./);
+
+  const kaputt = mitVerwaltung({ gesichert: null, teilen: async () => { throw new Error('x'); } });
+  kaputt.bereich.oeffneVerwaltung();
+  kaputt.tippe('sichern');
+  await warte();
+  assert.equal(letzteSicherung(kaputt.speicher), null);
+  assert.match(kaputt.ziel.innerHTML, /Sichern hat nicht geklappt/);
+});
+
+/** Datei wählen wie im Browser (Ereignis „change“ an der unsichtbaren Dateiauswahl). */
+function waehleDatei(ziel, inhalt) {
+  const feld = {
+    matches: (s) => s === '[data-verwaltung-datei]',
+    files: [{ size: inhalt.length, text: async () => inhalt }],
+    value: 'C:\\fakepath\\sicherung.json',
+  };
+  ziel.loese('change', { target: feld });
+  return feld;
+}
+
+test('Verwaltung: Wiederherstellen fragt nach und holt nur Fehlendes zurück', async () => {
+  // Handy A sichert, auf Handy B fehlt dann eine Vorlage
+  const a = mitVerwaltung();
+  const brot = speichereEigeneVorlage(a.speicher, { name: 'Brot', teig: ladeVorlage(VORLAGEN[0]).teig, mehl: 500 });
+  speichereEigeneVorlage(a.speicher, { name: 'Pizza', teig: ladeVorlage(VORLAGEN[0]).teig, mehl: 300 });
+  a.bereich.oeffneVerwaltung();
+  a.tippe('sichern');
+  await warte();
+  const inhalt = a.protokoll.sicherungen[0].inhalt;
+
+  const b = mitVerwaltung({ antworten: [true] });
+  speichereEigeneVorlage(b.speicher, { id: brot.id, name: 'Brot neu', teig: ladeVorlage(VORLAGEN[0]).teig, mehl: 700 });
+  b.bereich.oeffneVerwaltung();
+  const feld = waehleDatei(b.ziel, inhalt);
+  assert.equal(feld.value, '', 'gleiche Datei später wieder wählbar');
+  await warte();
+  assert.match(b.protokoll.fragen[0], /Sicherung vom .*: 1 Vorlage fehlt hier und wird wiederhergestellt/);
+  const namen = alleVorlagen(b.speicher).filter((v) => !v.eingebaut).map((v) => v.name).sort();
+  assert.deepEqual(namen, ['Brot neu', 'Pizza'], 'Vorhandenes bleibt, Fehlendes kommt zurück');
+  assert.match(b.ziel.innerHTML, /1 Eintrag wiederhergestellt/);
+  assert.equal(b.protokoll.neuGezeichnet, 1);
+});
+
+test('Verwaltung: Wiederherstellen – Nein, nichts fehlt, fremde Datei', async () => {
+  const a = mitVerwaltung();
+  speichereEigeneVorlage(a.speicher, { name: 'Brot', teig: ladeVorlage(VORLAGEN[0]).teig, mehl: 500 });
+  a.bereich.oeffneVerwaltung();
+  a.tippe('sichern');
+  await warte();
+  const inhalt = a.protokoll.sicherungen[0].inhalt;
+
+  const nein = mitVerwaltung({ antworten: [false] });
+  nein.bereich.oeffneVerwaltung();
+  waehleDatei(nein.ziel, inhalt);
+  await warte();
+  assert.equal(nein.protokoll.fragen.length, 1);
+  assert.equal(alleVorlagen(nein.speicher).filter((v) => !v.eingebaut).length, 0);
+
+  a.bereich.oeffneVerwaltung();
+  waehleDatei(a.ziel, inhalt);
+  await warte();
+  assert.equal(a.protokoll.fragen.length, 0);
+  assert.match(a.ziel.innerHTML, /Nichts wiederherzustellen/);
+
+  const fremd = mitVerwaltung();
+  fremd.bereich.oeffneVerwaltung();
+  waehleDatei(fremd.ziel, '{"hallo": 1}');
+  await warte();
+  assert.match(fremd.ziel.innerHTML, /keine Sicherung des Kochbuchs/);
 });

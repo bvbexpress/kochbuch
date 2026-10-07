@@ -1,4 +1,4 @@
-// Prüft die optionale Teiglinge-Angabe (z. B. 8 × 85 g) in Vorlagen und Teilen-Link.
+// Prüft die optionale Teiglinge-Angabe (z. B. 8 × 85 g) in Vorlagen und in der Sicherung.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -9,12 +9,11 @@ import {
   alleVorlagen,
   eigeneVorlagen,
   speichereEigeneVorlage,
-  uebernehmeVorlagen,
   bereinigeTeiglinge,
 } from '../js/teig/vorlagen.js';
-import { erstelleLink, liesLink, bereinigeVorlage } from '../js/teig/teilen.js';
+import { bereinigeVorlage } from '../js/teig/pruefung.js';
+import { sicherungsDatei, liesSicherung, stelleWiederHer } from '../js/kern/sicherung.js';
 
-const BASIS = 'https://beispiel.test/kochbuch/';
 const BUNS = { anzahl: 8, gewicht: 85, verlust: 2 };
 
 const neuerSpeicher = () => erstelleSpeicher(speicherImArbeitsspeicher());
@@ -56,18 +55,22 @@ test('Unsinnige gespeicherte Angabe zählt als „keine Angabe“', () => {
   assert.deepEqual(bereinigeTeiglinge({ ...BUNS, extra: 1 }), BUNS);
 });
 
-test('Link: Teiglinge-Angabe kommt mit, alte Links ohne Angabe gehen weiter', async () => {
+test('Sicherung: Teiglinge-Angabe kommt mit, Vorlage ohne Angabe bleibt ohne', () => {
   const s = neuerSpeicher();
   speichere(s, BUNS, 'Mit');
   speichere(s, null, 'Ohne');
-  const gelesen = await liesLink(await erstelleLink(eigeneVorlagen(s), BASIS));
+  const gelesen = liesSicherung(sicherungsDatei(s).inhalt);
   assert.equal(gelesen.verworfen, 0);
-  const [mit, ohne] = gelesen.vorlagen;
+  const [mit, ohne] = gelesen.sammlungen.teigvorlagen;
   assert.deepEqual(mit.teiglinge, BUNS);
   assert.equal('teiglinge' in ohne, false);
+
+  const b = neuerSpeicher();
+  stelleWiederHer(b, gelesen);
+  assert.deepEqual(ladeVorlage(eigeneVorlagen(b)[0]).teiglinge, BUNS);
 });
 
-test('Link: kaputte Angabe verwirft nur die Angabe, nicht die Vorlage', () => {
+test('Prüfung: kaputte Angabe verwirft nur die Angabe, nicht die Vorlage', () => {
   const s = neuerSpeicher();
   const v = speichere(s, BUNS);
   const gut = bereinigeVorlage({ ...v, teiglinge: BUNS });
@@ -75,20 +78,6 @@ test('Link: kaputte Angabe verwirft nur die Angabe, nicht die Vorlage', () => {
   const schlecht = bereinigeVorlage({ ...v, teiglinge: { anzahl: 1e12, gewicht: 85, verlust: 2 } });
   assert.ok(schlecht);
   assert.equal('teiglinge' in schlecht, false);
-});
-
-test('Übernehmen (auch als Kopie) behält die Teiglinge-Angabe', async () => {
-  const a = neuerSpeicher();
-  speichere(a, BUNS);
-  const { vorlagen } = await liesLink(await erstelleLink(eigeneVorlagen(a), BASIS));
-
-  const b = neuerSpeicher();
-  uebernehmeVorlagen(b, vorlagen);
-  assert.deepEqual(ladeVorlage(eigeneVorlagen(b)[0]).teiglinge, BUNS);
-
-  const c = neuerSpeicher();
-  uebernehmeVorlagen(c, vorlagen, { alsKopie: true });
-  assert.deepEqual(ladeVorlage(eigeneVorlagen(c)[0]).teiglinge, BUNS);
 });
 
 test('Änderung speichern ohne Angabe entfernt eine frühere Angabe', () => {

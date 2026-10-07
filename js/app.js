@@ -1,8 +1,7 @@
 // app.js – Startpunkt der App.
 // Später kommen hier weitere Bereiche (Rezepte, Vorrat) und eine Navigation dazu.
 
-import { zeigeTeigrechner, datenAktualisiert, sichereAlle } from './teig/ansicht.js';
-import { eigeneVorlagen } from './teig/vorlagen.js';
+import { zeigeTeigrechner, datenAktualisiert } from './teig/ansicht.js';
 import { starteOfflineBetrieb, frageVersion } from './kern/aktualisierung.js';
 import { bildschirmAnLassen } from './kern/bildschirm.js';
 import { speicher } from './kern/speicher.js';
@@ -22,7 +21,7 @@ const abgleich = erstelleAbgleichBereich({
   anmeldung,
   server,
   abgleichen: () => ausloeser.jetzt(),
-  sicherung: { anzahl: () => eigeneVorlagen(speicher).length, erstellen: sichereAlle },
+  nachWiederherstellen: datenAktualisiert,
 });
 const ausloeser = erstelleAusloeser({
   sync,
@@ -47,7 +46,7 @@ starteOfflineBetrieb((aktualisieren) => {
 });
 
 // Kleine Versionsanzeige ganz unten – so lässt sich prüfen, ob beide Handys gleich aktuell sind.
-// Langes Drücken darauf öffnet die versteckte Verwaltung (Abmelden, Verwalter-Handy an/aus).
+// Langes Drücken darauf öffnet die versteckte Verwaltung (Sichern, Wiederherstellen, Abmelden, Verwalter-Handy an/aus).
 frageVersion().then((version) => {
   if (version) document.getElementById('version').textContent = `Version ${version}`;
 });

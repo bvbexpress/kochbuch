@@ -19,7 +19,7 @@ Der Nutzer ist Anfänger und arbeitet nur in der Cloud: Erklärungen knapp halte
 Reihenfolge der Etappen ist fest. **Nichts aus einer späteren Etappe vorab bauen**, nur die Datenmodelle so wählen, dass sie passen.
 
 ### Etappe 1 – Teigrechner *(fertig)*
-Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link, Teiglinge, Starter-Auffrischung, PWA, Bildschirm-an.
+Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link (in Etappe 3, B, durch „Alles sichern“ ersetzt), Teiglinge, Starter-Auffrischung, PWA, Bildschirm-an.
 
 - **Schritt 7 – Teiglinge-Modus:** Anzahl × Gewicht je Teigling (z. B. 4 Pizzen à 250 g, 8 Buns à 85 g), optionaler
   **Verlust-Zuschlag in %** (Standard 2 %). Umschalten zwischen Mehl- und Teiglinge-Modus mit **einem Tipper**.
@@ -45,7 +45,7 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   Pizza 4 × 250 g, Brötchen 8 × 85 g in Teiglingen, sonst Mehl; `vorbelegung`) und Ausgangsbasis
   (leer = `LEERER_TEIG`: Weizen 550, 65 % Wasser, 2 % Salz, 500 g – oder Kopie einer Vorlage; `neueVorlage`).
   Wird sofort gespeichert und im Rechner geöffnet.
-- Eingebaute Vorlagen ausblendbar. **Favoriten und Ausgeblendet sind Geräte-Einstellungen** (nicht im Link, nicht im Sync).
+- Eingebaute Vorlagen ausblendbar. **Favoriten und Ausgeblendet sind Geräte-Einstellungen** (nicht im Sync, aber in der Sicherungsdatei).
 - **Zusatzzutaten** (Milch, Ei, Butter, Zucker, Honig, eigene) in % vom Gesamtmehl, siehe Rechenregeln.
 
 ## Offline und Updates (Schritt 9/10)
@@ -79,14 +79,14 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
 - **Konflikte:** Vorlagen/Rezepte → die Server-Fassung bleibt, die eigene wird zur Kopie mit kleinem Vermerk direkt an der
   Vorlage (kein Dialog). Inhaltlich gleich = kein Konflikt. Löschen gegen Ändern: Ändern gewinnt.
   Einzelwerte (Wasserwert eines Mehls): zuletzt hochgeladen gewinnt.
-- **Umzug:** Bei der ersten Anmeldung werden alle eigenen Datensätze hochgeladen. Vorher wird automatisch ein Sicherungs-Link
+- **Umzug** *(erledigt, die Karte ist seit Etappe 3, B, entfernt)*: Bei der ersten Anmeldung werden alle eigenen Datensätze hochgeladen. Vorher wird automatisch ein Sicherungs-Link
   angeboten (nur auf dem Verwalter-Handy). Favoriten, Ausgeblendet, zuletzt geöffnet bleiben Geräte-Einstellungen.
 - **Gegen das Pausieren** (Supabase pausiert nach 7 Tagen ohne Anfragen): GitHub Action ruft zweimal pro Woche
   eine kleine Datenbank-Funktion `ping` auf. Achtung: GitHub schaltet Zeitpläne in öffentlichen Repos nach 60 Tagen
   ohne Repo-Aktivität ab – die Action hält sich deshalb selbst aktiv. Schlägt sie fehl, mailt GitHub dem Verwalter.
 - **Fehler bleiben unsichtbar** (siehe Grundsatz): Die App arbeitet lokal weiter, offene Änderungen gehen nie verloren.
   Nur das Verwalter-Handy zeigt den Abgleich-Status, auch „Handy 2 hat seit X Tagen nicht abgeglichen“.
-- Teilen per Link bleibt als Sicherung.
+- Sicherung: „Alles sichern“ in der versteckten Verwaltung (seit Etappe 3, B; vorher Teilen per Link).
 - Erkennung doppelt benutzter Erneuerungsschlüssel in Supabase **nicht** abschalten (die Elternschlüssel-Ausnahme reicht).
   Abschalten nur als Notlösung, falls der Praxistest Abmeldungen zeigt.
 - **Bauplan** (je Schritt ein PR mit Tests; Reihenfolge fest):
@@ -146,6 +146,7 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
     beim Verlassen der App sofort), `jetzt()`. Lokale Änderungen meldet `speicher.beiAenderung` (nur
     `speichere`/`uebernimm`/`loesche`, nie Server-Daten). `bereit()` aus `abgleich.js`: angemeldet und Umzug frei.
     **Umzug:** Daten von vor Etappe 2 gelten als offen (Version 0) und gehen beim ersten Abgleich hoch.
+    *(Seit Etappe 3, B, entfernt: Beide Handys sind umgezogen, `bereit()` = angemeldet.)*
     Verwalter-Handy mit eigenen Vorlagen: vorher Karte in der Klappe („Sicherung erstellen“ = Sicherungs-Link,
     „Abgleich starten“), bis dahin kein Abgleich; „· bitte ansehen“ im Titel. Geräte-Einstellung
     `abgleich.umzug` = true nach „Abgleich starten“ oder dem ersten erfolgreichen Abgleich (danach nie wieder).
@@ -167,13 +168,18 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   (`entferneAusListe` in `ansicht.js`; Löschen = Grabstein, Rückgängig stellt den alten Inhalt als neue Änderung wieder her).
   Während eines Wischens zeichnet `datenAktualisiert()` nicht neu, sondern holt es danach nach.
 
-### Etappe 3 – Rezepte *(in Planung, noch nichts gebaut)*
+### Etappe 3 – Rezepte *(Kochen läuft, Back-Teil in Arbeit)*
 
-**Aufbau der App**
-- **Startseite:** zwei große Kacheln „Backen“ und „Kochen“, darunter eine Suche über alle Rezepte und „Weiter mit: …“
-  (die letzten 2 geöffneten Rezepte). Das automatische Öffnen der zuletzt benutzten Vorlage beim Start ist schon weg (Schritt 9).
-- **Backen** öffnet **direkt die Back-Rezeptliste** (keine Zwischenebene), oben dauerhaft ein Knopf „Teigrechner“
-  (Schnellrechnung ohne Rezept, mit Knopf „Als Rezept speichern“).
+**Aufbau der App** (neu geplant am 7.10.2026)
+- **Startseite so schlank wie möglich:** nur die zwei großen Kacheln „Kochen“ und „Backen“, unten die Versionsnummer.
+  **Keine** Suche über alle Rezepte, **kein** „Weiter mit“ (jede Liste hat ihre eigene Suche). Die App startet immer hier.
+- **Backen** öffnet **direkt die Back-Liste** (keine Zwischenebene), oben dauerhaft ein Knopf „Teigrechner“
+  (Schnellrechnung ohne Rezept, mit Knopf „Als Rezept speichern“, kommt mit E). Die **Wasserwerte** (bisher Klappe auf der Startseite)
+  werden eine Klappe „Einstellungen: Wasserwerte“ unten im Teigrechner.
+- **Abgleich-Status und Anmelde-Formular** wandern in die versteckte Verwaltung (langes Drücken auf die Versionsnummer).
+  Auf dem Verwalter-Handy erscheint bei Problemen nur ein kleiner Punkt „•“ neben der Versionsnummer: abgemeldet, kein Haushalt,
+  ein Handy seit `WARNEN_AB_TAGEN` nicht abgeglichen **oder letzte Sicherung länger als 30 Tage her (bzw. nie)**. Sonst nichts.
+  Wird Handy 2 einmal abgelehnt, richtet der Verwalter es über die Verwaltung neu ein (kein Formular im Alltag).
 - **Kochen:** Rezepte nach Kategorien (Currys, Pasta, Suppen, Aufläufe …), innerhalb alphabetisch, Favoriten oben, Suche.
 - Die bisherigen Teigrechner-Vorlagen werden **Back-Rezepte** (Teigwerte plus Arbeitsschritte): keine zwei Listen.
 
@@ -195,6 +201,12 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   Auftretens, `geraeteListe` in `liste.js`, nicht gespeichert). Leere Schritte nehmen ihren Eintrag mit (`bereinigeSchritte`).
   Der Connector prüft streng (gleiche Länge wie `schritte`, Fehler statt Kürzen); wer `schritte` ändert und das Rezept Geräte hat, muss
   `schrittgeraete` neu mitliefern (sonst verrutschen sie). Die Datenbank-Prüfung `intern.connector_pruefe_rezept` kennt das Feld.
+- **Ernährungsform** (kommt mit A): `ernaehrung` = `vegan` | `vegetarisch` | `fisch` | `fleisch` (fehlt = kein Icon, alte Rezepte bleiben
+  gültig), dazu `auchVegetarisch: true` nur bei `fisch`/`fleisch` (sonst abgewiesen). Icons als Emoji in Liste und Rezept:
+  🌱 vegan, 🥕 vegetarisch, 🐟 Fisch, 🥩 Fleisch, bei „auch vegetarisch“ 🥩/🥕; im Rezept zusätzlich als Text. Die vegetarische Variante
+  steht in einem Satz in der Notiz (kein eigenes Feld). Geprüft in `bereinigeRezept`, im Connector (`rezept_anlegen`: **Pflicht**,
+  `rezept_aktualisieren`: freiwillig) und in `intern.connector_pruefe_rezept`. Kein Filter in der Liste (später leicht nachrüstbar).
+  Einrichten in dieser Reihenfolge: SQL ausführen → Edge Function neu einfügen → App.
 - `status`: **erprobt** | **noch testen**, ein Tipper. **Per Connector gespeicherte Rezepte sind „erprobt“**, „noch testen“ nur für
   importierte (`quelle: import`). Kurze Notiz am Rezept. „Neu“-Markierung bis zum ersten Öffnen
   (Geräte-Einstellung mit gesehenen `id`s; beim Umzug gelten alle alten Vorlagen als gesehen).
@@ -210,16 +222,16 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
 
 **Umzug Vorlagen → Back-Rezepte (ohne Datenverlust)**
 - Jede Vorlage wird ein Back-Rezept **mit derselben `id`** (beide Handys gleichzeitig = kein Doppel, gleicher Inhalt = kein Konflikt).
-- `teigvorlagen` bleibt **unverändert als Sicherung** (löschen nur später, bewusst, in eigenem Schritt). Vorher Sicherungs-Link
-  anbieten wie in Etappe 2. Lücke: Ändert ein Handy mit alter Version danach eine Vorlage, ändert es nur das Archiv
+- `teigvorlagen` bleibt **unverändert als Sicherung** (löschen nur später, bewusst, in eigenem Schritt). Vorher „Alles sichern“
+  anbieten (Datei, siehe „Sicherung“). Lücke: Ändert ein Handy mit alter Version danach eine Vorlage, ändert es nur das Archiv
   (Update-Hinweis und Versionsanzeige decken das ab).
 
 **Teigrechner ↔ Back-Rezept und Vereinfachung**
 - Im Back-Rezept „Im Teigrechner anpassen“. Zurück nur **„Nur für heute“** (Rezept zeigt die angepassten Mengen, Original
   bleibt) oder **„Ins Rezept übernehmen“** (dauerhaft).
 - Dadurch entfallen die **Speichern-Karte** (Name/Kategorie/Modus) und die **Klappe „Vorlage“**. Name, Kategorie, Modus liegen
-  beim Bearbeiten des Rezepts; „Als neue speichern“ wird „Kopie machen“ im Rezept.
-- Ein voller Zutaten-Editor am Handy ist **nicht** vorgesehen (Hauptweg = Connector); zuerst nur Notiz, Status, Schritte ändern.
+  in einem kleinen „Bearbeiten“ des Back-Rezepts (nur diese drei); „Als neue speichern“ wird „Kopie machen“ im Rezept.
+- **Kein Editor am Handy** für Zutaten oder Schritte (Hauptweg = Connector). Notiz und Status lassen sich schon ändern (Schritt 2).
 
 **Connector „Rezepte direkt aus Claude“** (Remote-MCP-Server für claude.ai)
 - **Geprüft in Schritt 0:** Eigener Connector im Pro-Konto (Customize → Connectors → „Add custom connector“), Anmeldung
@@ -236,13 +248,13 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
 - **Sicherheit:** langer Zufallsschlüssel nur als Supabase-Secret (nie im Repo, Repo ist öffentlich). Schreiben nur über
   eine Datenbank-Funktion `rezept_speichern`, aufrufbar von einer **eigenen Datenbank-Rolle**, die nur diese Funktion ausführen
   darf (nicht `service_role`). Nur Sammlungen `rezepte` und `zutaten`, nie `geloescht`, `geaendert_von` = „claude“.
-  Prüfung wie bei Teilen-Links (Größenlimit, nur bekannte Felder, Zahlenbereiche). Schlüssel tauschbar in einer Minute.
+  Prüfung wie bei der Sicherungsdatei (Größenlimit, nur bekannte Felder, Zahlenbereiche). Schlüssel tauschbar in einer Minute.
   Schlimmster Fall bei Diebstahl: Rezepte werden hinzugefügt, nichts gelesen, nichts gelöscht.
 - **Schlüssel nur als Kopfzeile** `Authorization: Bearer <Schlüssel>` (entschieden nach Schritt 0). **Kein** Schlüssel im Pfad,
   kein `x-api-key`, kein OAuth. Fehlt das Secret oder ist es kürzer als 32 Zeichen, ist die Funktion zu (401).
   Plan B (Schlüssel im Pfad, OAuth) entfällt.
-- **Notlösung „Rezept einfügen“:** Kochbuch-Code (derselbe wie beim Connector, geprüft wie Links) in der App einfügen.
-  Claude gibt ihn aus, wenn der Connector fehlt. Auch Weg für den späteren Import der bisherigen Sammlung.
+- ~~Notlösung „Rezept einfügen“~~ **entfällt** (entschieden 7.10.2026): Der Connector läuft, der Import geht über ihn,
+  „Alles sichern“ ersetzt die Notlösung.
 - **Projektanweisung (für das Claude-Projekt „Kochen & Backen“, Stand nach Schritt 9):**
   > **Kochbuch.** Das Kochbuch der Familie hat Werkzeuge (`zutaten_liste`, `rezepte_finden`, `rezept_anlegen`, `rezept_aktualisieren`).
   > Es ist nur für Koch-Rezepte (Backen/Teig folgt später). Löschen geht nicht.
@@ -362,14 +374,20 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
   Namen nicht (er legt sie dann selbst mit gleicher id an – kein Schaden). Bereits gespeicherte Zutaten mit gleicher id behalten die
   eingebaute Schreibweise. Namensregeln stehen in der Projektanweisung (oben). Danach ergänzt: **Gerät je Schritt** (`schrittgeraete`, siehe „Rezept“), die App startet immer mit der Startseite, weitere oft benutzte Zutaten (Reis, Pasta, Linsen, Kräuter, Hack …); Projektanweisung überarbeitet (Prüfen vor dem Vorschlag, Endstand zeigen und bestätigen lassen, Import mit ergänzten Mengen und Vermerk in der Notiz, Fehler ausdrücklich melden). Der Satz zum Kochbuch-Code ist gestrichen, solange „Rezept einfügen“ (Schritt 3) fehlt. Import: alte Rezepte als Text im Chat, Claude
   speichert per `rezept_anlegen` mit `quelle: import`.
-- **3** „Rezept einfügen“ (Notlösung) und einfacher Editor (Notiz, Status, Schritte). 3–5 $.
-- **4** Neue Startseite (Kacheln, Suche über alles, „Weiter mit“). 3–5 $.
-- **5** Umzug Vorlagen → Back-Rezepte, Back-Rezeptansicht. 5–8 $.
-- **6** „Im Teigrechner anpassen“, „Nur für heute“/„Ins Rezept übernehmen“, Speichern-Karte und Klappe „Vorlage“ weg. 6–10 $.
-- Wird das Geld knapp: Schritt 6 verkleinern (nur die beiden Knöpfe), Editor weglassen, 4–6 notfalls später (Back-Teil bleibt
-  bis dahin wie heute, die Rezepte per Connector laufen unabhängig davon).
-- Reihenfolge-Hinweis: Bis Schritt 4 hat die App noch die alte Startseite. Kochen-Rezepte bekommen dafür in Schritt 2 einen
-  einfachen Einstieg (eigener Bereich unter der Vorlagenliste), der in Schritt 4 durch die Kacheln ersetzt wird.
+**Neuer Plan ab 7.10.2026** (ersetzt die alten Schritte 3–6). Guthaben 32 $ bis 4.11.2026. **Reihenfolge fest: B → A → C → D → E**
+(B zuerst, damit die Rezepte sofort gesichert werden können).
+- ~~**3** „Rezept einfügen“ und Editor~~ **entfällt ganz** (Notiz/Status gehen schon, Schritte ändert Claude).
+- **B** „Alles sichern“ / „Wiederherstellen“, Teilen per Link raus. 4–6 $. ***(fertig, siehe „Sicherung“)***
+- **A** Ernährungsform (App, Connector, Datenbank-Prüfung, Tests, Projektanweisung + einmaliger Auftrag zum Nachtragen der
+  vorhandenen Rezepte im claude.ai-Chat – kostet kein Guthaben). 3–5 $.
+- **C** (ersetzt alten Schritt 4) Startseite nur mit Kacheln, Wasserwerte in den Teigrechner, Abgleich-Status und Anmeldung in die
+  Verwaltung, Punkt neben der Versionsnummer (siehe „Aufbau der App“). Kochen-Einstieg unter der Vorlagenliste fällt weg.
+  „Backen“ öffnet bis D die heutige Vorlagenliste. 4–6 $.
+- **D** (alter Schritt 5) Umzug Vorlagen → Back-Rezepte, Back-Rezeptansicht; vorher „Alles sichern“ anbieten. 5–8 $.
+- **E** (alter Schritt 6) „Im Teigrechner anpassen“, „Nur für heute“/„Ins Rezept übernehmen“, Teigrechner-Knopf mit
+  „Als Rezept speichern“, kleines Bearbeiten (Name, Kategorie, Modus), Speichern-Karte und Klappe „Vorlage“ weg. 5–8 $.
+- Summe 21–33 $: A–D (16–25 $) sicher, E nur bei Restguthaben. Sparvariante E: nur „Ins Rezept übernehmen“ (ohne „Nur für heute“).
+- Connector für Back-Rezepte: nicht eingeplant (frühestens nach dem 4.11.).
 
 **Was der Nutzer selbst einrichtet:** Funktions-Secret (Schlüssel) in Supabase; Datenbank-Skript ausführen; Edge Function im
 Dashboard einfügen; in claude.ai Connector hinzufügen (Name, URL, Schlüssel) und im Projekt aktivieren; Projektanweisung
@@ -415,9 +433,9 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 | `css/basis.css` | Farben (hell/dunkel), Schrift, Knöpfe, Felder |
 | `css/<bereich>.css` | Design eines Bereichs (z. B. `teig.css`, `kochen.css`) |
 | `js/app.js` | Start und (später) Navigation |
-| `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse, öffentlicher Schlüssel, Abfragen), `anmeldung.js` (Anmeldung, stilles Erneuern), `abgleich.js` (Klappe Abgleich: Anmelde-Formular, Status auf dem Verwalter-Handy, Umzug, versteckte Verwaltung), `ausloeser.js` (wann abgeglichen wird) |
+| `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse, öffentlicher Schlüssel, Abfragen), `anmeldung.js` (Anmeldung, stilles Erneuern), `abgleich.js` (Klappe Abgleich: Anmelde-Formular, Status auf dem Verwalter-Handy, versteckte Verwaltung mit Sichern/Wiederherstellen), `sicherung.js` (Sicherungsdatei: erstellen, prüfen, wiederherstellen), `ausloeser.js` (wann abgeglichen wird) |
 | `js/rezepte/` | Rezepte (Etappe 3): `rezept.js` (Modell, Prüfung, Speichern), `katalog.js` (Zutatenkatalog), `rechner.js` (Skalieren), `liste.js` (Ordnen, Favoriten, Mengen in Schritten), `kochen.js` (Oberfläche Kochen) |
-| `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js` (inkl. Kategorien, Ordnen der Liste), `zutaten.js` (Mehle/Saaten/Zusatzzutaten), `teilen.js` (Teilen-Link), `startseite.js` (HTML der Vorlagenliste), `ansicht.js` (Oberfläche, Navigation) |
+| `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js` (inkl. Kategorien, Ordnen der Liste), `zutaten.js` (Mehle/Saaten/Zusatzzutaten), `pruefung.js` (Vorlagen von außen prüfen), `startseite.js` (HTML der Vorlagenliste), `ansicht.js` (Oberfläche, Navigation) |
 | `supabase/functions/` | Edge Functions: `kochbuch/index.ts` (Connector), im Dashboard eingefügt; nicht Teil der App |
 | `datenbank/schema.sql` | Supabase-Datenbank (Tabellen, Zugriffsschutz, Sync-Funktionen, Connector-Rolle); nicht Teil der App |
 | `datenbank/connector-pruefen.sql` | Kontrollabfrage: was die Connector-Rolle darf (im Dashboard ausführen) |
@@ -453,24 +471,30 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 Jeder Datensatz (Vorlagen, Mehle/Saaten – eigene und geänderte Standardwerte –, später Rezepte, Vorräte) hat:
 - `id` – UUID, auf beiden Handys gleich (Ausnahme: geänderte eingebaute Mehle/Saaten/Zusätze behalten deren feste
   id wie `weizen550`, das ist auf beiden Handys ebenfalls gleich)
-- `geaendert` – Zeitstempel (ms) der letzten Änderung. Für Teilen-Links gewinnt die neuere Version; beim Sync
-  entscheidet die Server-`version` (siehe Etappe 2)
+- `geaendert` – Zeitstempel (ms) der letzten Änderung. Beim Sync entscheidet nie dieser Zeitstempel, sondern die
+  Server-`version` (siehe Etappe 2)
 - `geloescht` – `true` statt echtem Löschen („Grabstein“)
 
 Geräte-Einstellungen (`speicher.einstellung`) gehören nur zu einem Handy und werden nicht synchronisiert.
 Gespeicherte Daten beim Laden immer auf Gültigkeit prüfen.
 
-## Teilen per Link (Schritt 11)
+## Sicherung (Etappe 3, B)
 
-- Link: `<App-Adresse>#teilen=<Code>`; Code = JSON, `deflate-raw`-gepackt, Base64url (`z.`), sonst ungepackt (`r.`).
-  Alles nach dem `#` geht nie an einen Server. Ein Link enthält eine Vorlage (Teilen) oder alle eigenen (Sichern).
-- Links sind **nicht vertrauenswürdig**: `teilen.js` prüft und bereinigt alles (UUID-id, Zahlenbereiche, Namenslänge,
-  Größenlimit gegen Zip-Bomben, nur bekannte Felder). Namen immer mit `text()` maskieren.
-- Übernahme mit id und `geaendert` des Absenders, **neuere Version gewinnt** (`speicher.uebernimm`); sonst Angebot „als Kopie“.
-- **iOS:** Ein Link öffnet in Safari, nie in der Homescreen-App, und Safari/Homescreen-App haben getrennte Speicher.
-  Darum im Browser nur Vorschau + „Link kopieren“; übernommen wird in der App über „Teilen und Sichern → Link einfügen“.
-- Enthalten seit Schritt 12: `kategorie`, `modus`, `teig.zusaetze`. Alte Links ohne diese Felder funktionieren weiter.
-- Nicht enthalten: eigene Mehl-/Saatensorten und Wasserwerte (Einstellungen), Favoriten, Ausgeblendet.
+- Ersetzt „Teilen und Sichern“ (Teilen per Link, Schritt 11, ist komplett entfernt: der Abgleich verteilt alles, und ohne
+  „Link einfügen“ wäre ein Link auf dem iPhone ohnehin nutzlos).
+- **Versteckte Verwaltung** (langes Drücken auf die Versionsnummer, jedes Handy): „Alles sichern“ und „Aus Sicherung wiederherstellen“.
+- **Datei** `kochbuch-sicherung-JJJJ-MM-TT.json` (`{ format: 'kochbuch-sicherung', v: 1, erstellt, sammlungen, einstellungen }`):
+  alle Sammlungen aus `SAMMLUNGEN` (ohne Grabsteine, ohne internes `sync`) und die Geräte-Einstellungen aus `EINSTELLUNGEN`
+  (Favoriten, Ausgeblendet, gesehene Rezepte). **Nicht** enthalten: Anmeldung, Abgleich-Stand, Verwalter-Häkchen.
+  Auf dem iPhone übers Teilen-Menü („In Dateien sichern“), sonst als Download. Zeitpunkt als Geräte-Einstellung `sicherung.letzte`
+  (nur wenn das Teilen-Menü nicht abgebrochen wurde).
+- **Wiederherstellen:** Datei wählen → Prüfung → Rückfrage („3 Rezepte fehlen hier und werden wiederhergestellt“). **Nur was fehlt oder
+  gelöscht ist** kommt zurück (`speicher.stelleWiederHer`), als neue offene Änderung (geht beim Abgleich hoch; Löschen gegen Ändern:
+  Ändern gewinnt). **Vorhandenes bleibt unverändert**, auch wenn die Sicherung anders aussieht. Einstellungslisten werden ergänzt, nie gekürzt.
+- Dateien sind **nicht vertrauenswürdig**: `sicherung.js` prüft alles (`bereinigeRezept`, `bereinigeVorlage` aus `teig/pruefung.js`,
+  Katalogeinträge, Wasserwerte mit Zahlenbereichen; ≤ 5 MB, nur bekannte Sammlungen, Einstellungen und Felder). Namen immer mit `text()` maskieren.
+- Verwalter-Handy: Zeile „Letzte Sicherung: vor X Tagen“ im Abgleich-Status; mehr als 30 Tage (`SICHERUNG_WARNEN_AB_TAGEN`) oder nie
+  = „· bitte ansehen“ (ab C: Punkt neben der Versionsnummer).
 
 ## Gestaltung „Moos & Holz“
 
@@ -488,8 +512,8 @@ Gespeicherte Daten beim Laden immer auf Gültigkeit prüfen.
 - **Sehr schnell:** sofortiger Start, offline nutzbar, keine unnötigen Bibliotheken.
 - **Küchentauglich:** große Schaltflächen (mind. **56 px**, `--tipp-hoehe`), mit einer Hand und Teig an den Fingern bedienbar.
 - **Live-Ergebnisse** beim Tippen, kein „Berechnen“-Knopf.
-- Häufigster Weg (Vorlage laden → Mehlmenge ändern → ablesen) in **höchstens zwei Tippern**
-  (Vorlage in der Liste antippen → Menge eintippen).
+- Häufigster Weg (Vorlage laden → Mehlmenge ändern → ablesen) in **höchstens drei Tippern**
+  (Kachel „Backen“ → Rezept antippen → Menge eintippen; ab C).
 - **Bildschirm bleibt an**, solange die App offen ist.
 - **Nur das Nötige sichtbar**, Zusatzoptionen einklappbar (`details.klappe`).
 - Zahlenfelder mit `inputmode="decimal"`, Komma und Punkt erlaubt; beim Antippen wird der Inhalt markiert.

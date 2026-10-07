@@ -139,6 +139,25 @@ export function erstelleSpeicher(backend, jetzt = () => Date.now()) {
       return gemeldet(sammlungSchreiben(sammlung, einsetzen(liste, alsOffen(datensatz, alt)))) ? ergebnis : null;
     },
 
+    /**
+     * Holt einen Datensatz aus einer Sicherung zurück – nur, wenn es ihn hier nicht gibt oder er
+     * gelöscht ist. Gilt als neue lokale Änderung (offen, aktueller Zeitpunkt); `erstellt` aus der
+     * Sicherung bleibt, damit die Reihenfolge stimmt.
+     * Ergebnis: 'wiederhergestellt', 'vorhanden' (nichts geändert) oder null (Speichern gescheitert).
+     */
+    stelleWiederHer(sammlung, daten) {
+      const liste = sammlungLesen(sammlung);
+      const alt = liste.find((d) => d.id === daten.id);
+      if (alt && !alt.geloescht) return 'vorhanden';
+      const zeit = jetzt();
+      const erstellt = typeof daten.erstellt === 'number' && Number.isFinite(daten.erstellt)
+        ? daten.erstellt : alt?.erstellt ?? zeit;
+      const datensatz = { ...ohneSync(daten), erstellt, geaendert: zeit, geloescht: false };
+      return gemeldet(sammlungSchreiben(sammlung, einsetzen(liste, alsOffen(datensatz, alt))))
+        ? 'wiederhergestellt'
+        : null;
+    },
+
     /** Markiert als gelöscht. Die Nutzdaten werden entfernt, nur der "Grabstein" bleibt. */
     loesche(sammlung, id) {
       const liste = sammlungLesen(sammlung).map((d) =>
