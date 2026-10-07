@@ -201,12 +201,15 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   Auftretens, `geraeteListe` in `liste.js`, nicht gespeichert). Leere Schritte nehmen ihren Eintrag mit (`bereinigeSchritte`).
   Der Connector prüft streng (gleiche Länge wie `schritte`, Fehler statt Kürzen); wer `schritte` ändert und das Rezept Geräte hat, muss
   `schrittgeraete` neu mitliefern (sonst verrutschen sie). Die Datenbank-Prüfung `intern.connector_pruefe_rezept` kennt das Feld.
-- **Ernährungsform** (kommt mit A): `ernaehrung` = `vegan` | `vegetarisch` | `fisch` | `fleisch` (fehlt = kein Icon, alte Rezepte bleiben
+- **Ernährungsform** *(fertig, A)*: `ernaehrung` = `vegan` | `vegetarisch` | `fisch` | `fleisch` (fehlt = kein Icon, alte Rezepte bleiben
   gültig), dazu `auchVegetarisch: true` nur bei `fisch`/`fleisch` (sonst abgewiesen). Icons als Emoji in Liste und Rezept:
   🌱 vegan, 🥕 vegetarisch, 🐟 Fisch, 🥩 Fleisch, bei „auch vegetarisch“ 🥩/🥕; im Rezept zusätzlich als Text. Die vegetarische Variante
   steht in einem Satz in der Notiz (kein eigenes Feld). Geprüft in `bereinigeRezept`, im Connector (`rezept_anlegen`: **Pflicht**,
   `rezept_aktualisieren`: freiwillig) und in `intern.connector_pruefe_rezept`. Kein Filter in der Liste (später leicht nachrüstbar).
   Einrichten in dieser Reihenfolge: SQL ausführen → Edge Function neu einfügen → App.
+  Umsetzung: `ERNAEHRUNG`/`MIT_TIER` in `rezept.js` (Kopie in der Edge Function, Test vergleicht), `ernaehrungAnzeige` in `liste.js`.
+  `rezepte_finden` liefert in der Liste auch `ernaehrung` (null = fehlt noch). Beim Aktualisieren: neue `ernaehrung` ohne Angabe zu
+  `auchVegetarisch` verwirft die alte Angabe (statt eines Fehlers). `auchVegetarisch: false` wird nie gespeichert (Feld fehlt).
 - `status`: **erprobt** | **noch testen**, ein Tipper. **Per Connector gespeicherte Rezepte sind „erprobt“**, „noch testen“ nur für
   importierte (`quelle: import`). Kurze Notiz am Rezept. „Neu“-Markierung bis zum ersten Öffnen
   (Geräte-Einstellung mit gesehenen `id`s; beim Umzug gelten alle alten Vorlagen als gesehen).
@@ -255,7 +258,7 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   Plan B (Schlüssel im Pfad, OAuth) entfällt.
 - ~~Notlösung „Rezept einfügen“~~ **entfällt** (entschieden 7.10.2026): Der Connector läuft, der Import geht über ihn,
   „Alles sichern“ ersetzt die Notlösung.
-- **Projektanweisung (für das Claude-Projekt „Kochen & Backen“, Stand nach Schritt 9):**
+- **Projektanweisung (für das Claude-Projekt „Kochen & Backen“, Stand nach A):**
   > **Kochbuch.** Das Kochbuch der Familie hat Werkzeuge (`zutaten_liste`, `rezepte_finden`, `rezept_anlegen`, `rezept_aktualisieren`).
   > Es ist nur für Koch-Rezepte (Backen/Teig folgt später). Löschen geht nicht.
   >
@@ -290,6 +293,11 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   >
   > **Status** ist „erprobt“, weil wir es gerade gekocht haben.
   >
+  > **Ernährungsform:** Setze bei jedem Rezept `ernaehrung`: „vegan“ (nichts vom Tier), „vegetarisch“ (Milch, Ei, Käse, Honig ja, aber
+  > kein Fleisch und kein Fisch, auch keine Fischsauce, Brühe vom Tier oder Gelatine), „fisch“ (Fisch oder Meeresfrüchte, kein Fleisch),
+  > „fleisch“. Lässt sich ein Fisch- oder Fleischgericht leicht für einen Teil vegetarisch machen (z. B. Fleisch separat braten), setze
+  > `auchVegetarisch: true` und schreibe die vegetarische Variante in einem Satz in die Notiz.
+  >
   > **Import:** Alte Rezepte (aus alten ChatGPT-Chats) füge ich als Text in den Chat ein. Auf mein Zeichen speicherst du sie, nur
   > Koch-Rezepte, mit `quelle: import` und Status „noch testen“ (bleibt so, bis wir es gekocht haben). Vorher `rezepte_finden`, damit nichts
   > doppelt entsteht. Schritte und vorhandene Mengen übernimmst du unverändert. **Fehlende oder als „unklar“ markierte Mengen ergänzt du als
@@ -298,6 +306,11 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   > gekochten Endstand ganz normal als „erprobt“ (steht es schon als Import im Kochbuch, aktualisiere es).
   >
   > **Fehler:** Ist der Connector nicht erreichbar oder schlägt das Speichern fehl, sag es mir ausdrücklich.
+- **Einmaliger Auftrag zum Nachtragen** (nach A, im claude.ai-Chat, nicht in die Projektanweisung):
+  > Hole mit `rezepte_finden` alle Rezepte. Bestimme für jedes ohne `ernaehrung` die Ernährungsform nach der Projektanweisung (dafür
+  > jedes Rezept per id lesen). Zeige mir zuerst eine Tabelle (Name, Ernährungsform, auch vegetarisch, ggf. Satz für die Notiz). Nach
+  > meiner Bestätigung trägst du sie mit `rezept_aktualisieren` nach: nur `ernaehrung`, ggf. `auchVegetarisch` und die um den einen Satz
+  > ergänzte Notiz (die alte Notiz bleibt davor stehen), sonst nichts ändern.
 
 **Bauplan** (je Schritt ein PR mit Tests). **Reihenfolge: zuerst der Connector, der Back-Umbau danach.**
 Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben anfangs ca. 50 $):
@@ -379,7 +392,7 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
 - ~~**3** „Rezept einfügen“ und Editor~~ **entfällt ganz** (Notiz/Status gehen schon, Schritte ändert Claude).
 - **B** „Alles sichern“ / „Wiederherstellen“, Teilen per Link raus. 4–6 $. ***(fertig, siehe „Sicherung“)***
 - **A** Ernährungsform (App, Connector, Datenbank-Prüfung, Tests, Projektanweisung + einmaliger Auftrag zum Nachtragen der
-  vorhandenen Rezepte im claude.ai-Chat – kostet kein Guthaben). 3–5 $.
+  vorhandenen Rezepte im claude.ai-Chat – kostet kein Guthaben). 3–5 $. ***(fertig, siehe „Rezept“; Einrichtung in Supabase/claude.ai durch den Nutzer)***
 - **C** (ersetzt alten Schritt 4) Startseite nur mit Kacheln, Wasserwerte in den Teigrechner, Abgleich-Status und Anmeldung in die
   Verwaltung, Punkt neben der Versionsnummer (siehe „Aufbau der App“). Kochen-Einstieg unter der Vorlagenliste fällt weg.
   „Backen“ öffnet bis D die heutige Vorlagenliste. 4–6 $.

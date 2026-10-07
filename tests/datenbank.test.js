@@ -541,7 +541,7 @@ for (const [modus, grundausstattung] of Object.entries(MODI)) describe(`Supabase
       assert.deepEqual(finden('0%').map((r) => r.id), [id]);
       assert.equal(finden('_').length, 0);
       const r = finden('vollkorn')[0];
-      assert.deepEqual(Object.keys(r).sort(), ['art', 'id', 'kategorie', 'name', 'version']);
+      assert.deepEqual(Object.keys(r).sort(), ['art', 'ernaehrung', 'id', 'kategorie', 'name', 'version']);
       assert.ok(json(connector(`select connector.rezepte_finden('')`)).length >= 5);
       assert.ok(json(connector(`select connector.rezepte_finden()`)).length >= 5);
     });
@@ -567,6 +567,11 @@ for (const [modus, grundausstattung] of Object.entries(MODI)) describe(`Supabase
         { daten: { ...k, quelle: undefined } },
         { daten: { ...k, status: 'lecker' } },
         { daten: { ...k, notiz: 'x'.repeat(2001) } },
+        { daten: { ...k, ernaehrung: 'pescetarisch' } },
+        { daten: { ...k, ernaehrung: 3 } },
+        { daten: { ...k, ernaehrung: 'vegetarisch', auchVegetarisch: true } },
+        { daten: { ...k, ernaehrung: 'fleisch', auchVegetarisch: false } },
+        { daten: { ...k, auchVegetarisch: true } },
         { daten: { ...k, kategorie: 'Pasta!' } },
         { daten: { ...k, zutaten: [{ zutat: 'a b', menge: 1 }] } },
         { daten: { ...k, zutaten: [{ zutat: 'salz', menge: -1 }] } },
@@ -590,7 +595,8 @@ for (const [modus, grundausstattung] of Object.entries(MODI)) describe(`Supabase
       assert.ok(gruende.every((x) => x.ok === false && x.fehler === 'ungueltig'), JSON.stringify(gruende));
       assert.deepEqual(gruende.map((x) => x.grund), [
         'eintrag', 'eintrag', 'id', 'id', 'basis', 'basis', 'daten', 'unbekanntes Feld unbekannt', 'art', 'name', 'name',
-        'portionen', 'portionen', 'portionen', 'quelle', 'quelle', 'status', 'notiz', 'kategorie',
+        'portionen', 'portionen', 'portionen', 'quelle', 'quelle', 'status', 'notiz',
+        'ernaehrung', 'ernaehrung', 'auchVegetarisch', 'auchVegetarisch', 'auchVegetarisch', 'kategorie',
         'zutaten', 'zutaten', 'zutaten', 'zutaten', 'zutaten', 'schritte', 'schritte',
         'schrittzutaten', 'schrittzutaten', 'schrittzutaten', 'schrittzutaten',
         'schrittgeraete', 'schrittgeraete', 'schrittgeraete', 'schrittgeraete', 'teig', 'teig', 'zu groß',
@@ -672,7 +678,7 @@ for (const [modus, grundausstattung] of Object.entries(MODI)) describe(`Supabase
       };
 
       const roh = {
-        name: 'Edge-Curry', kategorie: 'Currys & Dal', portionen: 2,
+        name: 'Edge-Curry', kategorie: 'Currys & Dal', portionen: 2, ernaehrung: 'vegan',
         zutaten: [{ name: 'Kichererbsen', menge: 240, einheit: 'g', art: 'vorrat' }, { name: 'Ingwer', menge: 1, einheit: 'TL' },
           { name: "Chili's", menge: null, regel: 'fix' }],
         schritte: ['Kichererbsen abgießen.', 'Mit Ingwer und Chili anbraten.'],
@@ -710,6 +716,14 @@ for (const [modus, grundausstattung] of Object.entries(MODI)) describe(`Supabase
       assert.match(kopie.name, /^Edge-Curry \(Änderung vom \d+\.\d+\.\)$/);
       const { konflikt, ...ohneVermerk } = kopie;
       wieApp(ohneVermerk);
+
+      // Ernährungsform ändern: Fleisch, auch vegetarisch möglich – geht durch die Prüfung der Datenbank
+      const stand = zeile(id).version;
+      const e = await rufe('rezept_aktualisieren', { id, version: stand, ernaehrung: 'fleisch', auchVegetarisch: true });
+      assert.deepEqual([e.gespeichert, e.version], [true, stand + 1]);
+      wieApp(zeile(id).daten);
+      assert.deepEqual([zeile(id).daten.ernaehrung, zeile(id).daten.auchVegetarisch], ['fleisch', true]);
+      assert.equal(finden('Edge-Curry').find((r) => r.id === id).ernaehrung, 'fleisch');
     });
   });
 

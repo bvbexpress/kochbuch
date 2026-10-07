@@ -8,8 +8,9 @@ import { alleZutaten } from '../js/rezepte/katalog.js';
 import { skaliere } from '../js/rezepte/rechner.js';
 import {
   ordneRezepte, portionenText, rezeptFavoriten, schalteRezeptFavorit, gesehen, markiereGesehen,
-  mengenInSchritten, geraeteListe, SUCHE_AB,
+  mengenInSchritten, geraeteListe, ernaehrungAnzeige, SUCHE_AB,
 } from '../js/rezepte/liste.js';
+import { bereinigeRezept } from '../js/rezepte/rezept.js';
 
 const neuerSpeicher = () => erstelleSpeicher(speicherImArbeitsspeicher());
 const r = (name, extra = {}) => ({ id: name, name, kategorie: null, ...extra });
@@ -241,4 +242,39 @@ test('Rezept löschen und „Rückgängig“: gleicher Inhalt, gleiche id', () =
   assert.equal(neu.name, 'Nudeln');
   assert.deepEqual(neu.schrittzutaten, holeRezept(s, id).schrittzutaten);
   assert.equal(alleRezepte(s).length, 1);
+});
+
+// ---------- Ernährungsform ----------
+
+test('Ernährungsform: Icon und Text, „auch vegetarisch“ nur bei Fisch/Fleisch, ohne Angabe nichts', () => {
+  assert.deepEqual(ernaehrungAnzeige({ ernaehrung: 'vegan' }), { zeichen: '🌱', text: 'Vegan' });
+  assert.deepEqual(ernaehrungAnzeige({ ernaehrung: 'vegetarisch' }), { zeichen: '🥕', text: 'Vegetarisch' });
+  assert.deepEqual(ernaehrungAnzeige({ ernaehrung: 'fisch' }), { zeichen: '🐟', text: 'Fisch' });
+  assert.deepEqual(ernaehrungAnzeige({ ernaehrung: 'fleisch', auchVegetarisch: true }),
+    { zeichen: '🥩/🥕', text: 'Fleisch · auch vegetarisch möglich' });
+  assert.deepEqual(ernaehrungAnzeige({ ernaehrung: 'vegan', auchVegetarisch: true }), { zeichen: '🌱', text: 'Vegan' });
+  assert.equal(ernaehrungAnzeige({}), null);
+  assert.equal(ernaehrungAnzeige({ ernaehrung: 'pescetarisch' }), null);
+  assert.equal(ernaehrungAnzeige(null), null);
+});
+
+test('Ernährungsform im Rezept: optional, Unbekanntes fällt weg, „auch vegetarisch“ nur als true bei Fisch/Fleisch', () => {
+  const basis = { art: 'kochen', name: 'Curry', portionen: 2 };
+  assert.equal('ernaehrung' in bereinigeRezept(basis), false, 'alte Rezepte bleiben gültig');
+  assert.equal(bereinigeRezept({ ...basis, ernaehrung: 'vegetarisch' }).ernaehrung, 'vegetarisch');
+  assert.equal('ernaehrung' in bereinigeRezept({ ...basis, ernaehrung: 'pescetarisch' }), false);
+  const fleisch = bereinigeRezept({ ...basis, ernaehrung: 'fleisch', auchVegetarisch: true });
+  assert.deepEqual([fleisch.ernaehrung, fleisch.auchVegetarisch], ['fleisch', true]);
+  assert.equal('auchVegetarisch' in bereinigeRezept({ ...basis, ernaehrung: 'vegan', auchVegetarisch: true }), false);
+  assert.equal('auchVegetarisch' in bereinigeRezept({ ...basis, ernaehrung: 'fisch', auchVegetarisch: false }), false);
+  assert.equal('auchVegetarisch' in bereinigeRezept({ ...basis, ernaehrung: 'fisch', auchVegetarisch: 'ja' }), false);
+  assert.equal('auchVegetarisch' in bereinigeRezept({ ...basis, auchVegetarisch: true }), false);
+});
+
+test('Ernährungsform bleibt beim Speichern von Status und Notiz erhalten', () => {
+  const s = neuerSpeicher();
+  const gespeichert = speichereRezept(s, { art: 'kochen', name: 'Chili', portionen: 4, ernaehrung: 'fleisch', auchVegetarisch: true });
+  speichereRezept(s, { ...holeRezept(s, gespeichert.id), status: 'testen', notiz: 'Bohnen statt Hack für die Vegetarierin.' });
+  const r = holeRezept(s, gespeichert.id);
+  assert.deepEqual([r.ernaehrung, r.auchVegetarisch, r.status], ['fleisch', true, 'testen']);
 });

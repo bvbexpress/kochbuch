@@ -43,6 +43,8 @@ export const PORTIONSARTEN = ['personen', 'stueck', 'laibe'];
 export const REGELN = ['linear', 'ganz', 'fix'];
 export const STATUS = ['erprobt', 'testen'];
 export const QUELLEN = ['claude', 'import']; // 'hand' gibt es nur am Handy
+export const ERNAEHRUNG = ['vegan', 'vegetarisch', 'fisch', 'fleisch'];
+export const MIT_TIER = ['fisch', 'fleisch']; // nur hier gibt es „auch vegetarisch möglich“
 /** = ARTEN in js/rezepte/katalog.js */
 export const ZUTAT_ARTEN = ['mehl', 'saat', 'zusatz', 'gemuese', 'obst', 'fleisch', 'milchprodukt', 'gewuerz', 'vorrat', 'sonstiges'];
 /** = Grenzen in js/rezepte/rezept.js */
@@ -134,7 +136,8 @@ const zutatName = (katalog, id) => katalog.find((z) => z.id === id)?.name ?? id;
 
 // ---------- Prüfen ----------
 
-const FELDER = ['name', 'kategorie', 'portionen', 'portionsart', 'zutaten', 'schritte', 'schrittzutaten', 'schrittgeraete', 'status', 'notiz', 'quelle'];
+const FELDER = ['name', 'kategorie', 'portionen', 'portionsart', 'zutaten', 'schritte', 'schrittzutaten', 'schrittgeraete', 'status',
+  'ernaehrung', 'auchVegetarisch', 'notiz', 'quelle'];
 
 function kategorieVon(x) {
   if (typeof x !== 'string') return null;
@@ -149,6 +152,7 @@ function kategorieVon(x) {
  * Ergebnis: { rezept, neu } – `rezept` genau in der Form von `bereinigeRezept` (ohne id), `neu` = neue
  * Katalogeinträge { id, name, art } – oder { fehler: [Text, …] }.
  * `katalog` wird nicht verändert. `bekannt`: weitere erlaubte Katalog-ids (Zutaten des bisherigen Rezepts).
+ * `pflicht`: schrittzutaten und ernaehrung müssen angegeben sein (Anlegen; beim Aktualisieren alter Rezepte nicht).
  */
 export function pruefeRezept(roh, katalog, { bekannt = [], pflicht = true } = {}) {
   if (!roh || typeof roh !== 'object' || Array.isArray(roh)) return { fehler: ['Rezept fehlt oder ist kein Objekt.'] };
@@ -277,6 +281,15 @@ export function pruefeRezept(roh, katalog, { bekannt = [], pflicht = true } = {}
   const notiz = roh.notiz === undefined || roh.notiz === null ? '' : sauber(roh.notiz);
   if (notiz === null || notiz.length > GRENZEN.notiz) f(`notiz ist kein Text bis ${GRENZEN.notiz} Zeichen.`);
 
+  // Ernährungsform: beim Anlegen Pflicht; „auch vegetarisch“ nur bei Fisch/Fleisch
+  const ernaehrung = roh.ernaehrung ?? null;
+  if (ernaehrung === null) {
+    if (pflicht) f(`ernaehrung fehlt: ${ERNAEHRUNG.join(' | ')}.`);
+  } else if (!ERNAEHRUNG.includes(ernaehrung)) f(`ernaehrung: ${ERNAEHRUNG.join(' | ')}.`);
+  const auchVegetarisch = roh.auchVegetarisch ?? false;
+  if (typeof auchVegetarisch !== 'boolean') f('auchVegetarisch muss true oder false sein.');
+  else if (auchVegetarisch && !MIT_TIER.includes(ernaehrung)) f('auchVegetarisch gibt es nur bei ernaehrung fisch oder fleisch.');
+
   if (fehler.length) return { fehler: fehler.slice(0, 15) };
   const benutzt = new Set(zutaten.map((z) => z.zutat));
   return {
@@ -293,6 +306,8 @@ export function pruefeRezept(roh, katalog, { bekannt = [], pflicht = true } = {}
       // ebenso: kein einziges Gerät = Feld fehlt
       ...(schrittgeraete && schrittgeraete.some(Boolean) ? { schrittgeraete } : {}),
       status,
+      ...(ernaehrung ? { ernaehrung } : {}),
+      ...(auchVegetarisch === true ? { auchVegetarisch } : {}),
       notiz,
       quelle,
     },
@@ -318,7 +333,9 @@ export function fuerClaude(id, version, d, katalog) {
         e.menge === undefined ? { name: name(e.zutat) } : { name: name(e.zutat), menge: e.menge })))
       : null,
     schrittgeraete: Array.isArray(d.schrittgeraete) ? d.schrittgeraete : null,
-    status: d.status ?? 'erprobt', notiz: d.notiz ?? '', quelle: d.quelle ?? 'hand',
+    status: d.status ?? 'erprobt',
+    ernaehrung: d.ernaehrung ?? null, auchVegetarisch: d.auchVegetarisch === true,
+    notiz: d.notiz ?? '', quelle: d.quelle ?? 'hand',
   };
 }
 
@@ -364,6 +381,14 @@ const REZEPT_FELDER = {
     },
   },
   status: { type: 'string', enum: STATUS, description: 'erprobt = gerade gekocht und gelungen; testen = noch nicht ausprobiert (Import).' },
+  ernaehrung: {
+    type: 'string', enum: ERNAEHRUNG,
+    description: 'vegan = nichts vom Tier; vegetarisch = Milch, Ei, Käse, Honig ja, kein Fleisch und kein Fisch (auch keine Fischsauce, Brühe vom Tier, Gelatine); fisch = Fisch oder Meeresfrüchte, kein Fleisch; fleisch = mit Fleisch.',
+  },
+  auchVegetarisch: {
+    type: 'boolean',
+    description: 'Nur bei fisch oder fleisch: true, wenn sich das Gericht leicht für einen Teil vegetarisch machen lässt (die Variante in einem Satz in die notiz).',
+  },
   notiz: { type: 'string', maxLength: GRENZEN.notiz, description: 'Kurz, z. B. unsere Anpassungen.' },
   quelle: { type: 'string', enum: QUELLEN, description: 'claude (Standard) oder import (übernommenes altes Rezept).' },
 };
@@ -395,7 +420,7 @@ export const WERKZEUGE = [
           type: 'array', minItems: 1, maxItems: MAX_REZEPTE,
           items: {
             type: 'object', properties: REZEPT_FELDER, additionalProperties: false,
-            required: ['name', 'kategorie', 'portionen', 'zutaten', 'schritte', 'schrittzutaten'],
+            required: ['name', 'kategorie', 'portionen', 'zutaten', 'schritte', 'schrittzutaten', 'ernaehrung'],
           },
         },
       },
@@ -419,7 +444,8 @@ export const WERKZEUGE = [
 
 const ANLEITUNG = 'Kochbuch der Familie (nur Koch-Rezepte). Vor dem Speichern zutaten_liste abfragen und diese Namen benutzen. '
   + 'Vorher mit rezepte_finden prüfen, ob es das Rezept schon gibt; dann rezept_aktualisieren statt neu anlegen. '
-  + 'Mengen für die angegebenen Portionen, Schritte kurz, zu jedem Schritt schrittzutaten und, wenn bekannt, das Gerät (schrittgeraete). Löschen geht nicht.';
+  + 'Mengen für die angegebenen Portionen, Schritte kurz, zu jedem Schritt schrittzutaten und, wenn bekannt, das Gerät (schrittgeraete). '
+  + 'Immer die Ernährungsform (ernaehrung, bei Fisch/Fleisch ggf. auchVegetarisch). Löschen geht nicht.';
 
 /** Fehler, den Claude sieht (isError), statt eines Protokollfehlers. */
 class Hinweis extends Error {}
@@ -542,10 +568,12 @@ async function rezeptAktualisieren(db, a) {
   const zusammen = {
     name: alt.name, kategorie: alt.kategorie, portionen: alt.portionen, portionsart: alt.portionsart,
     zutaten: alt.zutaten, schritte: alt.schritte, schrittzutaten: alt.schrittzutaten, schrittgeraete: alt.schrittgeraete,
-    status: alt.status, notiz: alt.notiz,
+    status: alt.status, ernaehrung: alt.ernaehrung, auchVegetarisch: alt.auchVegetarisch, notiz: alt.notiz,
     quelle: QUELLEN.includes(alt.quelle) ? alt.quelle : 'claude',
     ...aenderung,
   };
+  // Neue Ernährungsform ohne Angabe zu „auch vegetarisch“: die alte Angabe passt evtl. nicht mehr
+  if (aenderung.ernaehrung !== undefined && aenderung.auchVegetarisch === undefined) delete zusammen.auchVegetarisch;
   const bekannt = (Array.isArray(alt.zutaten) ? alt.zutaten : []).map((z) => z?.zutat).filter(gueltigeZutatId);
   const geprueft = pruefeRezept(zusammen, katalog, { bekannt, pflicht: false });
   if (geprueft.fehler) throw new Hinweis(`Nicht gespeichert: ${geprueft.fehler.join(' ')}`);

@@ -14,7 +14,7 @@ import { alleZutaten, zutatName } from './katalog.js';
 import { skaliere, mengeText } from './rechner.js';
 import {
   SUCHE_AB, ordneRezepte, rezeptFavoriten, schalteRezeptFavorit, gesehen, markiereGesehen,
-  portionenText, mengenInSchritten, geraeteListe,
+  portionenText, mengenInSchritten, geraeteListe, ernaehrungAnzeige,
 } from './liste.js';
 import { vermerkText } from '../teig/vorlagen.js';
 
@@ -99,6 +99,7 @@ function listeInnenHtml(ordnung) {
   const zeile = (r) => {
     const stern = sterne.has(r.id);
     const neu = !bekannt.has(r.id);
+    const ernaehrung = ernaehrungAnzeige(r);
     const info = [portionenText(r.portionen, r.portionsart), r.status === 'testen' ? 'Noch testen' : null]
       .filter(Boolean).join(' · ');
     // Nach links wischen zeigt den roten Knopf „Löschen“ hinter der Zeile (Geste: teig/wischen.js)
@@ -106,7 +107,9 @@ function listeInnenHtml(ordnung) {
         <button type="button" class="vorlage-weg" data-kweg="${text(r.id)}" tabindex="-1">Löschen</button>
         <div class="vorlage-inhalt">
           <button type="button" class="vorlage-oeffnen" data-koeffnen="${text(r.id)}">
-            <span class="vorlage-name">${text(r.name)}${neu ? ' <span class="neu">Neu</span>' : ''}</span>
+            <span class="vorlage-name">${text(r.name)}${ernaehrung
+              ? ` <span class="ernaehrung" role="img" aria-label="${text(ernaehrung.text)}">${ernaehrung.zeichen}</span>` : ''}${neu
+              ? ' <span class="neu">Neu</span>' : ''}</span>
             <small class="zahl">${text(info)}</small>
             ${r.konflikt ? '<small class="vermerk">Gleichzeitig geändert – bitte ansehen</small>' : ''}
           </button>
@@ -150,6 +153,7 @@ function rezeptHtml(r) {
   const geaendert = Math.abs(portionen - r.portionen) > 0.005;
   const art = r.portionsart;
   const geraete = geraeteListe(r);
+  const ernaehrung = ernaehrungAnzeige(r);
 
   const zutatenZeilen = skaliert.zutaten.map((z) => `
       <li class="zutat">
@@ -209,6 +213,7 @@ function rezeptHtml(r) {
         <textarea class="eingabe notiz-feld" data-knotiz rows="2" maxlength="2000"
                   placeholder="z. B. weniger Salz …" autocomplete="off">${text(r.notiz)}</textarea></label>
     </section>
+    ${ernaehrung ? `<p class="ernaehrung-zeile"><span aria-hidden="true">${ernaehrung.zeichen}</span> ${text(ernaehrung.text)}</p>` : ''}
     ${geraete.length ? `<p class="geraete" aria-label="Geräte"><span class="leise">Geräte:</span> ${geraete.map((g) => `<span class="geraet-tag">${text(g)}</span>`).join(' ')}</p>` : ''}
     <details class="klappe" data-kklappe="zutaten" ${zutatenOffen ? 'open' : ''}>
       <summary>Zutaten (${r.zutaten.length})</summary>
