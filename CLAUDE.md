@@ -202,6 +202,11 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   Auftretens, `geraeteListe` in `liste.js`, nicht gespeichert). Leere Schritte nehmen ihren Eintrag mit (`bereinigeSchritte`).
   Der Connector prüft streng (gleiche Länge wie `schritte`, Fehler statt Kürzen); wer `schritte` ändert und das Rezept Geräte hat, muss
   `schrittgeraete` neu mitliefern (sonst verrutschen sie). Die Datenbank-Prüfung `intern.connector_pruefe_rezept` kennt das Feld.
+- **Teig je Schritt** (`schrittteig`, nur Back-Rezepte, parallel zu `schritte`, optional): je Schritt `[{ teil, anteil? }]`, `teil` aus
+  `TEIG_TEILE` (`mehl`, `wasser`, `starter`, `salz`, `oel`, `hefe`, `saaten`, `quellwasser`, `zusaetze`; Mehl/Saaten/Zusätze je Sorte
+  einzeln), `anteil` 0–1 für eine feste Aufteilung (Wasser 0,9 in Schritt 2, 0,1 in Schritt 3), ohne = alles. Die Gramm rechnet
+  `teigInSchritten` (`teig/rechner.js`) aus dem eingestellten Teig – sie skalieren also mit Mehl bzw. Teiglingen und laufen live mit.
+  Geprüft in `bereinigeRezept` (nur bekannte Teile, je Schritt einmal; leere Schritte nehmen ihren Eintrag mit; ohne Einträge fehlt das Feld).
 - **Ernährungsform** *(fertig, A)*: `ernaehrung` = `vegan` | `vegetarisch` | `fisch` | `fleisch` (fehlt = kein Icon, alte Rezepte bleiben
   gültig), dazu `auchVegetarisch: true` nur bei `fisch`/`fleisch` (sonst abgewiesen). Icons als Emoji in Liste und Rezept:
   🌱 vegan, 🥕 vegetarisch, 🐟 Fisch, 🥩 Fleisch, bei „auch vegetarisch“ 🥩/🥕; im Rezept zusätzlich als Text. Die vegetarische Variante
@@ -420,7 +425,8 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
   „Alles sichern“ vorher: kein Zwang in der App (der Umzug löscht nichts), sondern Anleitung an den Nutzer vor dem Update.
   **Back-Rezeptansicht:** Das Back-Rezept öffnet im Rechner (Menge, Teig, Klappen wie bisher, Speichern-Karte schreibt ins Rezept:
   „Rezept aktualisieren“ / „Als neues speichern“ = Kopie inkl. Schritte und Notiz); darunter `js/rezepte/backen.js`: weitere Zutaten
-  (skalieren mit dem Mehl), Status, Notiz, Geräte, Schritte zum Abhaken (Attribute `data-b…`). Gemeinsame HTML-Bausteine mit Kochen in
+  (skalieren mit dem Mehl), Status, Notiz, Geräte, Schritte zum Abhaken mit den Teigmengen des Schritts (`schrittteig`;
+Attribute `data-b…`). Gemeinsame HTML-Bausteine mit Kochen in
   `js/rezepte/teile.js`. Liste zeigt „Neu“ und „Noch testen“. „+ Neues Rezept“ legt ein Back-Rezept ohne Schritte an. Bis E bleibt
   die Speichern-Karte (Teig ändern ginge sonst nicht mehr).
 - **E** (alter Schritt 6) „Im Teigrechner anpassen“, „Nur für heute“/„Ins Rezept übernehmen“, Teigrechner-Knopf mit

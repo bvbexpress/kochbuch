@@ -34,26 +34,33 @@ export const BACK_REZEPTE = [
     id: '4c70ead4-b8b9-47d5-a436-ed4e8e7f8ea2',
     vorlage: 'weizenvollkorn',
     name: 'Weizenvollkorn-Sauerteigbrot',
+    // [Text, Gerät, Teile des Teigs]
     schritte: [
-      ['Quellstück: Sonnenblumenkerne und Leinsamen mit kochendem Wasser übergießen, abgedeckt abkühlen lassen.', 'Wasserkocher'],
-      ['Mehl mit dem Großteil des Wassers mischen, 20–30 Min. quellen lassen.', 'Große Schüssel'],
-      ['Starter im restlichen Wasser auflösen und einarbeiten.', ''],
-      ['Salz einarbeiten.', ''],
+      ['Quellstück: Sonnenblumenkerne und Leinsamen mit dem kochenden Quellwasser übergießen, abgedeckt abkühlen lassen.',
+        'Wasserkocher', [{ teil: 'saaten' }, { teil: 'quellwasser' }]],
+      ['Mehl mit 90 % des Wassers mischen, 20–30 Min. quellen lassen.', 'Große Schüssel',
+        [{ teil: 'mehl' }, { teil: 'wasser', anteil: 0.9 }]],
+      ['Starter in den restlichen 10 % des Wassers auflösen und einarbeiten.', '',
+        [{ teil: 'starter' }, { teil: 'wasser', anteil: 0.1 }]],
+      ['Salz einarbeiten.', '', [{ teil: 'salz' }]],
       ['Abgekühltes Quellstück unterarbeiten.', ''],
       ['Stockgare ca. 3 Std. bei 24–26 °C, nach 30, 60 und 90 Min. dehnen und falten, danach ruhen lassen.', ''],
       ['Schonend formen, Spannung aufbauen, in die Form geben, einschneiden.', 'Kastenform'],
       ['15 Min. mit Dampf backen.', 'Ofen 240 °C'],
       ['Dampf ablassen, 35–40 Min. fertig backen.', 'Ofen 205 °C'],
     ],
-    notiz: 'Klebriger Teig ist bei Vollkorn normal. Nach viel Gasaufbau nicht mehr spät falten.',
+    notiz: 'Klebriger Teig ist bei Vollkorn normal. Nach viel Gasaufbau nicht mehr spät falten. '
+      + 'Perspektivisch auch im gusseisernen Topf: Topf mit vorheizen, mit Deckel backen statt mit Dampf, '
+      + 'Deckel nach etwa 20 Min. abnehmen.',
   },
   {
     id: '92c672f5-0f30-46a2-900d-925a4a89d911',
     vorlage: 'focaccia',
     name: 'Sauerteig-Focaccia',
     schritte: [
-      ['Starter in einem Großteil des Wassers auflösen, Mehl einarbeiten.', 'Große Schüssel'],
-      ['Salz, dann Öl einarbeiten. Der Teig darf weich und klebrig sein.', ''],
+      ['Starter im Wasser auflösen, Mehl einarbeiten.', 'Große Schüssel',
+        [{ teil: 'starter' }, { teil: 'wasser' }, { teil: 'mehl' }]],
+      ['Salz, dann Öl einarbeiten. Der Teig darf weich und klebrig sein.', '', [{ teil: 'salz' }, { teil: 'oel' }]],
       ['Mehrfach dehnen und falten.', ''],
       ['Abgedeckt über Nacht in den Kühlschrank.', 'Kühlschrank'],
       ['Morgens temperieren lassen.', ''],
@@ -91,6 +98,7 @@ export function eingebautesBackRezept(eintrag) {
     name: eintrag.name,
     schritte: eintrag.schritte.map(([s]) => s),
     schrittgeraete: eintrag.schritte.map(([, g]) => g),
+    schrittteig: eintrag.schritte.map(([, , t]) => t ?? []),
     notiz: eintrag.notiz,
   });
 }

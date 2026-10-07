@@ -11,14 +11,17 @@ import { mengeText } from './rechner.js';
 import { geraeteListe } from './liste.js';
 
 /**
- * Schritte als Liste. mengen: je Schritt [{ name, menge, einheit }] oder null (keine Mengen),
+ * Schritte als Liste. mengen: je Schritt [{ name, menge, einheit }] oder null (keine Mengen); hat ein Eintrag
+ * `ausgabe` statt `menge`, bleibt die Zahl leer und wird live eingetragen (`data-ausgabe`, Teig im Back-Rezept).
  * haken: Set der abgehakten Schritte. Der erste offene Schritt ist der aktuelle.
  */
 export function schritteHtml(r, { mengen = null, haken, p }) {
   const jetzt = r.schritte.findIndex((_, i) => !haken.has(i));
   const schritte = r.schritte.map((s, i) => {
     const fertig = haken.has(i);
-    const chips = (mengen?.[i] ?? []).map((m) => (m.menge === null
+    const chips = (mengen?.[i] ?? []).map((m) => (m.ausgabe
+      ? `<span class="menge-chip"><b class="zahl"><output data-ausgabe="${text(m.ausgabe)}"></output></b> ${text(m.name)}</span>`
+      : m.menge === null
       ? `<span class="menge-chip">${text(m.name)}, <span class="leise">nach Geschmack</span></span>`
       : `<span class="menge-chip"><b class="zahl">${text(mengeText(m.menge, m.einheit))}</b> ${text(m.name)}</span>`)).join('');
     const geraet = r.schrittgeraete?.[i] ?? '';

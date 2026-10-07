@@ -105,3 +105,60 @@ test('speicher.kennt: auch gelöschte Datensätze zählen', () => {
   assert.equal(s.hole('rezepte', d.id), null);
   assert.equal(s.kennt('rezepte', 'gibt-es-nicht'), false);
 });
+
+// ---------- Teigmengen je Schritt (schrittteig) ----------
+
+import { berechne, gesamtmehlAusMehl, teigInSchritten } from '../js/teig/rechner.js';
+
+const mengen = (r, mehl) => teigInSchritten(r.schrittteig, r.teig, berechne(r.teig, gesamtmehlAusMehl(r.teig, mehl)))
+  .map((je) => je.map((m) => `${Math.round(m.gramm)} ${m.name}`));
+
+test('Brot: Zutaten je Schritt, Wasser fest 90 % / 10 % aufgeteilt, skaliert mit dem Mehl', () => {
+  const brot = eingebautesBackRezept(BACK_REZEPTE[0]);
+  assert.equal(brot.schrittteig.length, brot.schritte.length);
+  const m = mengen(brot, 500);
+  assert.deepEqual(m.slice(0, 5), [
+    ['50 Sonnenblumenkerne', '25 Leinsamen', '80 Quellwasser'],
+    ['500 Weizenvollkorn', '360 Wasser'],
+    ['100 Starter', '40 Wasser'],
+    ['11 Salz'],
+    [],
+  ]);
+  const doppelt = mengen(brot, 1000);
+  assert.deepEqual(doppelt[1], ['1000 Weizenvollkorn', '720 Wasser']);
+  assert.deepEqual(doppelt[2], ['200 Starter', '80 Wasser']);
+  assert.ok(brot.notiz.includes('gusseisernen Topf'));
+});
+
+test('Focaccia: Schritt 1 Starter, ganzes Wasser, Mehl; Schritt 2 Salz und Öl', () => {
+  const f = eingebautesBackRezept(BACK_REZEPTE[1]);
+  const m = mengen(f, 300);
+  assert.deepEqual(m[0], ['50 Starter', '225 Wasser', '300 Tipo 00']);
+  assert.deepEqual(m[1], ['7 Salz', '15 Öl']);
+  assert.equal(f.schritte[0], 'Starter im Wasser auflösen, Mehl einarbeiten.');
+});
+
+test('schrittteig: nur bekannte Teile, je Schritt einmal, Anteil 0–1, nur bei Back-Rezepten, leere Schritte nehmen ihren Eintrag mit', () => {
+  const f = eingebautesBackRezept(BACK_REZEPTE[1]);
+  const r = bereinigeRezept({
+    ...f,
+    schritte: ['A', '', 'B'],
+    schrittgeraete: ['', '', ''],
+    schrittteig: [
+      [{ teil: 'wasser', anteil: 0.5 }, { teil: 'wasser' }, { teil: 'zucker' }, { teil: 'salz', anteil: 2 }],
+      [{ teil: 'mehl' }],
+      [{ teil: 'mehl', anteil: 1 }],
+    ],
+  });
+  assert.deepEqual(r.schrittteig, [[{ teil: 'wasser', anteil: 0.5 }], [{ teil: 'mehl' }]]);
+  assert.equal(bereinigeRezept({ ...f, schrittteig: [[], []] }).schrittteig, undefined, 'ohne Einträge fehlt das Feld');
+  const kochen = bereinigeRezept({ art: 'kochen', name: 'Dal', portionen: 2, schritte: ['A'], schrittteig: [[{ teil: 'mehl' }]] });
+  assert.equal(kochen.schrittteig, undefined);
+});
+
+test('teigInSchritten: Teile, die der Teig nicht hat, fehlen; ohne Ergebnis nur Namen', () => {
+  const f = eingebautesBackRezept(BACK_REZEPTE[1]);
+  const ohne = teigInSchritten([[{ teil: 'hefe' }, { teil: 'quellwasser' }, { teil: 'oel' }]], f.teig);
+  assert.deepEqual(ohne, [[{ name: 'Öl', gramm: null }]]);
+  assert.equal(teigInSchritten(undefined, f.teig), null);
+});

@@ -18,6 +18,10 @@
 //                auchVegetarisch: true nur bei Fisch/Fleisch („lässt sich für einen Teil vegetarisch machen“)
 //   nur Backen:  teig, mehl, modus, teiglinge – wie bei den Teigvorlagen; Mehl, Wasser, Salz usw. rechnet
 //                der Teigrechner, `zutaten` sind nur das Übrige (Belag …) und skalieren mit dem Mehl
+//                schrittteig  [[{ teil, anteil? }]] – optional je Schritt (gleiche Reihenfolge wie `schritte`) die Teile
+//                des Teigs aus TEIG_TEILE, die dieser Schritt braucht; `anteil` (0–1) = nur dieser Teil davon
+//                (z. B. Wasser 0,9 in Schritt 2 und 0,1 in Schritt 3), ohne = alles. Die Gramm rechnet der Teigrechner
+//                aus dem eingestellten Teig (`teigInSchritten` in teig/rechner.js), sie skalieren also mit dem Mehl.
 //
 // Rezepte können von überall kommen (Abgleich, Connector, eingefügter Code): Alles geht durch
 // `bereinigeRezept`, unbekannte Felder fallen weg, Unsinn ergibt null.
@@ -40,6 +44,8 @@ export const STATUS = ['erprobt', 'testen'];
 export const QUELLEN = ['claude', 'import', 'hand'];
 export const ERNAEHRUNG = ['vegan', 'vegetarisch', 'fisch', 'fleisch'];
 export const MIT_TIER = ['fisch', 'fleisch']; // nur hier gibt es „auch vegetarisch möglich“
+/** Teile des Teigs für `schrittteig` (Back-Rezepte). mehl/saaten/zusaetze = jede Sorte einzeln. */
+export const TEIG_TEILE = ['mehl', 'wasser', 'starter', 'salz', 'oel', 'hefe', 'saaten', 'quellwasser', 'zusaetze'];
 
 /** Kategorien beim Kochen, in der Reihenfolge der Liste (Backen: KATEGORIEN aus teig/vorlagen.js). */
 export const KOCH_KATEGORIEN = [
@@ -97,9 +103,10 @@ export function bereinigeRezept(roh) {
   if (!backen && portionen === null) return null;
 
   const zutaten = bereinigeZutaten(roh.zutaten ?? []);
-  const geprueft = bereinigeSchritte(roh.schritte ?? [], roh.schrittzutaten, zutaten, roh.schrittgeraete);
+  const geprueft = bereinigeSchritte(roh.schritte ?? [], roh.schrittzutaten, zutaten, roh.schrittgeraete,
+    backen ? roh.schrittteig : undefined);
   if (!zutaten || !geprueft) return null;
-  const { schritte, schrittzutaten, schrittgeraete } = geprueft;
+  const { schritte, schrittzutaten, schrittgeraete, schrittteig } = geprueft;
 
   const quelle = QUELLEN.includes(roh.quelle) ? roh.quelle : 'hand';
   const status = STATUS.includes(roh.status) ? roh.status : quelle === 'import' ? 'testen' : 'erprobt';
@@ -137,6 +144,7 @@ export function bereinigeRezept(roh) {
     const modus = MODI.includes(roh.modus) ? roh.modus : angabe ? 'teiglinge' : 'mehl';
     Object.assign(rezept, {
       teig, mehl, modus,
+      ...(schrittteig ? { schrittteig } : {}),
       // Teiglinge-Angabe nur im Teiglinge-Modus, wie bei den Teigvorlagen
       ...(modus === 'teiglinge' ? { teiglinge: angabe ?? { ...STANDARD_TEIGLINGE } } : {}),
     });
@@ -166,13 +174,15 @@ function bereinigeZutaten(liste) {
  * Einträge wie die Schritte; Verweise auf Zutaten, die das Rezept nicht hat, und unsinnige Teilmengen
  * fallen weg. Sind es insgesamt keine, fehlt `schrittzutaten` (→ Namenssuche als Rückfall).
  * Dasselbe für das Gerät je Schritt (`schrittgeraete`): leere Schritte nehmen ihren Eintrag mit, ohne Gerät fehlt das Feld.
+ * Ebenso die Teile des Teigs je Schritt (`schrittteig`, nur Back-Rezepte): nur bekannte Teile, je Schritt einmal, Anteil 0–1.
  */
-function bereinigeSchritte(liste, roheZutaten, zutaten, roheGeraete) {
+function bereinigeSchritte(liste, roheZutaten, zutaten, roheGeraete, roherTeig) {
   if (!Array.isArray(liste) || liste.length > MAX_SCHRITTE) return null;
   const imRezept = new Set((zutaten ?? []).map((z) => z.zutat));
   const schritte = [];
   const je = [];
   const geraete = [];
+  const teigJe = [];
   liste.forEach((s, i) => {
     if (typeof s !== 'string') return;
     const t = text(s, MAX_SCHRITT);
@@ -190,13 +200,30 @@ function bereinigeSchritte(liste, roheZutaten, zutaten, roheGeraete) {
       eintraege.push(menge === null ? { zutat: e.zutat } : { zutat: e.zutat, menge });
     }
     je.push(eintraege);
+    teigJe.push(bereinigeTeigTeile(Array.isArray(roherTeig) ? roherTeig[i] : null));
   });
   if (liste.some((s) => typeof s !== 'string')) return null;
   return {
     schritte,
     schrittzutaten: je.some((e) => e.length) ? je : null,
     schrittgeraete: geraete.some(Boolean) ? geraete : null,
+    schrittteig: teigJe.some((e) => e.length) ? teigJe : null,
   };
+}
+
+/** Teile des Teigs eines Schritts: [{ teil, anteil? }], Unbekanntes und Doppeltes fällt weg. */
+function bereinigeTeigTeile(roh) {
+  if (!Array.isArray(roh)) return [];
+  const gesehen = new Set();
+  const sauber = [];
+  for (const e of roh.slice(0, TEIG_TEILE.length)) {
+    if (!e || typeof e !== 'object' || !TEIG_TEILE.includes(e.teil) || gesehen.has(e.teil)) continue;
+    const anteil = e.anteil === undefined || e.anteil === null ? null : zahl(e.anteil, 0, 1);
+    if (e.anteil !== undefined && e.anteil !== null && anteil === null) continue;
+    gesehen.add(e.teil);
+    sauber.push(anteil === null || anteil === 1 ? { teil: e.teil } : { teil: e.teil, anteil });
+  }
+  return sauber;
 }
 
 /**

@@ -1,6 +1,7 @@
 // backen.js – Rezept-Teil eines Back-Rezepts (Etappe 3, D). Das Back-Rezept öffnet im Rechner
 // (teig/ansicht.js: Menge, Teig, Klappen); darunter steht dieser Teil: weitere Zutaten (Belag …,
-// skalieren mit dem Mehl), Status, Notiz, Geräte und die Schritte zum Abhaken.
+// skalieren mit dem Mehl), Status, Notiz, Geräte und die Schritte zum Abhaken – mit den Teigmengen des
+// Schritts (`schrittteig`), live aus dem eingestellten Teig.
 // Gerechnet wird in rechner.js, gespeichert über rezept.js. Haken gelten nur, solange die App offen ist.
 // Eigene `data-b…`-Attribute (siehe teile.js), damit sich Rechner und Kochen nicht gestört fühlen.
 
@@ -10,6 +11,8 @@ import { holeRezept, speichereRezept } from './rezept.js';
 import { alleZutaten, zutatName } from './katalog.js';
 import { skaliere, mengeText } from './rechner.js';
 import { schritteHtml, statusHtml, notizHtml, geraeteHtml } from './teile.js';
+import { teigInSchritten } from '../teig/rechner.js';
+import { formatGramm, formatGrammFein } from '../kern/zahlen.js';
 
 const NOTIZ_PAUSE = 500; // ms nach dem letzten Tippen, dann wird die Notiz gespeichert
 
@@ -37,8 +40,8 @@ export function startBacken(ziel, { neuZeichnen: zeichnen }) {
   });
 }
 
-/** HTML des Rezept-Teils; r = gespeichertes Back-Rezept (holeRezept). */
-export function backenTeilHtml(r) {
+/** HTML des Rezept-Teils; r = gespeichertes Back-Rezept (holeRezept), teig = der eingestellte Teig im Rechner. */
+export function backenTeilHtml(r, teig) {
   offen = r.id;
   const katalog = alleZutaten(speicher);
   const zutaten = r.zutaten.map((z, i) => `
@@ -54,12 +57,26 @@ export function backenTeilHtml(r) {
     <section class="karte" aria-label="Status">${statusHtml(r.status, 'b')}</section>
     ${notizHtml(r.notiz, 'b')}
     ${geraeteHtml(r)}
-    ${schritteHtml(r, { haken: erledigt.get(r.id) ?? new Set(), p: 'b' })}`;
+    ${schritteHtml(r, { mengen: teigChips(r, teig), haken: erledigt.get(r.id) ?? new Set(), p: 'b' })}`;
 }
 
-/** Weitere Zutaten auf das eingestellte Mehl umrechnen (bei jedem Tastendruck). */
-export function aktualisiereBacken(r, mehl) {
-  if (!r?.zutaten.length) return;
+/** Teigmengen je Schritt als Chips ohne Zahl (die trägt `aktualisiereBacken` ein); null ohne `schrittteig`. */
+function teigChips(r, teig) {
+  return teigInSchritten(r.schrittteig, teig)?.map((je, i) => je.map((m, j) => ({ name: m.name, ausgabe: `bs-${i}-${j}` }))) ?? null;
+}
+
+/**
+ * Bei jedem Tastendruck: Teigmengen der Schritte aus dem eingestellten Teig (e = Ergebnis von `berechne`)
+ * und weitere Zutaten auf das eingestellte Mehl umrechnen.
+ */
+export function aktualisiereBacken(r, mehl, teig, e) {
+  if (!r) return;
+  teigInSchritten(r.schrittteig, teig, e)?.forEach((je, i) => je.forEach((m, j) => {
+    const el = wurzel.querySelector(`[data-ausgabe="bs-${i}-${j}"]`);
+    // wie im Rechner: ganze Gramm, Hefe unter 10 g mit einer Nachkommastelle
+    if (el) el.textContent = `${m.gramm < 10 && m.name.endsWith('hefe') ? formatGrammFein(m.gramm) : formatGramm(m.gramm)} g`;
+  }));
+  if (!r.zutaten.length) return;
   skaliere(r, { mehl }).zutaten.forEach((z, i) => {
     const el = wurzel.querySelector(`[data-ausgabe="bz-${i}"]`);
     if (el) {

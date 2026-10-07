@@ -461,7 +461,7 @@ function zeichneRechner() {
     <button type="button" class="knopf knopf-voll" data-aktion="speichern-karte"
             ${vorlageGeaendert() && !speicherKarte ? '' : 'hidden'}>Änderungen speichern …</button>
 
-    ${vorlage ? backenTeilHtml(vorlage) : ''}
+    ${vorlage ? backenTeilHtml(vorlage, teig) : ''}
 
     ${mehlKlappe()}
     ${saatenKlappe()}
@@ -840,7 +840,7 @@ function aktualisiere() {
 
   zeigeAnpassung(e);
   zeigeAuffrischung();
-  aktualisiereBacken(aktuellesRezept(), mehl);
+  aktualisiereBacken(aktuellesRezept(), mehl, teig, e);
   synchronisiereFelder();
   zeigeGeaendert();
 }
