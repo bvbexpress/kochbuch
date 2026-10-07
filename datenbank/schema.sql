@@ -292,7 +292,7 @@ grant execute on function public.ping() to anon, authenticated;
 -- `connector` ausführen und sonst nichts: keine Tabelle lesen oder schreiben, keine andere Funktion.
 --
 --   zutaten_liste()           – Zutatenkatalog des Haushalts: [{ id, name }]
---   rezepte_finden(suche)     – Rezepte nach Name (Teilwort) oder id: [{ id, name, art, kategorie, version }]
+--   rezepte_finden(suche)     – Rezepte nach Name (Teilwort) oder id: [{ id, name, art, kategorie, ernaehrung, version }]
 --   rezept_lesen(id)          – ein Rezept: { id, version, daten } oder null
 --   rezept_speichern(eingabe) – Rezepte anlegen/aktualisieren und neue Zutaten anlegen (siehe unten)
 --
@@ -390,7 +390,8 @@ begin
   if octet_length(d::text) > 100000 then return 'zu groß'; end if;
   select k into v_feld from jsonb_object_keys(d) k
     where k <> all (array['art', 'name', 'kategorie', 'portionen', 'portionsart', 'zutaten', 'schritte',
-      'schrittzutaten', 'schrittgeraete', 'status', 'notiz', 'quelle', 'teig', 'mehl', 'modus', 'teiglinge'])
+      'schrittzutaten', 'schrittgeraete', 'status', 'ernaehrung', 'auchVegetarisch', 'notiz', 'quelle',
+      'teig', 'mehl', 'modus', 'teiglinge'])
     limit 1;
   if v_feld is not null then return 'unbekanntes Feld ' || v_feld; end if;
 
@@ -417,6 +418,11 @@ begin
   if d ? 'notiz' and not (jsonb_typeof(d->'notiz') = 'string' and char_length(d->>'notiz') <= 2000) then
     return 'notiz';
   end if;
+  -- Ernährungsform (optional); „auch vegetarisch“ nur als true und nur bei Fisch/Fleisch
+  if d ? 'ernaehrung' and not (jsonb_typeof(d->'ernaehrung') = 'string'
+    and d->>'ernaehrung' in ('vegan', 'vegetarisch', 'fisch', 'fleisch')) then return 'ernaehrung'; end if;
+  if d ? 'auchVegetarisch' and not (d->'auchVegetarisch' = 'true'::jsonb
+    and coalesce(d->>'ernaehrung', '') in ('fisch', 'fleisch')) then return 'auchVegetarisch'; end if;
 
   -- Zutaten
   if jsonb_typeof(coalesce(d->'zutaten', '[]')) <> 'array' or jsonb_array_length(coalesce(d->'zutaten', '[]')) > 80 then
@@ -536,9 +542,10 @@ security definer
 set search_path = ''
 as $$
   select coalesce(jsonb_agg(jsonb_build_object('id', z.id, 'name', z.name, 'art', z.art,
-    'kategorie', z.kategorie, 'version', z.version) order by z.name, z.id), '[]')
+    'kategorie', z.kategorie, 'ernaehrung', z.ernaehrung, 'version', z.version) order by z.name, z.id), '[]')
   from (
-    select d.id, d.daten->>'name' as name, d.daten->>'art' as art, d.daten->>'kategorie' as kategorie, d.version
+    select d.id, d.daten->>'name' as name, d.daten->>'art' as art, d.daten->>'kategorie' as kategorie,
+      d.daten->>'ernaehrung' as ernaehrung, d.version
     from public.datensaetze d
     where d.haushalt = intern.connector_haushalt() and d.sammlung = 'rezepte' and not d.geloescht
       and (coalesce(btrim(suche), '') = ''

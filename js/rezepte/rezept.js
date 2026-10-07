@@ -14,6 +14,8 @@
 //                leer = keins. Fehlt das Feld, hat kein Schritt ein Gerät. Die Liste aller Geräte oben im Rezept
 //                entsteht daraus (`geraeteListe` in liste.js), sie wird nicht gespeichert.
 //   status       'erprobt' | 'testen'      notiz (kurz)      quelle 'claude' | 'import' | 'hand'
+//   ernaehrung   optional 'vegan' | 'vegetarisch' | 'fisch' | 'fleisch' (fehlt = unbekannt, kein Icon);
+//                auchVegetarisch: true nur bei Fisch/Fleisch („lässt sich für einen Teil vegetarisch machen“)
 //   nur Backen:  teig, mehl, modus, teiglinge – wie bei den Teigvorlagen; Mehl, Wasser, Salz usw. rechnet
 //                der Teigrechner, `zutaten` sind nur das Übrige (Belag …) und skalieren mit dem Mehl
 //
@@ -36,6 +38,8 @@ export const PORTIONSARTEN = [
 export const REGELN = ['linear', 'ganz', 'fix']; // linear · ganze Stück (rundet) · fix (bleibt gleich)
 export const STATUS = ['erprobt', 'testen'];
 export const QUELLEN = ['claude', 'import', 'hand'];
+export const ERNAEHRUNG = ['vegan', 'vegetarisch', 'fisch', 'fleisch'];
+export const MIT_TIER = ['fisch', 'fleisch']; // nur hier gibt es „auch vegetarisch möglich“
 
 /** Kategorien beim Kochen, in der Reihenfolge der Liste (Backen: KATEGORIEN aus teig/vorlagen.js). */
 export const KOCH_KATEGORIEN = [
@@ -102,6 +106,9 @@ export function bereinigeRezept(roh) {
   const kategorie = kategorienFuer(roh.art).some((k) => k.id === roh.kategorie) ? roh.kategorie : null;
   const notiz = text(roh.notiz, MAX_NOTIZ) ?? '';
   const konflikt = bereinigeKonflikt(roh.konflikt);
+  // Ernährungsform ist optional (alte Rezepte): Unbekanntes fällt weg, „auch vegetarisch“ nur bei Fisch/Fleisch
+  const ernaehrung = ERNAEHRUNG.includes(roh.ernaehrung) ? roh.ernaehrung : null;
+  const auchVegetarisch = roh.auchVegetarisch === true && MIT_TIER.includes(ernaehrung);
 
   const rezept = {
     ...(roh.id ? { id: roh.id.toLowerCase() } : {}),
@@ -115,6 +122,8 @@ export function bereinigeRezept(roh) {
     ...(schrittzutaten ? { schrittzutaten } : {}),
     ...(schrittgeraete ? { schrittgeraete } : {}),
     status,
+    ...(ernaehrung ? { ernaehrung } : {}),
+    ...(auchVegetarisch ? { auchVegetarisch } : {}),
     notiz,
     quelle,
     ...(konflikt ? { konflikt } : {}),

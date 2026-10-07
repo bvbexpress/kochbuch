@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   bearbeite, pruefeRezept, katalogAus, fuerClaude, datenbankMit, zutatId, bereinigeZutatenName,
-  KOCH_KATEGORIEN, PORTIONSARTEN, REGELN, STATUS, QUELLEN, ZUTAT_ARTEN, EINGEBAUT, GRENZEN, WERKZEUGE,
+  KOCH_KATEGORIEN, PORTIONSARTEN, REGELN, STATUS, QUELLEN, ERNAEHRUNG, MIT_TIER, ZUTAT_ARTEN, EINGEBAUT, GRENZEN, WERKZEUGE,
 } from '../supabase/functions/kochbuch/index.ts';
 import * as rezeptJs from '../js/rezepte/rezept.js';
 import * as katalogJs from '../js/rezepte/katalog.js';
@@ -19,7 +19,7 @@ const quelltext = readFileSync(new URL('../supabase/functions/kochbuch/index.ts'
 
 /** Rezept, wie Claude es schickt (Zutaten mit Namen). */
 const curry = (aenderung = {}) => ({
-  name: 'Linsencurry', kategorie: 'currys', portionen: 4,
+  name: 'Linsencurry', kategorie: 'currys', portionen: 4, ernaehrung: 'vegetarisch',
   zutaten: [
     { name: 'Tempeh', menge: 200, einheit: 'g', art: 'vorrat' },
     { name: 'Zwiebel', menge: 1, einheit: '', regel: 'ganz', art: 'gemuese' },
@@ -44,6 +44,8 @@ test('Kopien stimmen mit js/ überein: Kategorien, Arten, Regeln, eingebaute Zut
   assert.deepEqual(PORTIONSARTEN, rezeptJs.PORTIONSARTEN.map((p) => p.id));
   assert.deepEqual(REGELN, rezeptJs.REGELN);
   assert.deepEqual(STATUS, rezeptJs.STATUS);
+  assert.deepEqual(ERNAEHRUNG, rezeptJs.ERNAEHRUNG);
+  assert.deepEqual(MIT_TIER, rezeptJs.MIT_TIER);
   assert.deepEqual(QUELLEN, rezeptJs.QUELLEN.filter((q) => q !== 'hand'));
   assert.deepEqual(ZUTAT_ARTEN, katalogJs.ARTEN);
   assert.deepEqual(EINGEBAUT, katalogJs.EINGEBAUT);
@@ -164,11 +166,63 @@ test('Unsinn wird mit verständlichem Grund abgewiesen, nie still repariert', ()
   assert.match(grund(curry({ notiz: 'x'.repeat(2001) })), /notiz/);
   assert.match(grund(curry({ notiz: 5 })), /notiz/);
   // Alle Gründe auf einmal (höchstens 15), damit Claude alles in einem Durchgang verbessert
-  assert.equal(pruefeRezept({ name: '', portionen: 0, zutaten: 'x', schritte: 'y', status: 'z' }, k).fehler.length, 7);
+  assert.equal(pruefeRezept({ name: '', portionen: 0, zutaten: 'x', schritte: 'y', status: 'z' }, k).fehler.length, 8);
   // Was hier abgewiesen wird und die App auch nicht annähme: nie gespeichert
   for (const roh of [curry({ portionen: 0 }), curry({ zutaten: [{ name: 'Salz', menge: -1 }] })]) {
     assert.equal(wieDieApp(roh, katalogJs.EINGEBAUT).rezept, null);
   }
+});
+
+test('Ernährungsform: beim Anlegen Pflicht, beim Aktualisieren freiwillig; „auch vegetarisch“ nur bei Fisch/Fleisch', () => {
+  const k = katalogAus([]);
+  const grund = (roh, opt) => pruefeRezept(roh, k, opt).fehler?.join(' ') ?? 'OK';
+  assert.match(grund(curry({ ernaehrung: undefined })), /ernaehrung fehlt: vegan \| vegetarisch \| fisch \| fleisch/);
+  assert.equal(grund(curry({ ernaehrung: undefined }), { pflicht: false }), 'OK');
+  assert.equal(grund(curry({ ernaehrung: null }), { pflicht: false }), 'OK');
+  assert.match(grund(curry({ ernaehrung: 'pescetarisch' })), /ernaehrung: vegan/);
+  assert.match(grund(curry({ ernaehrung: 'vegan', auchVegetarisch: true })), /auchVegetarisch gibt es nur bei/);
+  assert.match(grund(curry({ ernaehrung: undefined, auchVegetarisch: true }), { pflicht: false }), /auchVegetarisch gibt es nur bei/);
+  assert.match(grund(curry({ ernaehrung: 'fisch', auchVegetarisch: 'ja' })), /true oder false/);
+  assert.equal(grund(curry({ ernaehrung: 'fisch', auchVegetarisch: false })), 'OK');
+
+  // Gleiche Form wie in der App: false fällt weg, true bleibt
+  const appKatalog = katalogJs.EINGEBAUT;
+  for (const roh of [curry({ ernaehrung: 'fleisch', auchVegetarisch: true }), curry({ ernaehrung: 'fisch', auchVegetarisch: false })]) {
+    const ich = pruefeRezept(roh, k).rezept;
+    assert.deepEqual(ich, wieDieApp(roh, appKatalog).rezept);
+    assert.deepEqual(rezeptJs.bereinigeRezept(ich), ich);
+  }
+  assert.equal('auchVegetarisch' in pruefeRezept(curry({ ernaehrung: 'fisch', auchVegetarisch: false }), k).rezept, false);
+  // Werkzeug-Beschreibung: beim Anlegen Pflichtfeld
+  const anlegen = WERKZEUGE.find((w) => w.name === 'rezept_anlegen');
+  assert.ok(anlegen.inputSchema.properties.rezepte.items.required.includes('ernaehrung'));
+  assert.deepEqual(anlegen.inputSchema.properties.rezepte.items.properties.ernaehrung.enum, ERNAEHRUNG);
+});
+
+test('Ernährungsform per rezept_aktualisieren nachtragen; neue Form ohne Angabe verwirft „auch vegetarisch“', async () => {
+  const db = nachgebauteDb();
+  const id = '00000000-0000-4000-8000-0000000a1700';
+  // altes Rezept ohne Ernährungsform (vor A gespeichert)
+  const { rezept } = pruefeRezept(curry({ ernaehrung: undefined }), katalogAus([]), { pflicht: false });
+  db.rezepte.set(id, { id, version: 1, daten: rezept });
+  assert.equal((await rufe(db, 'rezepte_finden', { id })).daten.ernaehrung, null);
+
+  const n = await rufe(db, 'rezept_aktualisieren', { id, version: 1, ernaehrung: 'fleisch', auchVegetarisch: true });
+  assert.deepEqual([n.daten.gespeichert, n.daten.version], [true, 2]);
+  assert.deepEqual(db.rezepte.get(id).daten, { ...rezept, ernaehrung: 'fleisch', auchVegetarisch: true });
+  const gelesen = (await rufe(db, 'rezepte_finden', { id })).daten;
+  assert.deepEqual([gelesen.ernaehrung, gelesen.auchVegetarisch], ['fleisch', true]);
+
+  // Notiz ändern: Ernährungsform bleibt
+  await rufe(db, 'rezept_aktualisieren', { id, version: 2, notiz: 'Hack separat braten.' });
+  assert.equal(db.rezepte.get(id).daten.auchVegetarisch, true);
+
+  // Auf vegetarisch umstellen ohne Angabe zu auchVegetarisch: die alte Angabe fällt weg statt eines Fehlers
+  const v = await rufe(db, 'rezept_aktualisieren', { id, version: 3, ernaehrung: 'vegetarisch' });
+  assert.equal(v.fehler, false, v.text);
+  assert.equal(db.rezepte.get(id).daten.ernaehrung, 'vegetarisch');
+  assert.equal('auchVegetarisch' in db.rezepte.get(id).daten, false);
+  assert.match((await rufe(db, 'rezept_aktualisieren', { id, version: 4, auchVegetarisch: true })).text, /nur bei ernaehrung fisch oder fleisch/);
 });
 
 test('Gespeichertes Rezept → Form für Claude (Namen statt ids) → wieder gespeichert = gleich', () => {

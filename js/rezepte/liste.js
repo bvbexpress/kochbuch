@@ -1,7 +1,7 @@
 // liste.js – Kochen: Liste ordnen, Favoriten, „neu“, Mengen in den Schritten.
 // Reine Logik ohne Oberfläche, darum testbar. Gerechnet wird in rechner.js.
 
-import { KOCH_KATEGORIEN, PORTIONSARTEN } from './rezept.js';
+import { KOCH_KATEGORIEN, PORTIONSARTEN, MIT_TIER } from './rezept.js';
 import { zutatName } from './katalog.js';
 import { formatMenge } from '../kern/zahlen.js';
 
@@ -15,6 +15,25 @@ const GESEHEN = 'rezepte.gesehen';
 function idListe(speicher, name) {
   const liste = speicher.einstellung(name, []);
   return Array.isArray(liste) ? liste.filter((id) => typeof id === 'string') : [];
+}
+
+const ERNAEHRUNG_ANZEIGE = {
+  vegan: { zeichen: '🌱', text: 'Vegan' },
+  vegetarisch: { zeichen: '🥕', text: 'Vegetarisch' },
+  fisch: { zeichen: '🐟', text: 'Fisch' },
+  fleisch: { zeichen: '🥩', text: 'Fleisch' },
+};
+
+/**
+ * Icon und Text zur Ernährungsform: { zeichen: '🥩/🥕', text: 'Fleisch · auch vegetarisch möglich' }.
+ * null, wenn das Rezept keine Angabe hat.
+ */
+export function ernaehrungAnzeige(rezept) {
+  const a = ERNAEHRUNG_ANZEIGE[rezept?.ernaehrung];
+  if (!a) return null;
+  return rezept.auchVegetarisch === true && MIT_TIER.includes(rezept.ernaehrung)
+    ? { zeichen: `${a.zeichen}/🥕`, text: `${a.text} · auch vegetarisch möglich` }
+    : { ...a };
 }
 
 export const rezeptFavoriten = (speicher) => idListe(speicher, FAVORITEN);

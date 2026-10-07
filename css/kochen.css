@@ -184,6 +184,17 @@
   font-weight: 600;
 }
 
+/* Ernährungsform: kleines Icon in der Liste, Zeile mit Text im Rezept */
+.ernaehrung {
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.ernaehrung-zeile {
+  margin: 0;
+  color: var(--text);
+}
+
 .geraete {
   display: flex;
   flex-wrap: wrap;
