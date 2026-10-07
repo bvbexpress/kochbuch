@@ -12,7 +12,6 @@ import {
   loescheEigeneVorlage,
   stelleEigeneVorlageWiederHer,
   speichereEigeneVorlage,
-  uebernehmeVorlagen,
   ordneVorlagen,
   modusVon,
   bereinigeKategorie,
@@ -23,12 +22,12 @@ import {
   normalisiereTeig,
   STANDARD_TEIGLINGE,
 } from '../js/teig/vorlagen.js';
-import { erstelleLink, liesLink, bereinigeVorlage } from '../js/teig/teilen.js';
+import { bereinigeVorlage } from '../js/teig/pruefung.js';
+import { sicherungsDatei, liesSicherung, stelleWiederHer } from '../js/kern/sicherung.js';
 import { zusammenfassung, vorlagenListeHtml } from '../js/teig/startseite.js';
 import { berechne, gesamtmehlAusMehl, mehlFuerTeiglinge, mehlAusTeiglingen } from '../js/teig/rechner.js';
 import { ZUSAETZE } from '../js/teig/zutaten.js';
 
-const BASIS = 'https://beispiel.test/kochbuch/';
 const neuerSpeicher = () => erstelleSpeicher(speicherImArbeitsspeicher());
 const teigVon = (i = 0) => ladeVorlage(VORLAGEN[i]).teig;
 
@@ -173,27 +172,27 @@ test('Kaputte Einstellungen für Favoriten/Ausgeblendet blockieren nichts', () =
   assert.deepEqual(ausgeblendet(s), ['focaccia']);
 });
 
-// ---------- Teilen-Link ----------
+// ---------- Sicherung und Prüfung von außen ----------
 
-test('Link: Kategorie, Modus und Zusatzzutaten kommen mit', async () => {
+test('Sicherung: Kategorie, Modus und Zusatzzutaten kommen mit', () => {
   const s = neuerSpeicher();
   const teig = { ...teigVon(), zusaetze: [{ id: 'milch', name: 'Milch', prozent: 20, wasser: 87 }] };
   speichereEigeneVorlage(s, { name: 'Brioche', teig, mehl: 500, kategorie: 'gebaeck', modus: 'teiglinge',
     teiglinge: { anzahl: 2, gewicht: 450, verlust: 2 } });
-  const { vorlagen } = await liesLink(await erstelleLink(eigeneVorlagen(s), BASIS));
-  const [v] = vorlagen;
+  const gelesen = liesSicherung(sicherungsDatei(s).inhalt);
+  const [v] = gelesen.sammlungen.teigvorlagen;
   assert.equal(v.kategorie, 'gebaeck');
   assert.equal(v.modus, 'teiglinge');
   assert.deepEqual(v.teig.zusaetze, [{ id: 'milch', name: 'Milch', prozent: 20, wasser: 87 }]);
 
   const b = neuerSpeicher();
-  uebernehmeVorlagen(b, vorlagen, { alsKopie: true });
-  const kopie = eigeneVorlagen(b)[0];
-  assert.equal(kopie.kategorie, 'gebaeck');
-  assert.equal(kopie.modus, 'teiglinge');
+  stelleWiederHer(b, gelesen);
+  const zurueck = eigeneVorlagen(b)[0];
+  assert.equal(zurueck.kategorie, 'gebaeck');
+  assert.equal(zurueck.modus, 'teiglinge');
 });
 
-test('Link: alter Link ohne Kategorie, Modus, Zusatzzutaten funktioniert', () => {
+test('Prüfung: alte Vorlage ohne Kategorie, Modus, Zusatzzutaten funktioniert', () => {
   const s = neuerSpeicher();
   const v = lege(s, 'Alt');
   const alt = { id: v.id, name: 'Alt', mehl: 400, geaendert: 1, teig: { ...v.teig } };
@@ -205,7 +204,7 @@ test('Link: alter Link ohne Kategorie, Modus, Zusatzzutaten funktioniert', () =>
   assert.deepEqual(sauber.teig.zusaetze, []);
 });
 
-test('Link: unbekannte Kategorie/Modus fallen weg, unsinnige Zusatzzutaten verwerfen die Vorlage', () => {
+test('Prüfung: unbekannte Kategorie/Modus fallen weg, unsinnige Zusatzzutaten verwerfen die Vorlage', () => {
   const s = neuerSpeicher();
   const v = lege(s, 'X');
   const roh = { id: v.id, name: 'X', mehl: 400, geaendert: 1, teig: v.teig };

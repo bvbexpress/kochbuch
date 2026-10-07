@@ -401,32 +401,10 @@
   margin-top: 8px;
 }
 
-/* ---------- Erhaltene Vorlage (Teilen-Link) ---------- */
-.uebernahme .aktionen {
-  padding-bottom: 0;
-  margin-top: 12px;
-}
-
+/* ---------- Karten ---------- */
 .karte-titel {
   margin: 0 0 8px;
   font-size: 1.1rem;
-}
-
-.uebernahme-liste {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 8px;
-}
-
-.uebernahme-liste small {
-  display: block;
-  color: var(--text-leise);
-}
-
-.uebernahme .hinweis {
-  margin: 12px 0;
 }
 
 .hinweis-ok {

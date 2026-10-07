@@ -20,7 +20,7 @@
 // Rezepte können von überall kommen (Abgleich, Connector, eingefügter Code): Alles geht durch
 // `bereinigeRezept`, unbekannte Felder fallen weg, Unsinn ergibt null.
 
-import { bereinigeTeig } from '../teig/teilen.js';
+import { bereinigeTeig } from '../teig/pruefung.js';
 import {
   KATEGORIEN, MODI, STANDARD_TEIGLINGE, bereinigeTeiglinge, bereinigeKonflikt,
 } from '../teig/vorlagen.js';

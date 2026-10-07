@@ -138,7 +138,7 @@ export const EINGEBAUT = [
 ];
 
 /** Geprüfter Katalogeintrag { id, name, art } oder null. */
-function bereinigeEintrag(d) {
+export function bereinigeEintrag(d) {
   if (!d || typeof d !== 'object' || !gueltigeZutatId(d.id)) return null;
   const name = bereinigeZutatenName(d.name);
   if (!name) return null;

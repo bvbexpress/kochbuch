@@ -23,9 +23,6 @@ import {
   loescheEigeneVorlage,
   holeEigeneVorlage,
   stelleEigeneVorlageWiederHer,
-  eigeneVorlagen,
-  pruefeUebernahme,
-  uebernehmeVorlagen,
   bereinigeKategorie,
   modusVon,
   ordneVorlagen,
@@ -43,7 +40,6 @@ import {
   vermerkText,
   entferneVermerk,
 } from './vorlagen.js';
-import { erstelleLink, liesLink, hatTeilenCode } from './teilen.js';
 import {
   mehle,
   saaten,
@@ -90,7 +86,6 @@ let suche = ''; // Suchtext der Vorlagenliste
 let speicherKarte = null; // offene Karte „Speichern“: { name, kategorie, zurueck }
 let neuKarte = null; // offene Karte „Neue Vorlage“: { name, kategorie, modus, basis } – basis = id oder ''
 const offeneKlappen = new Set(); // welche einklappbaren Bereiche offen sind
-let paket = null;   // erhaltene Vorlagen aus einem Link, wartet auf „Übernehmen“: { vorlagen, verworfen, link }
 let aufHinweis = null; // einmaliger Hinweis in der Starter-Auffrischung
 let meldung = null; // einmalige Rückmeldung (wird beim nächsten Zeichnen angezeigt und gelöscht)
 let wischen = null; // Wisch-Geste der Vorlagenliste (wischen.js)
@@ -107,8 +102,6 @@ export function zeigeTeigrechner(ziel, { abgleich: bereich = null } = {}) {
   zustand = null;
   ansicht = 'liste';
   zeichne();
-  pruefeAdresse();
-  window.addEventListener('hashchange', pruefeAdresse);
 
   // Ein Zuhörer für alle Felder statt einer pro Feld ("Event-Delegation")
   wurzel.addEventListener('input', beiEingabe);
@@ -245,13 +238,11 @@ function zeichneListe() {
   wurzel.innerHTML = `
     <header class="seiten-kopf"><h1 class="kopf-titel">Kochbuch</h1></header>
     ${meldungHtml()}
-    ${paket ? uebernahmeKarte() : ''}
     ${neuKarte ? neuKarteHtml() : ''}
     ${ordnung.anzahl >= SUCHE_AB || suche ? suchfeldHtml(suche) : ''}
     <div class="vorlagen-gruppen" data-liste>${listeHtml(ordnung)}</div>
     ${neuKarte ? '' : '<button type="button" class="knopf knopf-voll" data-aktion="neu-karte">+ Neue Vorlage</button>'}
     ${neuKarte ? '' : kochenEinstiegHtml()}
-    ${teilenKlappe()}
     ${einstellungenKlappe()}
     ${abgleich ? abgleich.html() : ''}`;
 }
@@ -638,7 +629,7 @@ function modusKnoepfe(aktion) {
     </div>`;
 }
 
-/** Einstellungen der Vorlage: Modus, Verlust, Speichern, Teilen, Ausblenden/Löschen. */
+/** Einstellungen der Vorlage: Modus, Verlust, Speichern, Ausblenden/Löschen. */
 function vorlageKlappe(vorlage) {
   const eigene = vorlage && !vorlage.eingebaut;
   const verlust = imTeiglingeModus()
@@ -652,22 +643,17 @@ function vorlageKlappe(vorlage) {
            </span>
          </li>
        </ul>` : '';
-  const teilen = !eigene ? ''
-    : zustand.geaendert
-      ? '<p class="info">Teilen geht nach dem Speichern.</p>'
-      : '<button type="button" class="knopf" data-aktion="teilen">Vorlage teilen</button>';
   const weg = !vorlage ? ''
     : eigene
       ? `<button type="button" class="knopf knopf-leise" data-aktion="loeschen">„${text(vorlage.name)}“ löschen</button>`
       : '<button type="button" class="knopf knopf-leise" data-aktion="ausblenden">Vorlage ausblenden</button>';
 
-  return klappe('vorlage', 'Vorlage: Menge, Speichern, Teilen', `
+  return klappe('vorlage', 'Vorlage: Menge, Speichern', `
       <p class="info">Menge angeben als</p>
       ${modusKnoepfe('modus')}
       ${verlust}
       <div class="aktionen">
         <button type="button" class="knopf" data-aktion="speichern-karte">Speichern, umbenennen …</button>
-        ${teilen}
         ${weg}
       </div>`);
 }
@@ -1080,13 +1066,6 @@ function beiKlick(ereignis) {
   if (aktion === 'loeschen') loescheVorlage();
   if (aktion === 'vermerk-weg') behalteVorlage();
   if (aktion === 'ausblenden') blendeVorlageAus();
-  if (aktion === 'teilen') teileVorlage();
-  if (aktion === 'sichern') sichereAlle();
-  if (aktion === 'einfuegen') fuegeLinkEin();
-  if (aktion === 'import-ja') uebernehmePaket(false);
-  if (aktion === 'import-kopie') uebernehmePaket(true);
-  if (aktion === 'import-kopieren') kopiereLink(paket?.link);
-  if (aktion === 'import-weg') verwerfePaket();
 }
 
 /** Zurück zur Liste – mit ungespeicherten Änderungen erst fragen. */
@@ -1331,184 +1310,6 @@ function versteckeRueckgaengig() {
   clearTimeout(rueckgaengig.zeitgeber);
   rueckgaengig.f = null;
   rueckgaengig.leiste.hidden = true;
-}
-
-// ---------- Teilen, Sichern, Link einfügen ----------
-
-/** Adresse der App ohne alles nach dem „#“ – Basis für Teilen-Links. */
-function appAdresse() {
-  return `${location.origin}${location.pathname}`;
-}
-
-/** Läuft die App als Homescreen-Web-App (nicht in einem Safari-Tab)? */
-function imHomescreen() {
-  return window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
-}
-
-async function teileVorlage() {
-  const vorlage = aktuelleVorlage();
-  if (!vorlage || vorlage.eingebaut) return;
-  const link = await erstelleLink([vorlage], appAdresse());
-  await teileLink(link, {
-    title: vorlage.name,
-    text: `Teigvorlage „${vorlage.name}“ fürs Kochbuch – zum Übernehmen den Link öffnen:`,
-  });
-}
-
-export async function sichereAlle() {
-  const liste = eigeneVorlagen(speicher);
-  if (liste.length === 0) {
-    window.alert('Du hast noch keine eigenen Vorlagen zum Sichern.');
-    return;
-  }
-  const link = await erstelleLink(liste, appAdresse());
-  await teileLink(link, {
-    title: 'Kochbuch-Sicherung',
-    text: `Sicherung meiner ${liste.length} Kochbuch-Vorlagen – der Link enthält alle Vorlagen:`,
-  });
-}
-
-/** Öffnet das Teilen-Menü; ohne Teilen-Menü (oder wenn es scheitert) wird der Link kopiert. */
-async function teileLink(link, inhalt) {
-  if (window.navigator.share) {
-    try {
-      await window.navigator.share({ ...inhalt, url: link });
-      return;
-    } catch (fehler) {
-      if (fehler?.name === 'AbortError') return; // Menü bewusst geschlossen
-    }
-  }
-  await kopiereLink(link);
-}
-
-/** Kopiert den Link; geht das nicht, wird er zum Selbstkopieren angezeigt. */
-async function kopiereLink(link) {
-  if (!link) return;
-  try {
-    await window.navigator.clipboard.writeText(link);
-    meldung = 'Link kopiert. Jetzt in WhatsApp oder Notizen einfügen.';
-    return zeichne();
-  } catch {
-    window.prompt('Link zum Kopieren (lange antippen → Auswählen → Kopieren):', link);
-  }
-}
-
-/** Link aus der Zwischenablage holen; wenn das nicht geht, zum Einfügen nachfragen. */
-async function fuegeLinkEin() {
-  let eingabe = '';
-  try {
-    eingabe = await window.navigator.clipboard.readText();
-  } catch {
-    eingabe = '';
-  }
-  if (!hatTeilenCode(eingabe)) {
-    eingabe = window.prompt('Link der Vorlage hier einfügen:') ?? '';
-    if (!eingabe.trim()) return;
-  }
-  await liesPaket(eingabe);
-}
-
-/** Beim Start und wenn sich die Adresse ändert: steckt ein Teilen-Link in der Adresse? */
-async function pruefeAdresse() {
-  if (!hatTeilenCode(location.hash)) return;
-  await liesPaket(location.href, true);
-}
-
-/** Erhaltene Vorlagen werden auf der Startseite angezeigt. */
-async function liesPaket(eingabe, ausAdresse = false) {
-  const gelesen = await liesLink(eingabe);
-  if (!gelesen) {
-    meldung = 'In diesem Link habe ich keine Vorlage gefunden. Ist er vollständig kopiert?';
-    if (ausAdresse) adresseSaeubern();
-    return zeige('liste');
-  }
-  paket = { ...gelesen, link: ausAdresse ? location.href : eingabe.trim() };
-  zeige('liste');
-}
-
-function adresseSaeubern() {
-  if (location.hash) history.replaceState(null, '', `${location.pathname}${location.search}`);
-}
-
-const STATUS_TEXT = {
-  neu: 'neu',
-  neuer: 'neuere Version – ersetzt deine',
-  gleich: 'hast du schon',
-  aelter: 'du hast eine neuere Version',
-};
-
-/** Karte oben: Was steckt im Link, und wo lässt es sich übernehmen? */
-function uebernahmeKarte() {
-  const pruefung = pruefeUebernahme(speicher, paket.vorlagen);
-  const anzahl = (...status) => pruefung.filter((p) => status.includes(p.status)).length;
-  const zuUebernehmen = anzahl('neu', 'neuer');
-  const alsKopie = anzahl('neuer', 'aelter');
-  const viele = paket.vorlagen.length > 1;
-
-  const zeilen = pruefung.map(({ vorlage: v, status }) => `
-      <li><strong>${text(v.name)}</strong>
-        <small>${text(zusammenfassung(v))} · ${STATUS_TEXT[status]}</small></li>`).join('');
-
-  const verworfen = paket.verworfen > 0
-    ? `<p class="info">${paket.verworfen} Eintrag/Einträge im Link waren unbrauchbar und wurden ausgelassen.</p>` : '';
-
-  const jaText = zuUebernehmen > 1 ? `${zuUebernehmen} Vorlagen übernehmen` : 'Vorlage übernehmen';
-  const ja = zuUebernehmen > 0
-    ? `<button type="button" class="knopf ${imHomescreen() ? 'knopf-voll' : 'knopf-leise'}" data-aktion="import-ja">
-         ${imHomescreen() ? jaText : 'Nur hier im Browser übernehmen'}</button>` : '';
-  const kopie = alsKopie > 0
-    ? `<button type="button" class="knopf" data-aktion="import-kopie">Zusätzlich als Kopie übernehmen</button>` : '';
-
-  // Im Safari-Tab landet eine Übernahme im Browser-Speicher – getrennt von der Homescreen-App
-  const browserHinweis = imHomescreen() ? '' : `
-      <p class="hinweis">Du bist im Browser, nicht in der Kochbuch-App auf dem Homescreen.
-        Beide haben getrennte Speicher. So kommt die Vorlage in die App: Link kopieren →
-        Kochbuch-App vom Homescreen öffnen → unten bei „Teilen und Sichern“ auf „Link einfügen“ tippen.</p>`;
-  const kopieren = imHomescreen() ? ''
-    : '<button type="button" class="knopf knopf-voll" data-aktion="import-kopieren">Link kopieren</button>';
-
-  return `<section class="karte uebernahme" aria-label="Erhaltene Vorlage">
-      <h2 class="karte-titel">${viele ? `${paket.vorlagen.length} Vorlagen erhalten` : 'Vorlage erhalten'}</h2>
-      <ul class="uebernahme-liste">${zeilen}</ul>
-      ${verworfen}
-      ${browserHinweis}
-      <div class="aktionen">
-        ${kopieren}${ja}${kopie}
-        <button type="button" class="knopf knopf-leise" data-aktion="import-weg">Verwerfen</button>
-      </div>
-    </section>`;
-}
-
-function uebernehmePaket(alsKopie) {
-  if (!paket) return;
-  const ergebnis = uebernehmeVorlagen(speicher, paket.vorlagen, { alsKopie });
-  if (ergebnis.fehler > 0) return meldeFehler();
-  const ids = paket.vorlagen.map((v) => v.id);
-  const einzel = paket.vorlagen.length === 1;
-  verwerfePaket(false);
-  const gesamt = ergebnis.neu + ergebnis.aktualisiert;
-  const neueste = einzel && !alsKopie ? alleVorlagen(speicher).find((v) => v.id === ids[0]) : eigeneVorlagen(speicher).at(-1);
-  if (gesamt > 0 && neueste) return ladeUndZeige(neueste, `${gesamt === 1 ? 'Vorlage' : `${gesamt} Vorlagen`} übernommen.`);
-  meldung = 'Nichts zu übernehmen – du hast alles schon.';
-  zeichne();
-}
-
-function verwerfePaket(neuZeichnen = true) {
-  paket = null;
-  adresseSaeubern();
-  if (neuZeichnen) zeichne();
-}
-
-/** Einklappbarer Bereich auf der Startseite: Link einfügen und alle Vorlagen sichern. */
-function teilenKlappe() {
-  return klappe('teilen', 'Teilen und Sichern', `
-      <button type="button" class="knopf knopf-voll" data-aktion="einfuegen">Link einfügen</button>
-      <p class="info">Hast du einen Vorlagen-Link bekommen (z. B. per WhatsApp)? Link kopieren, hier tippen und einfügen.</p>
-      <button type="button" class="knopf" data-aktion="sichern">Alle meine Vorlagen sichern</button>
-      <p class="info">Erzeugt einen Link mit allen eigenen Vorlagen. Im Teilen-Menü z. B. in Notizen
-        ablegen oder dir selbst schicken. Wer den Link kennt, kann die Vorlagen lesen – nicht öffentlich posten.
-        Eigene Mehl- und Saatensorten, die Wasserwerte in den Einstellungen sowie Favoriten und
-        ausgeblendete Vorlagen sind nicht enthalten.</p>`);
 }
 
 function meldeFehler() {

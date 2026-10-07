@@ -5,21 +5,24 @@
 //   Verwaltung: langes Drücken auf die Versionsnummer ganz unten → „Abmelden“, „Verwalter-Handy an/aus“.
 // - Status nur auf dem Verwalter-Handy: Anmeldung, wartende Änderungen und
 //   wann jedes Handy zuletzt abgeglichen hat („Handy 2: seit 4 Tagen nicht abgeglichen“).
+//   Dazu, wann zuletzt gesichert wurde (ab 30 Tagen oder nie: „bitte ansehen“).
 //   Braucht etwas Aufmerksamkeit, steht das ruhig im Titel der Klappe – nur dort, nur auf diesem Handy.
 // - Auf allen anderen Handys verschwindet die Klappe nach der Anmeldung ganz. Sie kommt nur wieder,
 //   wenn Supabase die Anmeldung ablehnt (dann mit dem Formular, ohne Meldung).
+// - Versteckte Verwaltung: außerdem „Alles sichern“ (Datei) und „Aus Sicherung wiederherstellen“
+//   (kern/sicherung.js) – auf jedem Handy.
 //
-// - Umzug (erste Anmeldung): Auf dem Verwalter-Handy wird vor dem ersten Hochladen ein Sicherungs-Link
-//   angeboten; bis „Abgleich starten“ getippt ist, gleicht dieses Handy nicht ab (`bereit()`).
-//
-// Abgeglichen wird über kern/ausloeser.js; die Oberfläche stößt es nur nach der Anmeldung,
-// nach „Abgleich starten“ und vor dem Abmelden an.
+// Abgeglichen wird über kern/ausloeser.js; die Oberfläche stößt es nur nach der Anmeldung
+// und vor dem Abmelden an.
 
 import { SAMMLUNGEN } from './sync.js';
 import { text } from './html.js';
+import {
+  sicherungsDatei, teileDatei, letzteSicherung, merkeSicherung, liesSicherung, pruefeWiederherstellung,
+  stelleWiederHer, fehlenText, SICHERUNG_WARNEN_AB_TAGEN,
+} from './sicherung.js';
 
 const VERWALTER = 'abgleich.verwalter'; // Geräte-Einstellung: true = dieses Handy zeigt den Status
-const UMZUG = 'abgleich.umzug';         // Geräte-Einstellung: true = erster Abgleich ist erlaubt/erfolgt
 const LANG_DRUECKEN = 700;              // ms bis die Verwaltung aufgeht
 export const WARNEN_AB_TAGEN = 3;      // so lange ohne Abgleich → „bitte ansehen“
 const NEU_LADEN_NACH = 60_000;          // Mitglieder höchstens einmal pro Minute abfragen (ms)
@@ -61,6 +64,18 @@ export function tageZwischen(zeit, jetzt) {
   return Math.max(0, Math.round(tag(jetzt) - tag(zeit)));
 }
 
+/** „Letzte Sicherung: heute“, „… gestern“, „… vor 12 Tagen“, „Noch nie gesichert“. */
+export function sicherungText(zeit, jetzt) {
+  if (zeit === null) return 'Noch nie gesichert.';
+  const tage = tageZwischen(zeit, jetzt);
+  if (tage === 0) return 'Letzte Sicherung: heute.';
+  if (tage === 1) return 'Letzte Sicherung: gestern.';
+  return `Letzte Sicherung: vor ${tage} Tagen.`;
+}
+
+/** Sicherung nötig? Noch nie oder länger als 30 Tage her. */
+export const sicherungAlt = (zeit, jetzt) => zeit === null || tageZwischen(zeit, jetzt) > SICHERUNG_WARNEN_AB_TAGEN;
+
 /** „heute abgeglichen“, „gestern …“, „seit 4 Tagen nicht abgeglichen“, „noch nie abgeglichen“. */
 export function wannText(zeit, jetzt) {
   if (zeit === null) return 'noch nie abgeglichen';
@@ -77,8 +92,9 @@ export function wannText(zeit, jetzt) {
  *   mitglieder – Liste aus `bereinigeMitglieder`, undefined = wird geladen, null = Server nicht
  *                erreichbar, false = nicht abfragen (nicht angemeldet)
  *   konto      – Konto dieses Handys (markiert „dieses Handy“)
+ *   gesichert  – Zeitpunkt der letzten Sicherung (ms) oder null; undefined = keine Zeile
  */
-export function statusZeilen({ zustand, offen, mitglieder, konto, jetzt }) {
+export function statusZeilen({ zustand, offen, mitglieder, konto, jetzt, gesichert }) {
   const zeilen = [];
   if (zustand === 'abgelehnt') {
     zeilen.push({ text: 'Dieses Handy ist abgemeldet. Bitte unten neu anmelden.', achtung: true });
@@ -108,13 +124,21 @@ export function statusZeilen({ zustand, offen, mitglieder, konto, jetzt }) {
   if (zustand === 'angemeldet' && zeilen.length === 0) {
     zeilen.push({ text: 'Alles abgeglichen.', achtung: false });
   }
+  if (gesichert !== undefined) {
+    const alt = sicherungAlt(gesichert, jetzt);
+    zeilen.push({
+      text: `${sicherungText(gesichert, jetzt)}${alt ? ' Bitte „Alles sichern“: lange auf die Versionsnummer drücken.' : ''}`,
+      achtung: alt,
+    });
+  }
   return zeilen;
 }
 
 /**
  * Bereich „Abgleich“ für die Startseite und die versteckte Verwaltung.
  *   abgleichen – () => Promise: jetzt abgleichen (kern/ausloeser.js, prüft selbst `bereit()`)
- *   sicherung  – { anzahl(), erstellen() }: eigene Vorlagen zählen, Sicherungs-Link anbieten (Umzug)
+ *   teilen     – ({ name, inhalt }) => Promise<boolean>: Sicherungsdatei weitergeben (false = abgebrochen)
+ *   nachWiederherstellen – () => void: Daten haben sich geändert, Seite neu zeichnen
  *   fragen     – Ja/Nein-Frage (window.confirm)
  * Ergebnis:
  *   html()                    – HTML der Klappe (zu Beginn zugeklappt; '' auf angemeldeten Nicht-Verwalter-Handys)
@@ -129,7 +153,8 @@ export function erstelleAbgleichBereich({
   anmeldung,
   server,
   abgleichen = () => Promise.resolve(null),
-  sicherung = null,
+  teilen = teileDatei,
+  nachWiederherstellen = () => {},
   fragen = (frage) => globalThis.confirm?.(frage) === true,
   jetzt = () => Date.now(),
 }) {
@@ -140,12 +165,9 @@ export function erstelleAbgleichBereich({
   let fehler = '';      // Rückmeldung unter dem Anmelde-Formular
   let email = '';       // bleibt nach einem Fehlversuch im Feld (nur im Arbeitsspeicher)
   let zeichne = () => {};
-  let verwaltung = null; // { ziel, offen, laeuft } – versteckte Verwaltung unter der Versionsnummer
+  let verwaltung = null; // { ziel, offen, laeuft, meldung } – versteckte Verwaltung unter der Versionsnummer
 
-  /** Verwalter-Handy, noch nie abgeglichen, eigene Vorlagen da: erst Sicherung anbieten. */
-  const umzugOffen = () => istVerwalter(speicher) && speicher.einstellung(UMZUG) !== true
-    && (sicherung?.anzahl() ?? 0) > 0;
-  const bereit = () => anmeldung.zustand() === 'angemeldet' && !umzugOffen();
+  const bereit = () => anmeldung.zustand() === 'angemeldet';
 
   const anzahlOffen = () => Object.keys(SAMMLUNGEN).reduce((n, s) => n + speicher.offene(s).length, 0);
 
@@ -212,24 +234,6 @@ export function erstelleAbgleichBereich({
     zeichne();
   }
 
-  function umzugHtml() {
-    const n = sicherung.anzahl();
-    return `<div class="umzug">
-        <p class="info">Vor dem ersten Abgleich: ${n === 1 ? 'deine Vorlage' : `deine ${n} Vorlagen`} als Link sichern
-          (z. B. in Notizen ablegen). Danach „Abgleich starten“.</p>
-        <div class="aktionen">
-          <button type="button" class="knopf knopf-voll" data-umzug="sichern">Sicherung erstellen</button>
-          <button type="button" class="knopf" data-umzug="starten">Abgleich starten</button>
-        </div>
-      </div>`;
-  }
-
-  function starteUmzug() {
-    speicher.setzeEinstellung(UMZUG, true);
-    zeichne();
-    abgleichen();
-  }
-
   // ---------- versteckte Verwaltung (langes Drücken auf die Versionsnummer) ----------
 
   const ZUSTAND_TEXT = {
@@ -246,8 +250,18 @@ export function erstelleAbgleichBereich({
     const abmelden = zustand === 'abgemeldet' ? ''
       : `<button type="button" class="knopf" data-verwaltung="abmelden" ${laeuft ? 'disabled' : ''}>
           ${laeuft ? 'Wird abgeglichen …' : 'Abmelden'}</button>`;
+    const meldung = verwaltung.meldung;
+    verwaltung.meldung = null;
     return `<section class="karte verwaltung" aria-label="Verwaltung">
         <h2 class="karte-titel">Verwaltung</h2>
+        ${meldung ? `<p class="hinweis" role="status">${text(meldung)}</p>` : ''}
+        <p class="info">${text(sicherungText(letzteSicherung(speicher), jetzt()))}</p>
+        <button type="button" class="knopf knopf-voll" data-verwaltung="sichern">Alles sichern</button>
+        <p class="info">Rezepte, Vorlagen und Einstellungen als Datei. Im Teilen-Menü
+          „In Dateien sichern“ wählen (z. B. iCloud Drive).</p>
+        <button type="button" class="knopf" data-verwaltung="wiederherstellen">Aus Sicherung wiederherstellen</button>
+        <input type="file" class="unsichtbar" data-verwaltung-datei tabindex="-1" aria-hidden="true">
+        <p class="info">Holt nur zurück, was hier fehlt oder gelöscht ist. Vorhandenes bleibt, wie es ist.</p>
         <p class="info">${text(ZUSTAND_TEXT[zustand] ?? '')}</p>
         <button type="button" class="knopf" data-verwaltung="verwalter" aria-pressed="${verwalter}">
           Verwalter-Handy: ${verwalter ? 'an' : 'aus'}</button>
@@ -255,6 +269,56 @@ export function erstelleAbgleichBereich({
         ${abmelden}
         <button type="button" class="knopf knopf-leise" data-verwaltung="schliessen">Schließen</button>
       </section>`;
+  }
+
+  async function sichern() {
+    if (verwaltung.laeuft) return;
+    const datei = sicherungsDatei(speicher, jetzt());
+    let geteilt = false;
+    try {
+      geteilt = await teilen(datei);
+    } catch {
+      verwaltung.meldung = 'Sichern hat nicht geklappt. Bitte noch einmal versuchen.';
+    }
+    if (geteilt) {
+      merkeSicherung(speicher, jetzt());
+      verwaltung.meldung = 'Gesichert.';
+    }
+    zeichneVerwaltung();
+    zeichne();
+  }
+
+  /** Datei gewählt: prüfen, nachfragen, nur Fehlendes zurückholen. */
+  async function wiederherstellen(datei) {
+    if (!datei) return;
+    let inhalt = null;
+    try {
+      inhalt = datei.size > 5_000_000 ? null : await datei.text();
+    } catch {
+      inhalt = null;
+    }
+    const gelesen = liesSicherung(inhalt);
+    if (!gelesen) {
+      verwaltung.meldung = 'Das ist keine Sicherung des Kochbuchs.';
+      return zeichneVerwaltung();
+    }
+    const pruefung = pruefeWiederherstellung(speicher, gelesen);
+    if (pruefung.anzahlFehlen === 0) {
+      verwaltung.meldung = 'Nichts wiederherzustellen – alles aus der Sicherung ist schon da.';
+      return zeichneVerwaltung();
+    }
+    const vom = gelesen.erstellt ? ` vom ${new Date(gelesen.erstellt).toLocaleDateString('de-DE')}` : '';
+    const frage = `Sicherung${vom}: ${fehlenText(pruefung)} `
+      + `${pruefung.anzahlFehlen === 1 ? 'fehlt hier und wird' : 'fehlen hier und werden'} wiederhergestellt. `
+      + 'Alles andere bleibt, wie es ist. Fortfahren?';
+    if (!fragen(frage)) return;
+    const ergebnis = stelleWiederHer(speicher, gelesen);
+    verwaltung.meldung = ergebnis.fehler > 0
+      ? 'Nicht alles ließ sich speichern. Ist der Speicher des Handys voll?'
+      : `${ergebnis.wiederhergestellt === 1 ? '1 Eintrag' : `${ergebnis.wiederhergestellt} Einträge`} wiederhergestellt.`;
+    nachWiederherstellen();
+    zeichneVerwaltung();
+    zeichne();
   }
 
   function zeichneVerwaltung() {
@@ -305,16 +369,16 @@ export function erstelleAbgleichBereich({
       let inhalt;
       let achtung = false;
       if (verwalter) {
-        const umzug = zustand === 'angemeldet' && umzugOffen();
         const zeilen = statusZeilen({
           zustand,
           offen: anzahlOffen(),
           mitglieder: zustand === 'angemeldet' ? mitglieder : false,
           konto: anmeldung.konto(),
           jetzt: jetzt(),
+          gesichert: letzteSicherung(speicher),
         });
-        achtung = umzug || zeilen.some((z) => z.achtung);
-        inhalt = `${umzug ? umzugHtml() : ''}${statusHtml(zeilen)}${zustand === 'angemeldet' ? '' : formular(true)}`;
+        achtung = zeilen.some((z) => z.achtung);
+        inhalt = `${statusHtml(zeilen)}${zustand === 'angemeldet' ? '' : formular(true)}`;
       } else if (zustand === 'angemeldet') {
         return ''; // anderes Handy: nichts zu sehen, nichts zu tun
       } else {
@@ -338,16 +402,10 @@ export function erstelleAbgleichBereich({
         e.preventDefault();
         anmelden(e.target);
       });
-      wurzel.addEventListener('click', (e) => {
-        const knopf = e.target.closest?.('[data-umzug]');
-        if (!knopf || !umzugOffen()) return;
-        if (knopf.dataset.umzug === 'sichern') sicherung.erstellen();
-        if (knopf.dataset.umzug === 'starten') starteUmzug();
-      });
     },
 
     verbindeVerwaltung(version, ziel) {
-      verwaltung = { ziel, offen: false, laeuft: false };
+      verwaltung = { ziel, offen: false, laeuft: false, meldung: null };
       let zeitgeber = null;
       const abbrechen = () => {
         clearTimeout(zeitgeber);
@@ -363,10 +421,19 @@ export function erstelleAbgleichBereich({
       });
       for (const art of ['pointerup', 'pointercancel', 'pointerleave']) version.addEventListener(art, abbrechen);
       version.addEventListener('contextmenu', (e) => e.preventDefault());
+      ziel.addEventListener('change', (e) => {
+        const feld = e.target;
+        if (!feld?.matches?.('[data-verwaltung-datei]')) return;
+        const datei = feld.files?.[0];
+        feld.value = ''; // dieselbe Datei später noch einmal wählbar
+        wiederherstellen(datei);
+      });
       ziel.addEventListener('click', (e) => {
         const aktion = e.target.closest?.('[data-verwaltung]')?.dataset.verwaltung;
         if (aktion === 'verwalter') schalteVerwalter();
         if (aktion === 'abmelden') abmelden();
+        if (aktion === 'sichern') sichern();
+        if (aktion === 'wiederherstellen') ziel.querySelector?.('[data-verwaltung-datei]')?.click();
         if (aktion === 'schliessen') {
           verwaltung.offen = false;
           zeichneVerwaltung();
@@ -376,8 +443,7 @@ export function erstelleAbgleichBereich({
 
     bereit,
 
-    nachAbgleich(bericht) {
-      if (bericht?.ok) speicher.setzeEinstellung(UMZUG, true); // ab jetzt nie mehr Sicherung vorab
+    nachAbgleich() {
       geladenUm = 0; // „heute abgeglichen“ beim nächsten Aufklappen frisch
       if (offen) ladeMitglieder();
       zeichne();

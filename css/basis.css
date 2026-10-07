@@ -311,8 +311,19 @@ details.klappe > .klappe-inhalt {
   color: var(--text);
 }
 
-.verwaltung .info {
+.verwaltung .info,
+.verwaltung .hinweis {
   margin: 0;
+}
+
+/* Dateiauswahl: unsichtbar, geöffnet über einen normalen Knopf */
+.unsichtbar {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* Häkchen mit Text: die ganze Zeile ist antippbar */
