@@ -259,3 +259,42 @@
   width: 100%;
   margin-top: 12px;
 }
+
+/* ---------- Notiz als einzeilige Vorschau (Back-Rezepte): antippen = lesen und bearbeiten ---------- */
+.notiz-klappe > summary {
+  gap: 12px;
+  min-width: 0;
+}
+
+.notiz-titel {
+  flex: none;
+}
+
+.notiz-vorschau {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 400;
+  color: var(--text-leise);
+}
+
+.notiz-klappe[open] .notiz-vorschau {
+  display: none;
+}
+
+/* Schlanke Back-Ansicht: Mehlfeld und Status nicht aneinander kleben lassen */
+.karte > .feld + .status,
+.karte > .teiglinge-felder + .status {
+  margin-top: 12px;
+}
+
+.klappe-inhalt > .geraete {
+  margin: 12px 0 0;
+}
+
+/* Lange Zutatennamen („Sonnenblumenkerne“) dürfen umbrechen statt über den Rand zu ragen */
+.zutat > span {
+  overflow-wrap: anywhere;
+}

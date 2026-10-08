@@ -1,7 +1,7 @@
-// backen.js – Rezept-Teil eines Back-Rezepts (Etappe 3, D). Das Back-Rezept öffnet im Rechner
-// (teig/ansicht.js: Menge, Teig, Klappen); darunter steht dieser Teil: weitere Zutaten (Belag …,
-// skalieren mit dem Mehl), Status, Notiz, Geräte und die Schritte zum Abhaken – mit den Teigmengen des
-// Schritts (`schrittteig`), live aus dem eingestellten Teig.
+// backen.js – Rezept-Teil eines Back-Rezepts (Etappe 3, D; schlanke Ansicht „1a“). Ein Back-Rezept öffnet
+// kompakt (teig/ansicht.js: Menge, Status, dann diese Teile): Schritte zum Abhaken mit den Teigmengen
+// des Schritts (`schrittteig`, live aus dem eingestellten Teig), die Zutatenliste (Teig und weitere
+// Zutaten, skalieren mit dem Mehl) und die Notiz-Eingabe. Der volle Teigrechner ist ein Knopf weiter.
 // Gerechnet wird in rechner.js, gespeichert über rezept.js. Haken gelten nur, solange die App offen ist.
 // Eigene `data-b…`-Attribute (siehe teile.js), damit sich Rechner und Kochen nicht gestört fühlen.
 
@@ -10,7 +10,7 @@ import { text } from '../kern/html.js';
 import { holeRezept, speichereRezept } from './rezept.js';
 import { alleZutaten, zutatName } from './katalog.js';
 import { skaliere, mengeText } from './rechner.js';
-import { schritteHtml, statusHtml, notizHtml, geraeteHtml } from './teile.js';
+import { schritteHtml } from './teile.js';
 import { teigInSchritten } from '../teig/rechner.js';
 import { formatGramm, formatGrammFein } from '../kern/zahlen.js';
 
@@ -40,24 +40,42 @@ export function startBacken(ziel, { neuZeichnen: zeichnen }) {
   });
 }
 
-/** HTML des Rezept-Teils; r = gespeichertes Back-Rezept (holeRezept), teig = der eingestellte Teig im Rechner. */
-export function backenTeilHtml(r, teig) {
-  offen = r.id;
+/** Zeilen des Teigs für die Zutatenliste: [{ name, ausgabe }] – nur, was im Teig vorkommt. `ausgabe` = Name des Live-Feldes. */
+export function teigZutaten(teig) {
+  const zeilen = teig.mehlsorten.map((s, i) => ({ name: s.name, ausgabe: `mehlsorte-${i}` }));
+  const wenn = (wert, name, ausgabe) => { if (wert > 0) zeilen.push({ name, ausgabe }); };
+  wenn(teig.hydration, 'Wasser', 'wasser');
+  wenn(teig.starter, 'Starter', 'starter');
+  wenn(teig.salz, 'Salz', 'salz');
+  wenn(teig.oel, 'Öl', 'oel');
+  wenn(teig.hefe, teig.hefeArt === 'trocken' ? 'Trockenhefe' : 'Frischhefe', 'hefe');
+  teig.zusaetze.forEach((z, i) => zeilen.push({ name: z.name, ausgabe: `zusatz-${i}` }));
+  teig.saaten.forEach((s, i) => zeilen.push({ name: s.name, ausgabe: `saat-${i}` }));
+  if (teig.saaten.length) zeilen.push({ name: 'Quellwasser', ausgabe: 'quellwasser' });
+  return zeilen;
+}
+
+/** Inhalt der eingeklappten Zutatenliste (Teig, dann weitere Zutaten) und ihre Anzahl; die Zahlen trägt `aktualisiereBacken` ein. */
+export function backenZutatenHtml(r, teig) {
   const katalog = alleZutaten(speicher);
-  const zutaten = r.zutaten.map((z, i) => `
+  const zeile = (name, ausgabe) => `
       <li class="zutat">
-        <output class="zahl zutat-menge" data-ausgabe="bz-${i}"></output>
-        <span>${text(zutatName(katalog, z.zutat))}</span>
-      </li>`).join('');
-  return `
-    ${zutaten ? `<section class="karte" aria-label="Weitere Zutaten">
-        <h2 class="karte-titel">Weitere Zutaten</h2>
-        <ul class="zutaten-liste">${zutaten}</ul>
-      </section>` : ''}
-    <section class="karte" aria-label="Status">${statusHtml(r.status, 'b')}</section>
-    ${notizHtml(r.notiz, 'b')}
-    ${geraeteHtml(r)}
-    ${schritteHtml(r, { mengen: teigChips(r, teig), haken: erledigt.get(r.id) ?? new Set(), p: 'b' })}`;
+        <output class="zahl zutat-menge" data-ausgabe="${text(ausgabe)}"></output>
+        <span>${text(name)}</span>
+      </li>`;
+  const teigZeilen = teigZutaten(teig);
+  const weitere = r.zutaten.map((z, i) => zeile(zutatName(katalog, z.zutat), `bz-${i}`));
+  return {
+    anzahl: teigZeilen.length + weitere.length,
+    html: `<ul class="zutaten-liste">${teigZeilen.map((z) => zeile(z.name, z.ausgabe)).join('')}${weitere.join('')}</ul>`,
+  };
+}
+
+/** Schritte zum Abhaken mit den Teigmengen je Schritt; r = gespeichertes Back-Rezept, teig = der eingestellte Teig. */
+export function backenSchritteHtml(r, teig) {
+  offen = r.id;
+  if (!r.schritte.length) return '';
+  return schritteHtml(r, { mengen: teigChips(r, teig), haken: erledigt.get(r.id) ?? new Set(), p: 'b' });
 }
 
 /** Teigmengen je Schritt als Chips ohne Zahl (die trägt `aktualisiereBacken` ein); null ohne `schrittteig`. */

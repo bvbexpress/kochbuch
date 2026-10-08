@@ -440,7 +440,12 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
   (nur noch Archiv, Sync und Sicherung). Favoriten der eingebauten Vorlagen gehen auf ihr Rezept über (Back-Favoriten bleiben
   `teig.favoriten`), Umgezogenes gilt als gesehen. Ausgeblendet gibt es nicht mehr (Back-Rezepte löscht man, Wischen mit „Rückgängig“).
   „Alles sichern“ vorher: kein Zwang in der App (der Umzug löscht nichts), sondern Anleitung an den Nutzer vor dem Update.
-  **Back-Rezeptansicht:** Das Back-Rezept öffnet im Rechner (Menge, Teig, Klappen wie bisher, Speichern-Karte schreibt ins Rezept:
+  **Schlanke Back-Ansicht (1a, nach D):** Das Back-Rezept öffnet kompakt wie Kochen: oben Name + Ernährungs-Icon, ein Mengenfeld
+  (Mehl in g bzw. Anzahl × Gewicht) und Status; direkt darunter die Schritte (Teigmengen, Zeiten hervorgehoben), dann Klappe „Zutaten“
+  (Teig live in Gramm + weitere Zutaten + Geräteliste, zu; ohne Schritte offen), Notiz als einzeilige Vorschau (antippen = lesen/bearbeiten,
+  `notizKlappeHtml` in `teile.js`) und der Knopf **„Im Teigrechner anpassen“** → der volle Rechner (Mehlmischung, Quellstück, Hydration,
+  Prozente, Klappen; Zurück-Pfeil führt zum Rezept, `zustand.voll`). Neue Rezepte öffnen gleich im vollen Rechner. Speichern-Karte
+  und „Änderungen speichern …“ gelten in beiden Ansichten. Davor (Stand D):   **Back-Rezeptansicht:** Das Back-Rezept öffnet im Rechner (Menge, Teig, Klappen wie bisher, Speichern-Karte schreibt ins Rezept:
   „Rezept aktualisieren“ / „Als neues speichern“ = Kopie inkl. Schritte und Notiz); darunter `js/rezepte/backen.js`: weitere Zutaten
   (skalieren mit dem Mehl), Status, Notiz, Geräte, Schritte zum Abhaken mit den Teigmengen des Schritts (`schrittteig`;
 Attribute `data-b…`). Gemeinsame HTML-Bausteine mit Kochen in

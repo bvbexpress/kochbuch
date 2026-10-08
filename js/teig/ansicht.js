@@ -1,6 +1,7 @@
 // ansicht.js – Oberfläche: Startseite mit Kacheln, Backen (Liste der Back-Rezepte) und der Rechner.
-// Ein Back-Rezept öffnet im Rechner (Menge, Teig, Klappen), darunter Status, Notiz und Schritte
-// (rezepte/backen.js). Der Teigrechner ist derselbe Rechner ohne Rezept.
+// Ein Back-Rezept öffnet schlank (Menge, Status, Schritte, Zutaten, Notiz; rezepte/backen.js); der volle Rechner
+// (Mehlmischung, Quellstück, Hydration, Prozente, Klappen) ist ein Knopf weiter. Der Teigrechner ist derselbe
+// Rechner ohne Rezept.
 // Liest Eingaben, ruft den Rechner auf und schreibt die Grammzahlen in die Seite.
 // Gerechnet wird hier nichts – das macht ausschließlich rechner.js.
 // Gespeichert wird hier nichts direkt – das läuft über rezepte/rezept.js bzw. speicher.js.
@@ -52,10 +53,11 @@ import { leseZahl, formatGramm, formatGrammFein, formatProzent } from '../kern/z
 import { text } from '../kern/html.js';
 import { startKochen, zeichneKochen } from '../rezepte/kochen.js';
 import {
-  startBacken, backenTeilHtml, aktualisiereBacken, speichereNotizJetzt,
+  startBacken, backenSchritteHtml, backenZutatenHtml, aktualisiereBacken, speichereNotizJetzt,
 } from '../rezepte/backen.js';
+import { statusHtml, geraeteHtml, notizKlappeHtml } from '../rezepte/teile.js';
 import { alleRezepte, holeRezept, speichereRezept, SAMMLUNG as REZEPTE } from '../rezepte/rezept.js';
-import { gesehen, markiereGesehen } from '../rezepte/liste.js';
+import { gesehen, markiereGesehen, ernaehrungAnzeige } from '../rezepte/liste.js';
 
 const HINWEISE = {
   'starter-zu-viel': 'Mehr Starter als Mehl – bitte den Starter-Anteil verringern.',
@@ -81,6 +83,7 @@ let ansicht = 'start'; // 'start' (Kacheln), 'liste' (Backen), 'rechner' oder 'k
 // { vorlageId, teig, mehl, modus, teiglinge, geaendert, anpassung } – mehl = zugegebenes Mehl.
 // vorlageId = id des Back-Rezepts (Name aus der Zeit der Teigvorlagen).
 // geaendert = der Teig des Rezepts wurde verändert (nicht nur die Menge).
+// voll = bei einem Back-Rezept ist der volle Teigrechner offen (sonst die schlanke Rezeptansicht).
 // vorlageId = null: Teigrechner (Schnellrechnung ohne Rezept, nichts wird gespeichert).
 let zustand = null;
 let katalog;  // { mehle, saaten, zusaetze, wasserVon, verhaeltnisVon, art } – aus den Einstellungen
@@ -148,7 +151,7 @@ export function datenAktualisiert() {
     const vorlage = aktuellesRezept();
     const neu = vorlage && vorlageZustand(vorlage);
     if (neu && (neu.modus !== zustand.modus || JSON.stringify(neu.teig) !== JSON.stringify(zustand.teig))) {
-      zustand = { ...neu, mehl: zustand.mehl, teiglinge: zustand.teiglinge };
+      zustand = { ...neu, mehl: zustand.mehl, teiglinge: zustand.teiglinge, voll: zustand.voll };
     }
   }
   zeichne();
@@ -171,7 +174,7 @@ function vorlageZustand(vorlage) {
   const { teig, mehl, teiglinge: angabe, modus } = ladeVorlage(vorlage);
   // Ohne Teiglinge-Angabe bleiben die zuletzt genutzten Werte fürs Umschalten erhalten
   const teiglinge = angabe ?? zustand?.teiglinge ?? { ...STANDARD_TEIGLINGE };
-  return { vorlageId: vorlage.id, teig, mehl, modus, teiglinge, geaendert: false, anpassung: neueAnpassung() };
+  return { vorlageId: vorlage.id, teig, mehl, modus, teiglinge, geaendert: false, voll: false, anpassung: neueAnpassung() };
 }
 
 /** Summe der automatischen Anpassungen seit dem Laden (für den Hinweis). */
@@ -367,6 +370,7 @@ function oeffneVorlage(id) {
   if (zustand?.vorlageId !== id) {
     zustand = vorlageZustand(vorlage);
   }
+  zustand.voll = false;
   zeige('rechner');
 }
 
@@ -375,7 +379,7 @@ function oeffneTeigrechner() {
   if (zustand?.vorlageId !== null) {
     zustand = {
       vorlageId: null, teig: structuredClone(LEERER_TEIG), mehl: LEERES_MEHL, modus: 'mehl',
-      teiglinge: { ...STANDARD_TEIGLINGE }, geaendert: false, anpassung: neueAnpassung(),
+      teiglinge: { ...STANDARD_TEIGLINGE }, geaendert: false, voll: true, anpassung: neueAnpassung(),
     };
   }
   zeige('rechner');
@@ -386,8 +390,12 @@ const vorlageGeaendert = () => zustand.geaendert && zustand.vorlageId !== null;
 
 // ---------- Rechner ----------
 
+/** Schlanke Rezeptansicht? Nur bei einem Back-Rezept, solange der volle Teigrechner nicht offen ist. */
+const schlank = () => Boolean(zustand.vorlageId) && !zustand.voll && aktuellesRezept() !== null;
+
 function zeichneRechner() {
-  const { teig, mehl } = zustand;
+  if (schlank()) return zeichneRezept();
+  const { teig } = zustand;
   const vorlage = aktuellesRezept();
   const titel = zustand.vorlageId === null ? 'Teigrechner' : vorlage ? vorlage.name : 'Eigener Teig';
 
@@ -408,27 +416,12 @@ function zeichneRechner() {
   const hefeName = trocken ? 'Trockenhefe' : 'Frischhefe';
   const hefeWechsel = trocken ? '⇄ frisch' : '⇄ trocken';
 
-  const menge = imTeiglingeModus()
-    ? `<div class="teiglinge-felder">
-         ${grossesFeld('Anzahl', 'tl-anzahl', '×')}
-         ${grossesFeld('Gewicht je Teigling', 'tl-gewicht', 'g')}
-       </div>
-       <p class="info">Mehl zum Abwiegen: <output class="zahl" data-ausgabe="mehl-errechnet"></output>
-         · Gesamtmehl inkl. Starter: <output class="zahl" data-ausgabe="gesamtmehl"></output></p>`
-    : `<label class="feld">
-         <span class="feld-name">Mehl</span>
-         <span class="mit-einheit">
-           <input class="eingabe eingabe-gross" data-feld="mehl"
-                  inputmode="decimal" autocomplete="off" value="${Math.round(mehl)}">
-           <span class="einheit">g</span>
-         </span>
-       </label>
-       <p class="info">Gesamtmehl inkl. Starter:
-         <output class="zahl" data-ausgabe="gesamtmehl"></output></p>`;
+  const menge = mengeHtml(true);
 
   wurzel.innerHTML = `
     <header class="seiten-kopf">
-      <button type="button" class="knopf-zurueck" data-aktion="zurueck" aria-label="Zurück">‹</button>
+      <button type="button" class="knopf-zurueck" data-aktion="${vorlage ? 'zurueck-rezept' : 'zurueck'}"
+              aria-label="${vorlage ? 'Zurück zum Rezept' : 'Zurück'}">‹</button>
       <h1 class="kopf-titel">${text(titel)}
         <small class="geaendert" data-ausgabe="geaendert" ${vorlageGeaendert() ? '' : 'hidden'}>geändert</small></h1>
     </header>
@@ -461,14 +454,76 @@ function zeichneRechner() {
     <button type="button" class="knopf knopf-voll" data-aktion="speichern-karte"
             ${vorlageGeaendert() && !speicherKarte ? '' : 'hidden'}>Änderungen speichern …</button>
 
-    ${vorlage ? backenTeilHtml(vorlage, teig) : ''}
-
     ${mehlKlappe()}
     ${saatenKlappe()}
     ${zusatzKlappe()}
     ${auffrischKlappe()}
     ${vorlageKlappe(vorlage)}
     ${einstellungenKlappe()}`;
+
+  aktualisiere();
+}
+
+/** Mengenfeld: Mehl in g bzw. Anzahl × Gewicht (Teiglinge). mitInfo = Zeile mit Gesamtmehl darunter (voller Rechner). */
+function mengeHtml(mitInfo) {
+  if (imTeiglingeModus()) {
+    return `<div class="teiglinge-felder">
+         ${grossesFeld('Anzahl', 'tl-anzahl', '×')}
+         ${grossesFeld('Gewicht je Teigling', 'tl-gewicht', 'g')}
+       </div>
+       ${mitInfo ? `<p class="info">Mehl zum Abwiegen: <output class="zahl" data-ausgabe="mehl-errechnet"></output>
+         · Gesamtmehl inkl. Starter: <output class="zahl" data-ausgabe="gesamtmehl"></output></p>` : ''}`;
+  }
+  return `<label class="feld">
+         <span class="feld-name">Mehl</span>
+         <span class="mit-einheit">
+           <input class="eingabe eingabe-gross" data-feld="mehl"
+                  inputmode="decimal" autocomplete="off" value="${Math.round(zustand.mehl)}">
+           <span class="einheit">g</span>
+         </span>
+       </label>
+       ${mitInfo ? `<p class="info">Gesamtmehl inkl. Starter:
+         <output class="zahl" data-ausgabe="gesamtmehl"></output></p>` : ''}`;
+}
+
+/**
+ * Schlanke Rezeptansicht eines Back-Rezepts: oben Name, Ernährung, Menge und Status, direkt darunter die Schritte
+ * (mit den Teigmengen), dann Zutaten (zu), Notiz (eine Zeile) und der Knopf zum vollen Teigrechner.
+ * Wie beim Kochen; der Teig selbst wird erst im Teigrechner verstellt.
+ */
+function zeichneRezept() {
+  const r = aktuellesRezept();
+  const ernaehrung = ernaehrungAnzeige(r);
+  const zutaten = backenZutatenHtml(r, zustand.teig);
+  const ohneSchritte = r.schritte.length === 0; // z. B. ein umgezogenes Rezept: dann steht der Teig gleich offen da
+  wurzel.innerHTML = `
+    <header class="seiten-kopf">
+      <button type="button" class="knopf-zurueck" data-aktion="zurueck" aria-label="Zurück">‹</button>
+      <h1 class="kopf-titel">${text(r.name)}${ernaehrung
+        ? ` <span class="ernaehrung" role="img" aria-label="${text(ernaehrung.text)}">${ernaehrung.zeichen}</span>` : ''}
+        <small class="geaendert" data-ausgabe="geaendert" ${vorlageGeaendert() ? '' : 'hidden'}>geändert</small></h1>
+    </header>
+    ${meldungHtml()}
+    ${vermerkKarte(r)}
+    ${speicherKarte ? speicherKarteHtml(r) : ''}
+
+    <section class="karte" aria-label="Menge und Status">
+      ${mengeHtml(false)}
+      ${statusHtml(r.status, 'b')}
+    </section>
+
+    ${backenSchritteHtml(r, zustand.teig)}
+
+    <details class="klappe" data-klappe="zutaten" ${offeneKlappen.has('zutaten') || ohneSchritte ? 'open' : ''}>
+      <summary>Zutaten (${zutaten.anzahl})</summary>
+      <div class="klappe-inhalt">${zutaten.html}${geraeteHtml(r)}</div>
+    </details>
+
+    ${notizKlappeHtml(r.notiz, 'b', offeneKlappen.has('notiz'))}
+
+    <button type="button" class="knopf" data-aktion="teigrechner-voll">Im Teigrechner anpassen</button>
+    <button type="button" class="knopf knopf-voll" data-aktion="speichern-karte"
+            ${vorlageGeaendert() && !speicherKarte ? '' : 'hidden'}>Änderungen speichern …</button>`;
 
   aktualisiere();
 }
@@ -826,20 +881,22 @@ function aktualisiere() {
   // Hefe unter 10 g mit einer Nachkommastelle, sonst wären 0,4 g "0 g"
   setzeAusgabe('hefe', `${e.hefe < 10 ? formatGrammFein(e.hefe) : formatGramm(e.hefe)} g`);
 
-  const hinweis = wurzel.querySelector('[data-ausgabe="hinweise"]');
-  hinweis.textContent = e.hinweise.map((h) => HINWEISE[h]).join(' ');
-  hinweis.hidden = e.hinweise.length === 0;
+  if (!schlank()) { // Hinweise und Wasser-Erklärung gibt es nur im vollen Rechner
+    const hinweis = wurzel.querySelector('[data-ausgabe="hinweise"]');
+    hinweis.textContent = e.hinweise.map((h) => HINWEISE[h]).join(' ');
+    hinweis.hidden = e.hinweise.length === 0;
 
-  // Mit Zusatzzutaten: erklären, warum weniger Wasser dazukommt
-  const zusatzInfo = wurzel.querySelector('[data-ausgabe="zusatzwasser"]');
-  zusatzInfo.textContent = e.zusatzWasser > 0
-    ? `Wasser gesamt ${formatGramm(e.wasserGesamt)} g – davon ${formatGramm(e.zusatzWasser)} g aus den Zusatzzutaten, ` +
-      `${formatGramm(e.starterWasser)} g aus dem Starter.`
-    : '';
-  zusatzInfo.hidden = e.zusatzWasser <= 0;
+    // Mit Zusatzzutaten: erklären, warum weniger Wasser dazukommt
+    const zusatzInfo = wurzel.querySelector('[data-ausgabe="zusatzwasser"]');
+    zusatzInfo.textContent = e.zusatzWasser > 0
+      ? `Wasser gesamt ${formatGramm(e.wasserGesamt)} g – davon ${formatGramm(e.zusatzWasser)} g aus den Zusatzzutaten, ` +
+        `${formatGramm(e.starterWasser)} g aus dem Starter.`
+      : '';
+    zusatzInfo.hidden = e.zusatzWasser <= 0;
 
-  zeigeAnpassung(e);
-  zeigeAuffrischung();
+    zeigeAnpassung(e);
+    zeigeAuffrischung();
+  }
   aktualisiereBacken(aktuellesRezept(), mehl, teig, e);
   synchronisiereFelder();
   zeigeGeaendert();
@@ -1085,6 +1142,8 @@ function beiKlick(ereignis) {
   const knopf = ziel.closest('[data-aktion]');
   const aktion = knopf?.dataset.aktion;
   if (aktion === 'zurueck') zurueck();
+  if (aktion === 'zurueck-rezept') zeigeRezeptAnsicht();
+  if (aktion === 'teigrechner-voll') oeffneVollenRechner();
   if (aktion === 'zurueck-start') zeige('start');
   if (aktion === 'backen') zeige('liste');
   if (aktion === 'teigrechner') oeffneTeigrechner();
@@ -1114,6 +1173,21 @@ function beiKlick(ereignis) {
   if (aktion === 'sp-abbrechen') schliesseSpeicherKarte();
   if (aktion === 'loeschen') loescheVorlage();
   if (aktion === 'vermerk-weg') behalteVorlage();
+}
+
+/** Vom Back-Rezept in den vollen Teigrechner. */
+function oeffneVollenRechner() {
+  speichereNotizJetzt();
+  zustand.voll = true;
+  zeichne();
+  window.scrollTo(0, 0);
+}
+
+/** Aus dem vollen Teigrechner zurück zur schlanken Rezeptansicht (Änderungen bleiben, „Änderungen speichern“ steht dort). */
+function zeigeRezeptAnsicht() {
+  zustand.voll = false;
+  zeichne();
+  window.scrollTo(0, 0);
 }
 
 /** Zurück zur Liste – mit ungespeicherten Änderungen erst fragen. */
@@ -1187,6 +1261,7 @@ function entferneSorte(art, id) {
 
 function ladeUndZeige(vorlage, rueckmeldung = null) {
   zustand = vorlageZustand(vorlage);
+  zustand.voll = true; // ein neues Rezept hat noch keine Schritte: gleich den Teig einstellen
   meldung = rueckmeldung;
   zeige('rechner');
 }

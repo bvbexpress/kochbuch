@@ -81,6 +81,24 @@ export function notizHtml(notiz, p) {
     </section>`;
 }
 
+/**
+ * Notiz als einzeilige Vorschau; antippen klappt das Feld zum Lesen und Bearbeiten auf (Back-Rezepte).
+ * Leere Notiz: nur „Notiz hinzufügen“. `offen` = Zustand der Klappe (bleibt beim Neuzeichnen).
+ */
+export function notizKlappeHtml(notiz, p, offen = false) {
+  const vorschau = String(notiz ?? '').trim();
+  return `<details class="klappe notiz-klappe" data-klappe="notiz" ${offen ? 'open' : ''}>
+      <summary aria-label="Notiz">
+        <span class="notiz-titel">${vorschau ? 'Notiz' : 'Notiz hinzufügen'}</span>
+        ${vorschau ? `<span class="notiz-vorschau">${text(vorschau)}</span>` : ''}
+      </summary>
+      <div class="klappe-inhalt">
+        <textarea class="eingabe notiz-feld" data-${p}notiz rows="3" maxlength="2000"
+                  placeholder="z. B. weniger Salz …" aria-label="Notiz" autocomplete="off">${text(notiz)}</textarea>
+      </div>
+    </details>`;
+}
+
 /** „Geräte: Wok · Ofen 200 °C“ oben im Rezept; ohne Geräte nichts. */
 export function geraeteHtml(r) {
   const geraete = geraeteListe(r);
