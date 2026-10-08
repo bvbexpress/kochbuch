@@ -391,7 +391,7 @@ begin
   select k into v_feld from jsonb_object_keys(d) k
     where k <> all (array['art', 'name', 'kategorie', 'portionen', 'portionsart', 'zutaten', 'schritte',
       'schrittzutaten', 'schrittgeraete', 'status', 'ernaehrung', 'auchVegetarisch', 'notiz', 'quelle',
-      'teig', 'mehl', 'modus', 'teiglinge'])
+      'teig', 'mehl', 'modus', 'teiglinge', 'schrittteig'])
     limit 1;
   if v_feld is not null then return 'unbekanntes Feld ' || v_feld; end if;
 
@@ -474,7 +474,27 @@ begin
     then return 'schrittgeraete'; end if;
   end if;
 
-  -- Teigwerte nur bei Back-Rezepten (Einzelheiten prüft die App mit `bereinigeTeig`)
+  -- Teigteile je Schritt (nur Back-Rezepte, optional): gleiche Länge wie die Schritte, je Schritt höchstens 9 Einträge
+  -- { teil, anteil? } mit bekanntem Teil und anteil > 0 bis 1 (TEIG_TEILE in js/rezepte/rezept.js)
+  if coalesce(jsonb_typeof(d->'schrittteig'), 'null') <> 'null' then
+    if not v_backen or jsonb_typeof(d->'schrittteig') <> 'array'
+      or jsonb_array_length(d->'schrittteig') <> jsonb_array_length(coalesce(d->'schritte', '[]'))
+    then return 'schrittteig'; end if;
+    for v_je in select j from jsonb_array_elements(d->'schrittteig') j loop
+      if jsonb_typeof(v_je) <> 'array' or jsonb_array_length(v_je) > 9 then return 'schrittteig'; end if;
+      for v_e in select e from jsonb_array_elements(v_je) e loop
+        if jsonb_typeof(v_e) <> 'object'
+          or exists (select from jsonb_object_keys(v_e) k where k not in ('teil', 'anteil'))
+          or jsonb_typeof(v_e->'teil') is distinct from 'string'
+          or (v_e->>'teil') not in ('mehl', 'wasser', 'starter', 'salz', 'oel', 'hefe', 'saaten', 'quellwasser', 'zusaetze')
+          or (coalesce(jsonb_typeof(v_e->'anteil'), 'null') <> 'null'
+              and not (jsonb_typeof(v_e->'anteil') = 'number' and (v_e->>'anteil')::numeric > 0 and (v_e->>'anteil')::numeric <= 1))
+        then return 'schrittteig'; end if;
+      end loop;
+    end loop;
+  end if;
+
+  -- Teigwerte nur bei Back-Rezepten (Einzelheiten prüft die Edge Function streng, die App beim Laden mit `bereinigeTeig`)
   if v_backen then
     if jsonb_typeof(d->'teig') is distinct from 'object' then return 'teig'; end if;
     if not intern.connector_zahl(d->'mehl', 100000) then return 'mehl'; end if;

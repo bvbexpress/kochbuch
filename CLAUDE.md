@@ -264,9 +264,9 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   Plan B (Schlüssel im Pfad, OAuth) entfällt.
 - ~~Notlösung „Rezept einfügen“~~ **entfällt** (entschieden 7.10.2026): Der Connector läuft, der Import geht über ihn,
   „Alles sichern“ ersetzt die Notlösung.
-- **Projektanweisung (für das Claude-Projekt „Kochen & Backen“, Stand nach A):**
+- **Projektanweisung (für das Claude-Projekt „Kochen & Backen“, Stand nach Back-Connector):**
   > **Kochbuch.** Das Kochbuch der Familie hat Werkzeuge (`zutaten_liste`, `rezepte_finden`, `rezept_anlegen`, `rezept_aktualisieren`).
-  > Es ist nur für Koch-Rezepte (Backen/Teig folgt später). Löschen geht nicht.
+  > Es ist für Koch- und Back-Rezepte. Löschen geht nicht.
   >
   > **Vor dem Vorschlag:** Bevor du ein Gericht vorschlägst, prüfe mit `rezepte_finden`, ob es schon im Kochbuch steht. Wenn ja, kochen wir
   > nach diesem Rezept; Änderungen schlägst du nur gezielt vor (z. B. aus den Notizen), nicht das ganze Rezept neu.
@@ -304,8 +304,26 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   > „fleisch“. Lässt sich ein Fisch- oder Fleischgericht leicht für einen Teil vegetarisch machen (z. B. Fleisch separat braten), setze
   > `auchVegetarisch: true` und schreibe die vegetarische Variante in einem Satz in die Notiz.
   >
-  > **Import:** Alte Rezepte (aus alten ChatGPT-Chats) füge ich als Text in den Chat ein. Auf mein Zeichen speicherst du sie, nur
-  > Koch-Rezepte, mit `quelle: import` und Status „noch testen“ (bleibt so, bis wir es gekocht haben). Vorher `rezepte_finden`, damit nichts
+  > **Back-Rezepte** (`art: backen`: Brot, Brötchen, Pizza, Focaccia, Gebäck; Kategorie `brot`, `broetchen`, `pizza`, `focaccia` oder `gebaeck`).
+  > Der Teig steht in `teig` in **Bäckerprozent**: Alle Prozente beziehen sich auf das **Gesamtmehl inklusive Mehl im Starter**.
+  > `hydration` = gesamtes Wasser in % (Wasser im Starter und in Milch/Ei zählt dazu), `starter` in % (100 % Hydration, halb Mehl, halb Wasser),
+  > `salz`, `oel`, `hefe` in % (`hefeArt`: frisch oder trocken), `mehlsorten` mit `anteil` in % vom **zugegebenen** Mehl (zusammen 100 %),
+  > `saaten` und `zusaetze` (Milch, Ei, Butter, Zucker, Honig, eigene mit `wasser` in %) in % vom Gesamtmehl, `quellwasser` in % vom Gesamtmehl
+  > für die Saaten. Mehlnamen wie in `zutaten_liste`.
+  > **Menge:** `mehl` = zugegebenes Mehl in Gramm (was man abwiegt, ohne das Mehl im Starter). Bei Brötchen, Pizza u. ä. stattdessen
+  > `modus: teiglinge` mit `teiglinge: { anzahl, gewicht }` (Gramm je Teigling; das Mehl rechnet das Kochbuch selbst aus).
+  > **Rezepte in Gramm** rechnest du um: Gesamtmehl = Mehl + Mehl im Starter, alles andere ÷ Gesamtmehl × 100. Zeige mir die Umrechnung kurz.
+  > **`schrittteig`** (gleiche Länge wie `schritte`): je Schritt die Teigteile, die dort gebraucht werden (`mehl`, `wasser`, `starter`, `salz`, `oel`,
+  > `hefe`, `saaten`, `quellwasser`, `zusaetze`). Wird ein Teil auf mehrere Schritte verteilt, gib `anteil` (0–1) an: Wasser 0,9 in Schritt 2 und
+  > 0,1 in Schritt 3. Ohne `anteil` = alles. Zusammen höchstens 100 % je Teil. Schritte ohne Teig: leere Liste. Weitere Zutaten (Belag, Füllung)
+  > sind normale `zutaten` mit `schrittzutaten`; Mehl, Wasser, Salz, Starter, Hefe und Saaten gehören **nicht** dorthin. `portionen` ist beim Backen
+  > freiwillig. Geräte (`schrittgeraete`) und Notiz wie beim Kochen.
+  > **Antwort prüfen:** Der Connector liefert die errechneten `gramm`. Vergleiche sie mit dem, was wir gebacken haben (Gesamtteig, Wasser, Mehl,
+  > Salz). Stimmt etwas nicht, sag es mir und korrigiere mit `rezept_aktualisieren`. Dort `teig` immer als Ganzes (erst mit `rezepte_finden` lesen);
+  > ändern sich die Schritte, `schrittteig`, `schrittgeraete` und `schrittzutaten` neu mitliefern.
+  >
+  > **Import:** Alte Rezepte (aus alten ChatGPT-Chats) füge ich als Text in den Chat ein. Auf mein Zeichen speicherst du sie, Koch- und
+  > Back-Rezepte, mit `quelle: import` und Status „noch testen“ (bleibt so, bis wir es gekocht haben). Vorher `rezepte_finden`, damit nichts
   > doppelt entsteht. Schritte und vorhandene Mengen übernimmst du unverändert. **Fehlende oder als „unklar“ markierte Mengen ergänzt du als
   > Vorschlag**, passend zu unseren Vorlieben und Learnings, und **vermerkst in der Notiz, was du ergänzt hast** („Mengen ergänzt: Salz,
   > Öl“). Ist die Portionszahl unklar, frage nach. Kochen wir direkt nach einem eingefügten alten Rezept, speicherst du am Ende den
@@ -380,8 +398,7 @@ Kosten grob (±50 %, nach Schritt 1 mit den echten Zahlen korrigieren; Guthaben 
   schützt vor Doppeln bei Wiederholung), `rezept_aktualisieren` (`id` + `version`, nur angegebene Felder ersetzen, wer
   `zutaten`/`schritte` ändert, muss `schrittzutaten` mitgeben; Rezept vom Handy mit `quelle: hand` wird `claude`).
   `pruefeRezept` ist **streng**: Unsinn wird mit deutschem Grund abgewiesen (Claude verbessert), nie still gekürzt; Ergebnis hat
-  genau die Form von `bereinigeRezept`. Kategorie als id oder Name. **Nur Koch-Rezepte**; Back-Rezepte (Teigwerte) erst mit
-  Schritt 5. Fehler der Datenbank → ruhiger Hinweis an Claude, Einzelheiten nur im Funktions-Protokoll (ohne Inhalte).
+  genau die Form von `bereinigeRezept`. Kategorie als id oder Name. **Nur Koch-Rezepte** (Back-Rezepte seit der Connector-Erweiterung, siehe unten). Fehler der Datenbank → ruhiger Hinweis an Claude, Einzelheiten nur im Funktions-Protokoll (ohne Inhalte).
   Tests: `tests/connector.test.js` (Kopien = Originale aus `js/`, gleiche Ausgabe wie `loeseNamenAuf` + `bereinigeRezept`,
   MCP, Werkzeuge mit nachgebauter Datenbank) und in `tests/datenbank.test.js` ein Durchlauf gegen echtes PostgreSQL.
   Einmal von Hand in Deno mit `npm:postgres` und Passwort-Anmeldung gegen ein lokales PostgreSQL geprüft.
@@ -432,7 +449,18 @@ Attribute `data-b…`). Gemeinsame HTML-Bausteine mit Kochen in
 - **E** (alter Schritt 6) „Im Teigrechner anpassen“, „Nur für heute“/„Ins Rezept übernehmen“, Teigrechner-Knopf mit
   „Als Rezept speichern“, kleines Bearbeiten (Name, Kategorie, Modus), Speichern-Karte und Klappe „Vorlage“ weg. 5–8 $.
 - Summe 21–33 $: A–D (16–25 $) sicher, E nur bei Restguthaben. Sparvariante E: nur „Ins Rezept übernehmen“ (ohne „Nur für heute“).
-- Connector für Back-Rezepte: nicht eingeplant (frühestens nach dem 4.11.).
+- **Connector für Back-Rezepte** *(fertig, Einrichtung in Supabase/claude.ai durch den Nutzer)* – gleiche vier Werkzeuge, jetzt auch für `art: backen`
+  (kein neues Werkzeug). `rezept_anlegen`/`rezept_aktualisieren` nehmen `teig` (Bäckerprozent, wie `bereinigeTeig`), `mehl` **oder** `modus: teiglinge`
+  + `teiglinge` { anzahl, gewicht, verlust (Standard 2) }, `schrittteig` (Teigteile je Schritt, Teilmengen über `anteil`), dazu Geräte und Notiz.
+  Prüfung **streng** in der Edge Function (`pruefeTeig`, `pruefeTeiglinge`, `pruefeSchrittTeig`): Mehlanteile = 100 %, Zahlenbereiche, bekannte Mehle/Saaten/Zusätze
+  mit festen ids (Zusätze mit Standard-Wasseranteil, eigene brauchen `wasser`), Teigteil nur, wenn der Teig ihn hat, ein Teil in allen Schritten zusammen höchstens 100 %,
+  Hydration nicht zu niedrig für Starter/Zusätze. Im Teiglinge-Modus rechnet der Connector das Mehl wie die App (`mehlFuerTeiglinge`, Kopie). Die Antwort enthält
+  `gramm` (errechnete Mengen, Kopie von `berechne`), `mehl_errechnet` und `schrittteig_verteilt` (% je Teil in den Schritten): Claude kann Fehler sofort sehen.
+  Zutaten und Portionen sind beim Backen freiwillig (Belag u. ä.), `schrittzutaten` nur nötig, wenn es Zutaten gibt. Kategorien Brot, Brötchen, Pizza, Focaccia, Gebäck.
+  `rezept_aktualisieren`: `art` nicht änderbar; `teig` wird als Ganzes ersetzt; wer `schritte` ändert, liefert `schrittteig` (und `schrittgeraete`) neu mit; ändert Claude den Teig
+  nicht, gelten die gespeicherten Teigwerte unverändert (alte Rezepte vom Handy sind nicht streng genug für die neue Prüfung und bleiben trotzdem änderbar).
+  Datenbank: `intern.connector_pruefe_rezept` kennt `schrittteig` (Länge, bekannte Teile, anteil 0–1); der Teig selbst wird dort nur als Objekt geprüft (die App prüft beim Laden).
+  Reihenfolge beim Einrichten: SQL ausführen → Edge Function neu einfügen → Projektanweisung ersetzen. Tests: `tests/connector.test.js` (Back-Teil), `tests/datenbank.test.js`.
 
 **Was der Nutzer selbst einrichtet:** Funktions-Secret (Schlüssel) in Supabase; Datenbank-Skript ausführen; Edge Function im
 Dashboard einfügen; in claude.ai Connector hinzufügen (Name, URL, Schlüssel) und im Projekt aktivieren; Projektanweisung

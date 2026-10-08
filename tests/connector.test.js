@@ -8,10 +8,15 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   bearbeite, pruefeRezept, katalogAus, fuerClaude, datenbankMit, zutatId, bereinigeZutatenName,
+  BACK_KATEGORIEN, MODI, TEIG_TEILE, TEIG_FORMAT, STANDARD_VERLUST, TEIG_MEHLE, TEIG_SAATEN, TEIG_ZUSAETZE, mehlFuerTeiglinge, rechneTeig,
   KOCH_KATEGORIEN, PORTIONSARTEN, REGELN, STATUS, QUELLEN, ERNAEHRUNG, MIT_TIER, ZUTAT_ARTEN, EINGEBAUT, GRENZEN, WERKZEUGE,
 } from '../supabase/functions/kochbuch/index.ts';
 import * as rezeptJs from '../js/rezepte/rezept.js';
 import * as katalogJs from '../js/rezepte/katalog.js';
+import * as vorlagenJs from '../js/teig/vorlagen.js';
+import * as zutatenJs from '../js/teig/zutaten.js';
+import * as pruefungJs from '../js/teig/pruefung.js';
+import * as rechnerJs from '../js/teig/rechner.js';
 
 const SCHLUESSEL = 'testschluessel-0123456789abcdefghijklmnop';
 const ADRESSE = 'https://beispiel.supabase.co/functions/v1/kochbuch';
@@ -126,8 +131,9 @@ test('Unsinn wird mit verständlichem Grund abgewiesen, nie still repariert', ()
   const grund = (roh, opt) => pruefeRezept(roh, k, opt).fehler?.join(' ') ?? 'OK';
   assert.match(grund(null), /kein Objekt/);
   assert.match(grund([]), /kein Objekt/);
-  assert.match(grund(curry({ art: 'backen' })), /Unbekannte Felder: art/);
-  assert.match(grund(curry({ teig: {} })), /Unbekannte Felder: teig/);
+  assert.match(grund(curry({ art: 'braten' })), /art: kochen \| backen/);
+  assert.match(grund(curry({ teig: {} })), /teig gibt es nur bei Back-Rezepten/);
+  assert.match(grund(curry({ mehl: 500 })), /mehl gibt es nur bei Back-Rezepten/);
   assert.match(grund(curry({ name: ' ' })), /name fehlt/);
   assert.match(grund(curry({ name: 'x'.repeat(81) })), /name ist zu lang/);
   assert.match(grund(curry({ kategorie: undefined })), /kategorie fehlt.*pasta, currys/);
@@ -238,7 +244,8 @@ test('Gespeichertes Rezept → Form für Claude (Namen statt ids) → wieder ges
   // Unbekannte id (Katalog noch nicht da): die id als Name; altes Rezept ohne Zutaten je Schritt
   const alt = fuerClaude('id-2', 1, { art: 'kochen', name: 'Alt', portionen: 2, zutaten: [{ zutat: 'geheim', menge: 1 }], schritte: ['a'] }, katalog);
   assert.deepEqual([alt.zutaten[0].name, alt.schrittzutaten, alt.quelle], ['geheim', null, 'hand']);
-  assert.match(fuerClaude('id-3', 1, { art: 'backen', name: 'Brot' }, katalog).hinweis, /Back-Rezept/);
+  assert.equal(fuerClaude('id-3', 1, { art: 'backen', name: 'Brot' }, katalog).art, 'backen');
+  assert.equal(fuerClaude('id-3', 1, { art: 'kochen', name: 'Suppe' }, katalog).teig, undefined);
   assert.equal(alt.schrittgeraete, null);
   assert.deepEqual(fuerClaude('id-4', 1, { ...rezept, schrittgeraete: ['', 'Wok', '', ''] }, katalog).schrittgeraete, ['', 'Wok', '', '']);
 });
@@ -494,7 +501,7 @@ test('rezept_aktualisieren: nur angegebene Felder, mit Version; sonst Kopie, nie
   assert.match((await rufe(db, 'rezept_aktualisieren', { id, version: 3, quelle: 'hand' })).text, /quelle/);
   assert.match((await rufe(db, 'rezept_aktualisieren', { id: '00000000-0000-4000-8000-999999999999', version: 1, notiz: 'x' })).text, /Kein Rezept/);
   db.rezepte.set('00000000-0000-4000-8000-00000000b0b0', { id: '00000000-0000-4000-8000-00000000b0b0', version: 1, daten: { art: 'backen', name: 'Brot' } });
-  assert.match((await rufe(db, 'rezept_aktualisieren', { id: '00000000-0000-4000-8000-00000000b0b0', version: 1, notiz: 'x' })).text, /Back-Rezepte/);
+  assert.match((await rufe(db, 'rezept_aktualisieren', { id: '00000000-0000-4000-8000-00000000b0b0', version: 1, art: 'kochen' })).text, /art eines Rezepts/);
 });
 
 test('rezept_aktualisieren: Rezept vom Handy (quelle hand, ohne Zutaten je Schritt) bleibt bearbeitbar', async () => {
@@ -536,4 +543,226 @@ test('Keine Geheimnisse im Code: Schlüssel und Datenbank-Adresse nur als Secret
   assert.match(quelltext, /Deno\.env\.get\('KOCHBUCH_SCHLUESSEL'\)/);
   assert.match(quelltext, /Deno\.env\.get\('KOCHBUCH_DB_URL'\)/);
   assert.doesNotMatch(quelltext, /postgres(ql)?:\/\/|supabase\.co|service_role|SUPABASE_DB_URL/);
+});
+
+
+// ---------- Back-Rezepte ----------
+
+/** Back-Rezept, wie Claude es schickt (Mehl- und Saatennamen statt ids, Teilmengen je Schritt). */
+const brot = (aenderung = {}) => ({
+  art: 'backen', name: 'Dinkel-Roggen-Brot', kategorie: 'brot', ernaehrung: 'vegetarisch',
+  mehl: 500,
+  teig: {
+    hydration: 75, starter: 20, salz: 2, hefe: 0.2, hefeArt: 'frisch',
+    mehlsorten: [{ name: 'weizen 550', anteil: 70 }, { name: 'Roggenvollkorn', anteil: 30 }],
+    saaten: [{ name: 'Leinsamen', prozent: 5 }], quellwasser: 12.5,
+    zusaetze: [{ name: 'Honig', prozent: 2 }, { name: 'Joghurt', prozent: 10, wasser: 85 }],
+  },
+  schritte: ['Mehl, 90 % des Wassers und Starter mischen.', 'Salz, Hefe, Honig, Joghurt und Rest Wasser dazu, kneten.', 'Saaten quellen lassen und unterkneten.', 'Backen.'],
+  schrittteig: [
+    [{ teil: 'mehl' }, { teil: 'wasser', anteil: 0.9 }, { teil: 'starter' }],
+    [{ teil: 'salz' }, { teil: 'hefe' }, { teil: 'zusaetze' }, { teil: 'wasser', anteil: 0.1 }],
+    [{ teil: 'saaten' }, { teil: 'quellwasser' }],
+    [],
+  ],
+  schrittgeraete: ['', 'Knetmaschine', '', 'Ofen 240 °C Umluft'],
+  notiz: 'Nächstes Mal 10 Min. länger.',
+  ...aenderung,
+});
+const brotchen = (aenderung = {}) => brot({
+  name: 'Brötchen', kategorie: 'broetchen', mehl: undefined, modus: 'teiglinge', teiglinge: { anzahl: 8, gewicht: 85 },
+  teig: { hydration: 62, salz: 2, hefe: 1, mehlsorten: [{ name: 'Weizen 550', anteil: 100 }] },
+  schritte: ['Alles kneten.', 'Formen, backen.'], schrittteig: [[{ teil: 'mehl' }, { teil: 'wasser' }, { teil: 'salz' }, { teil: 'hefe' }], []],
+  schrittgeraete: undefined,
+  ...aenderung,
+});
+
+test('Back-Kopien stimmen mit js/ überein: Kategorien, Modi, Teigteile, feste ids', () => {
+  assert.deepEqual(BACK_KATEGORIEN, vorlagenJs.KATEGORIEN.map(({ id, name }) => ({ id, name })));
+  assert.deepEqual(MODI, vorlagenJs.MODI);
+  assert.deepEqual(TEIG_TEILE, rezeptJs.TEIG_TEILE);
+  assert.equal(STANDARD_VERLUST, rechnerJs.STANDARD_VERLUST);
+  assert.equal(TEIG_FORMAT, pruefungJs.bereinigeTeig(vorlagenJs.LEERER_TEIG).format);
+  assert.deepEqual(TEIG_MEHLE, zutatenJs.MEHLE.map(({ id, name }) => ({ id, name })));
+  assert.deepEqual(TEIG_SAATEN, zutatenJs.SAATEN.map(({ id, name }) => ({ id, name })));
+  assert.deepEqual(TEIG_ZUSAETZE, zutatenJs.ZUSAETZE);
+  assert.equal(GRENZEN.teigzeilen, 20); // = MAX_ZEILEN in js/teig/pruefung.js
+});
+
+test('Back-Rezept: gleiche Form wie bereinigeRezept – die App übernimmt es unverändert', () => {
+  const k = katalogAus([]);
+  for (const roh of [brot(), brotchen(), brot({ schrittteig: undefined, schrittgeraete: undefined, notiz: undefined, portionen: 2, portionsart: 'laibe' }),
+    brot({ zutaten: [{ name: 'Salz', menge: 5 }, { name: 'Wasser', menge: 100 }], schrittzutaten: [[], [{ name: 'Salz' }], [], [{ name: 'Wasser' }]] })]) {
+    const g = pruefeRezept(roh, k);
+    assert.equal(g.fehler, undefined, g.fehler?.join(' '));
+    assert.deepEqual(rezeptJs.bereinigeRezept(g.rezept), g.rezept);
+  }
+  const g = pruefeRezept(brot(), k);
+  assert.equal(g.rezept.art, 'backen');
+  assert.equal(g.rezept.portionen, undefined, 'Portionen sind beim Backen freiwillig');
+  assert.deepEqual(g.rezept.teig.mehlsorten, [{ id: 'weizen550', name: 'Weizen 550', anteil: 70 }, { id: 'roggenvollkorn', name: 'Roggenvollkorn', anteil: 30 }]);
+  assert.deepEqual(g.rezept.teig.zusaetze, [{ id: 'honig', name: 'Honig', prozent: 2, wasser: 17 }, { id: null, name: 'Joghurt', prozent: 10, wasser: 85 }]);
+  assert.deepEqual(g.rezept.schrittteig[0], [{ teil: 'mehl' }, { teil: 'wasser', anteil: 0.9 }, { teil: 'starter' }]);
+  assert.equal(g.rezept.modus, 'mehl');
+  assert.equal(g.rezept.teiglinge, undefined);
+  // Der Teig besteht dieselbe Prüfung wie in der App
+  assert.deepEqual(rezeptJs.bereinigeRezept(g.rezept).teig, pruefungJs.bereinigeTeig(g.rezept.teig));
+});
+
+test('Teiglinge-Modus: Mehl wird wie in der App errechnet, Angabe mit Standard-Verlust', () => {
+  const g = pruefeRezept(brotchen(), katalogAus([]));
+  assert.deepEqual(g.rezept.teiglinge, { anzahl: 8, gewicht: 85, verlust: 2 });
+  assert.equal(g.rezept.modus, 'teiglinge');
+  const erwartet = rechnerJs.mehlFuerTeiglinge(g.rezept.teig, 8, 85, 2);
+  assert.ok(Math.abs(g.rezept.mehl - erwartet) < 0.006);
+  // Die Kopie rechnet auf allen Teigen wie das Original
+  const mix = pruefeRezept(brot(), katalogAus([])).rezept.teig;
+  for (const [teig, anzahl, gewicht, verlust] of [[mix, 4, 250, 0], [g.rezept.teig, 3, 1000, 5], [mix, 12, 60, 2]]) {
+    assert.ok(Math.abs(mehlFuerTeiglinge(teig, anzahl, gewicht, verlust) - rechnerJs.mehlFuerTeiglinge(teig, anzahl, gewicht, verlust)) < 1e-9);
+  }
+  assert.equal(pruefeRezept(brotchen({ mehl: 123 }), katalogAus([])).rezept.mehl, g.rezept.mehl, 'angegebenes Mehl zählt im Teiglinge-Modus nicht');
+});
+
+test('Errechnete Gramm = Rechnung der App (berechne)', () => {
+  for (const roh of [brot(), brotchen()]) {
+    const { rezept, gramm } = pruefeRezept(roh, katalogAus([]));
+    const e = rechnerJs.berechne(rezept.teig, rechnerJs.gesamtmehlAusMehl(rezept.teig, rezept.mehl));
+    const eigen = rechneTeig(rezept.teig, rezept.mehl);
+    for (const [a, b] of [[eigen.gesamtmehl, e.gesamtmehl], [eigen.wasser, e.wasser], [eigen.starter, e.starter], [eigen.salz, e.salz],
+      [eigen.hefe, e.hefe], [eigen.quellwasser, e.quellwasser], [eigen.teigGesamt, e.teigGesamt]]) assert.ok(Math.abs(a - b) < 1e-9);
+    eigen.mehl.forEach((m, i) => assert.ok(Math.abs(m.gramm - e.mehlsorten[i].gramm) < 1e-9));
+    assert.equal(gramm.teigGesamt, Math.round(e.teigGesamt * 10) / 10);
+    assert.equal(gramm.wasser, Math.round(e.wasser * 10) / 10);
+  }
+});
+
+test('Back-Rezept: Unsinn wird mit verständlichem Grund abgewiesen', () => {
+  const k = katalogAus([]);
+  const grund = (roh, opt) => pruefeRezept(roh, k, opt).fehler?.join(' ') ?? 'OK';
+  const teig = (t) => brot({ teig: { ...brot().teig, ...t } });
+  assert.match(grund(brot({ kategorie: 'pasta' })), /kategorie.*brot, broetchen/);
+  assert.match(grund(brot({ teig: undefined })), /teig fehlt/);
+  assert.match(grund(brot({ mehl: undefined })), /mehl fehlt/);
+  assert.match(grund(brot({ mehl: -5 })), /mehl fehlt/);
+  assert.match(grund(brot({ modus: 'kilo' })), /modus/);
+  assert.match(grund(brot({ teiglinge: { anzahl: 4, gewicht: 200 }, modus: 'mehl' })), /nur im modus teiglinge/);
+  assert.match(grund(brotchen({ teiglinge: undefined })), /teiglinge fehlt/);
+  assert.match(grund(brotchen({ teiglinge: { anzahl: 0, gewicht: 80 } })), /teiglinge.anzahl/);
+  assert.match(grund(brotchen({ teiglinge: { anzahl: 4, gewicht: 80, verlust: 150 } })), /teiglinge.verlust/);
+  assert.match(grund(teig({ hydration: undefined })), /teig.hydration/);
+  assert.match(grund(teig({ hydration: 7500 })), /teig.hydration/);
+  assert.match(grund(teig({ hydration: '75' })), /teig.hydration/);
+  assert.match(grund(teig({ starter: 250 })), /teig.starter/);
+  assert.match(grund(teig({ salz: 'viel' })), /teig.salz/);
+  assert.match(grund(teig({ hefeArt: 'flüssig' })), /hefeArt/);
+  assert.match(grund(teig({ foo: 1 })), /unbekannte Felder foo/);
+  assert.match(grund(teig({ format: 7 })), /format/);
+  assert.match(grund(teig({ mehlsorten: [] })), /mehlsorten fehlt/);
+  assert.match(grund(teig({ mehlsorten: [{ name: 'Weizen 550', anteil: 70 }, { name: 'Roggen 1150', anteil: 20 }] })), /zusammen 100 %/);
+  assert.match(grund(teig({ mehlsorten: [{ name: 'Weizen 550', anteil: 50 }, { name: 'weizen 550', anteil: 50 }] })), /doppelt/);
+  assert.match(grund(teig({ mehlsorten: [{ name: 'Weizen 550', anteil: 0 }, { name: 'Dinkel', anteil: 100 }] })), /anteil/);
+  assert.match(grund(teig({ saaten: [{ name: 'Leinsamen' }] })), /prozent/);
+  assert.match(grund(teig({ zusaetze: [{ name: 'Joghurt', prozent: 10 }] })), /Joghurt.*wasser/);
+  assert.match(grund(teig({ zusaetze: [{ name: 'Milch', prozent: 10, wasser: 120 }] })), /wasser/);
+  assert.match(grund(teig({ hydration: 40, starter: 100 })), /hydration.*zu niedrig/);
+  // Teile je Schritt
+  assert.match(grund(brot({ schrittteig: [[]] })), /genau so viele Listen/);
+  assert.match(grund(brot({ schrittteig: [[{ teil: 'butter' }], [], [], []] })), /Schritt 1: teil „butter“ unbekannt/);
+  assert.match(grund(brot({ schrittteig: [[{ teil: 'mehl' }, { teil: 'mehl' }], [], [], []] })), /doppelt/);
+  assert.match(grund(brot({ schrittteig: [[{ teil: 'wasser', anteil: 1.5 }], [], [], []] })), /anteil/);
+  assert.match(grund(brot({ schrittteig: [[{ teil: 'wasser', anteil: 0.9 }], [{ teil: 'wasser', anteil: 0.3 }], [], []] })), /wasser ist insgesamt 120 %/);
+  assert.match(grund(brot({ schrittteig: [[{ teil: 'wasser' }], [{ teil: 'wasser' }], [], []] })), /wasser ist insgesamt 200 %/);
+  assert.match(grund(brot({ teig: { ...brot().teig, starter: 0 } })), /starter kommt im Teig nicht vor/);
+  assert.match(grund(brot({ teig: { ...brot().teig, saaten: [] } })), /saaten kommt im Teig nicht vor/);
+  assert.match(grund(brot({ schrittteig: [[{ teil: 'mehl', extra: 1 }], [], [], []] })), /Eintrag braucht teil/);
+  // Koch-Rezept bleibt Koch-Rezept
+  assert.match(grund(curry({ schrittteig: [[], [], [], []] })), /schrittteig gibt es nur bei Back-Rezepten/);
+  // Alles Weitere wie beim Kochen: Ernährungsform ist Pflicht
+  assert.match(grund(brot({ ernaehrung: undefined })), /ernaehrung fehlt/);
+  assert.equal(grund(brot({ ernaehrung: undefined }), { pflicht: false }), 'OK');
+});
+
+test('Back-Rezept: Zutaten sind freiwillig, schrittzutaten nur nötig, wenn es Zutaten gibt', () => {
+  const k = katalogAus([]);
+  assert.equal(pruefeRezept(brot({ zutaten: undefined, schrittzutaten: undefined }), k).fehler, undefined);
+  assert.match(pruefeRezept(brot({ zutaten: [{ name: 'Salz', menge: 3 }], schrittzutaten: undefined }), k).fehler.join(' '), /schrittzutaten fehlt/);
+});
+
+test('rezept_anlegen mit Back-Rezept: speichert, antwortet mit Gramm und Verteilung; Wiederholung ergibt kein Doppel', async () => {
+  const db = nachgebauteDb();
+  const r = await rufe(db, 'rezept_anlegen', { rezepte: [brot(), brotchen(), brot({ name: 'Kaputt', teig: undefined })] });
+  assert.equal(r.fehler, false);
+  const [gut, tl, kaputt] = r.daten.rezepte;
+  assert.equal(gut.gespeichert, true);
+  assert.equal(gut.gramm.gesamtmehl, Math.round(500 / 0.9 * 10) / 10);
+  assert.deepEqual(gut.gramm.mehl.map((m) => m.name), ['Weizen 550', 'Roggenvollkorn']);
+  assert.deepEqual(gut.schrittteig_verteilt, { mehl: 100, wasser: 100, starter: 100, salz: 100, hefe: 100, zusaetze: 100, saaten: 100, quellwasser: 100 });
+  assert.ok(tl.mehl_errechnet > 0 && tl.gramm.teigGesamt > 8 * 85);
+  assert.match(kaputt.fehler.join(' '), /teig fehlt/);
+  const gespeichert = db.rezepte.get(gut.id).daten;
+  assert.equal(gespeichert.art, 'backen');
+  assert.deepEqual(rezeptJs.bereinigeRezept(gespeichert), gespeichert);
+  const nochmal = await rufe(db, 'rezept_anlegen', { rezepte: [brot()] });
+  assert.match(nochmal.daten.rezepte[0].fehler[0], /Gibt es schon/);
+});
+
+test('rezepte_finden: Back-Rezept samt Teig lesen; als Ganzes zurückgeben ergibt dasselbe Rezept', async () => {
+  const db = nachgebauteDb();
+  const { id } = (await rufe(db, 'rezept_anlegen', { rezepte: [brot()] })).daten.rezepte[0];
+  const gelesen = (await rufe(db, 'rezepte_finden', { id })).daten;
+  assert.equal(gelesen.art, 'backen');
+  assert.equal(gelesen.mehl, 500);
+  assert.equal(gelesen.teig.mehlsorten[0].name, 'Weizen 550');
+  assert.equal(gelesen.modus, 'mehl');
+  assert.deepEqual(gelesen.schrittteig[1].map((e) => e.teil), ['salz', 'hefe', 'zusaetze', 'wasser']);
+  const { id: _i, version, ...zurueck } = gelesen;
+  assert.deepEqual(pruefeRezept(zurueck, katalogAus([])).rezept, db.rezepte.get(id).daten);
+  const liste = (await rufe(db, 'rezepte_finden', { suche: 'brot' })).daten.rezepte;
+  assert.deepEqual(liste.map((x) => [x.art, x.kategorie]), [['backen', 'brot']]);
+});
+
+test('rezept_aktualisieren bei Back-Rezepten: Notiz, Teig, Schritte; alte Rezepte vom Handy bleiben änderbar', async () => {
+  const db = nachgebauteDb();
+  const { id } = (await rufe(db, 'rezept_anlegen', { rezepte: [brot()] })).daten.rezepte[0];
+
+  const notiz = await rufe(db, 'rezept_aktualisieren', { id, version: 1, notiz: 'Besser mit 20 g mehr Wasser.' });
+  assert.equal(notiz.daten.gespeichert, true);
+  assert.equal(db.rezepte.get(id).daten.notiz, 'Besser mit 20 g mehr Wasser.');
+  assert.equal(db.rezepte.get(id).daten.teig.hydration, 75);
+
+  // Teig ändern: als Ganzes, streng geprüft, Gramm kommen zurück
+  const neuerTeig = { ...brot().teig, hydration: 78 };
+  const t = await rufe(db, 'rezept_aktualisieren', { id, version: 2, teig: neuerTeig });
+  assert.equal(t.daten.gespeichert, true);
+  assert.equal(db.rezepte.get(id).daten.teig.hydration, 78);
+  assert.ok(t.daten.gramm.wasser > 0);
+  assert.match((await rufe(db, 'rezept_aktualisieren', { id, version: 3, teig: { ...neuerTeig, mehlsorten: [{ name: 'Weizen 550', anteil: 10 }] } })).text, /zusammen 100 %/);
+
+  // Modus wechseln
+  const m = await rufe(db, 'rezept_aktualisieren', { id, version: 3, modus: 'teiglinge', teiglinge: { anzahl: 2, gewicht: 800 } });
+  assert.equal(m.daten.gespeichert, true);
+  assert.equal(db.rezepte.get(id).daten.modus, 'teiglinge');
+  const zurueck = await rufe(db, 'rezept_aktualisieren', { id, version: 4, modus: 'mehl', mehl: 450 });
+  assert.equal(zurueck.daten.gespeichert, true);
+  assert.deepEqual([db.rezepte.get(id).daten.modus, db.rezepte.get(id).daten.mehl, db.rezepte.get(id).daten.teiglinge], ['mehl', 450, undefined]);
+
+  // Schritte ändern: Geräte und Teigteile müssen mitkommen; art lässt sich nicht ändern
+  assert.match((await rufe(db, 'rezept_aktualisieren', { id, version: 5, schritte: ['a', 'b', 'c', 'd'] })).text, /schrittteig neu/);
+  assert.match((await rufe(db, 'rezept_aktualisieren', { id, version: 5, schritte: ['a', 'b', 'c', 'd'], schrittteig: [[], [], [], []] })).text, /schrittgeraete neu/);
+  const ok = await rufe(db, 'rezept_aktualisieren', { id, version: 5, schritte: ['a', 'b', 'c', 'd'], schrittgeraete: ['', '', '', ''], schrittteig: [[{ teil: 'mehl' }], [], [], []] });
+  assert.equal(ok.daten.gespeichert, true);
+  assert.match((await rufe(db, 'rezept_aktualisieren', { id, version: 6, art: 'kochen' })).text, /art eines Rezepts/);
+
+  // Rezept vom Handy: Teig nach den Regeln der App, aber nicht streng (Mehlanteile 90 %, kein ernaehrung) – Notiz geht trotzdem
+  const alt = '00000000-0000-4000-8000-0000000000bb';
+  db.rezepte.set(alt, { id: alt, version: 1, daten: {
+    art: 'backen', name: 'Altes Brot', kategorie: 'brot', portionsart: 'personen', zutaten: [], schritte: ['Backen.'], status: 'erprobt', notiz: '', quelle: 'hand',
+    teig: pruefungJs.bereinigeTeig({ ...vorlagenJs.LEERER_TEIG, mehlsorten: [{ id: null, name: 'Mix', anteil: 90 }] }), mehl: 500, modus: 'mehl',
+  } });
+  const neu = await rufe(db, 'rezept_aktualisieren', { id: alt, version: 1, notiz: 'Lecker.' });
+  assert.equal(neu.daten.gespeichert, true, neu.text);
+  const gespeichert = db.rezepte.get(alt).daten;
+  assert.deepEqual([gespeichert.notiz, gespeichert.quelle, gespeichert.teig.mehlsorten[0].anteil], ['Lecker.', 'claude', 90]);
+  // Fasst Claude den Teig an, gilt die strenge Prüfung
+  assert.match((await rufe(db, 'rezept_aktualisieren', { id: alt, version: 2, mehl: 400 })).text, /zusammen 100 %/);
 });
