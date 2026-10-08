@@ -200,11 +200,6 @@
   white-space: nowrap;
 }
 
-.ernaehrung-zeile {
-  margin: 0;
-  color: var(--text);
-}
-
 .geraete {
   display: flex;
   flex-wrap: wrap;
@@ -260,7 +255,7 @@
   margin-top: 12px;
 }
 
-/* ---------- Notiz als einzeilige Vorschau (Back-Rezepte): antippen = lesen und bearbeiten ---------- */
+/* ---------- Notiz als einzeilige Vorschau (Kochen und Backen): antippen = lesen und bearbeiten ---------- */
 .notiz-klappe > summary {
   gap: 12px;
   min-width: 0;

@@ -72,17 +72,8 @@ export function statusHtml(status, p) {
     </div>`;
 }
 
-/** Notizfeld (wird kurz nach dem Tippen gespeichert). */
-export function notizHtml(notiz, p) {
-  return `<section class="karte notiz" aria-label="Notiz">
-      <label class="feld"><span class="feld-name">Notiz</span>
-        <textarea class="eingabe notiz-feld" data-${p}notiz rows="2" maxlength="2000"
-                  placeholder="z. B. weniger Salz …" autocomplete="off">${text(notiz)}</textarea></label>
-    </section>`;
-}
-
 /**
- * Notiz als einzeilige Vorschau; antippen klappt das Feld zum Lesen und Bearbeiten auf (Back-Rezepte).
+ * Notiz als einzeilige Vorschau (Kochen und Backen); antippen klappt das Feld zum Lesen und Bearbeiten auf.
  * Leere Notiz: nur „Notiz hinzufügen“. `offen` = Zustand der Klappe (bleibt beim Neuzeichnen).
  */
 export function notizKlappeHtml(notiz, p, offen = false) {

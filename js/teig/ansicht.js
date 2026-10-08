@@ -1,5 +1,5 @@
 // ansicht.js – Oberfläche: Startseite mit Kacheln, Backen (Liste der Back-Rezepte) und der Rechner.
-// Ein Back-Rezept öffnet schlank (Menge, Status, Schritte, Zutaten, Notiz; rezepte/backen.js); der volle Rechner
+// Ein Back-Rezept öffnet schlank (Menge, Status, Notiz, Schritte, Zutaten; rezepte/backen.js); der volle Rechner
 // (Mehlmischung, Quellstück, Hydration, Prozente, Klappen) ist ein Knopf weiter. Der Teigrechner ist derselbe
 // Rechner ohne Rezept.
 // Liest Eingaben, ruft den Rechner auf und schreibt die Grammzahlen in die Seite.
@@ -512,14 +512,14 @@ function zeichneRezept() {
       ${statusHtml(r.status, 'b')}
     </section>
 
+    ${notizKlappeHtml(r.notiz, 'b', offeneKlappen.has('notiz'))}
+
     ${backenSchritteHtml(r, zustand.teig)}
 
     <details class="klappe" data-klappe="zutaten" ${offeneKlappen.has('zutaten') || ohneSchritte ? 'open' : ''}>
       <summary>Zutaten (${zutaten.anzahl})</summary>
       <div class="klappe-inhalt">${zutaten.html}${geraeteHtml(r)}</div>
     </details>
-
-    ${notizKlappeHtml(r.notiz, 'b', offeneKlappen.has('notiz'))}
 
     <button type="button" class="knopf" data-aktion="teigrechner-voll">Im Teigrechner anpassen</button>
     <button type="button" class="knopf knopf-voll" data-aktion="speichern-karte"
