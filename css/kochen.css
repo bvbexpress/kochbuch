@@ -172,6 +172,16 @@
   color: var(--zahl);
 }
 
+/* Zeitangaben im Schritttext (automatisch hervorgehoben) */
+.zeit {
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--akzent-weich);
+  color: var(--text);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 /* Gerät: kleines Kennzeichen (am Schritt und als Liste oben im Rezept) */
 .geraet-tag {
   justify-self: start;
