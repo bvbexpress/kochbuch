@@ -16,7 +16,7 @@ import {
   SUCHE_AB, ordneRezepte, rezeptFavoriten, schalteRezeptFavorit, gesehen, markiereGesehen,
   portionenText, mengenInSchritten, ernaehrungAnzeige,
 } from './liste.js';
-import { schritteHtml, statusHtml, notizHtml, geraeteHtml, vermerkHtml } from './teile.js';
+import { schritteHtml, statusHtml, notizKlappeHtml, geraeteHtml, vermerkHtml } from './teile.js';
 import { vermerkText } from '../teig/vorlagen.js';
 
 const MAX_PORTIONEN = 99;
@@ -29,6 +29,7 @@ let rueckgaengig = () => {};  // zeigt die Leiste „Rückgängig“ (kommt aus 
 let seite = 'liste';        // 'liste' | 'rezept'
 let rezeptId = null;
 let suche = '';
+let notizOffen = false;     // Notiz-Klappe (Vorschau in einer Zeile) offen?
 let zutatenOffen = false;   // zu: die Mengen stehen ohnehin in den Schritten, so sind sie gleich im Blick
 let notizZeitgeber = null;
 const portionenWahl = new Map(); // rezept-id → gewählte Portionen
@@ -48,6 +49,7 @@ export function startKochen(ziel, { zurueck, beiOeffnen: oeffnen, rueckgaengig: 
   wurzel.addEventListener('change', beiAenderung);
   wurzel.addEventListener('toggle', (e) => {
     if (e.target.dataset?.kklappe === 'zutaten') zutatenOffen = e.target.open;
+    if (e.target.dataset?.klappe === 'notiz') notizOffen = e.target.open;
   }, true);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') speichereNotizJetzt();
@@ -156,7 +158,8 @@ function rezeptHtml(r) {
   return `
     <header class="seiten-kopf">
       <button type="button" class="knopf-zurueck" data-k="zurueck" aria-label="Zurück">‹</button>
-      <h1 class="kopf-titel">${text(r.name)}</h1>
+      <h1 class="kopf-titel">${text(r.name)}${ernaehrung
+        ? ` <span class="ernaehrung" role="img" aria-label="${text(ernaehrung.text)}">${ernaehrung.zeichen}</span>` : ''}</h1>
       <button type="button" class="stern" data-kstern="${text(r.id)}" aria-pressed="${stern}"
               aria-label="${stern ? 'Aus den Favoriten nehmen' : 'Als Favorit markieren'}">${stern ? '★' : '☆'}</button>
     </header>
@@ -172,14 +175,12 @@ function rezeptHtml(r) {
       </div>
       ${statusHtml(r.status, 'k')}
     </section>
-    ${notizHtml(r.notiz, 'k')}
-    ${ernaehrung ? `<p class="ernaehrung-zeile"><span aria-hidden="true">${ernaehrung.zeichen}</span> ${text(ernaehrung.text)}</p>` : ''}
-    ${geraeteHtml(r)}
+    ${notizKlappeHtml(r.notiz, 'k', notizOffen)}
+    ${schritteHtml(r, { mengen, haken, p: 'k' })}
     <details class="klappe" data-kklappe="zutaten" ${zutatenOffen ? 'open' : ''}>
       <summary>Zutaten (${r.zutaten.length})</summary>
-      <div class="klappe-inhalt"><ul class="zutaten-liste">${zutatenZeilen || '<li class="leise">Keine Zutaten.</li>'}</ul></div>
-    </details>
-    ${schritteHtml(r, { mengen, haken, p: 'k' })}`;
+      <div class="klappe-inhalt"><ul class="zutaten-liste">${zutatenZeilen || '<li class="leise">Keine Zutaten.</li>'}</ul>${geraeteHtml(r)}</div>
+    </details>`;
 }
 
 function oeffneRezept(id) {

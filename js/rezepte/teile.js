@@ -72,13 +72,22 @@ export function statusHtml(status, p) {
     </div>`;
 }
 
-/** Notizfeld (wird kurz nach dem Tippen gespeichert). */
-export function notizHtml(notiz, p) {
-  return `<section class="karte notiz" aria-label="Notiz">
-      <label class="feld"><span class="feld-name">Notiz</span>
-        <textarea class="eingabe notiz-feld" data-${p}notiz rows="2" maxlength="2000"
-                  placeholder="z. B. weniger Salz …" autocomplete="off">${text(notiz)}</textarea></label>
-    </section>`;
+/**
+ * Notiz als einzeilige Vorschau (Kochen und Backen); antippen klappt das Feld zum Lesen und Bearbeiten auf.
+ * Leere Notiz: nur „Notiz hinzufügen“. `offen` = Zustand der Klappe (bleibt beim Neuzeichnen).
+ */
+export function notizKlappeHtml(notiz, p, offen = false) {
+  const vorschau = String(notiz ?? '').trim();
+  return `<details class="klappe notiz-klappe" data-klappe="notiz" ${offen ? 'open' : ''}>
+      <summary aria-label="Notiz">
+        <span class="notiz-titel">${vorschau ? 'Notiz' : 'Notiz hinzufügen'}</span>
+        ${vorschau ? `<span class="notiz-vorschau">${text(vorschau)}</span>` : ''}
+      </summary>
+      <div class="klappe-inhalt">
+        <textarea class="eingabe notiz-feld" data-${p}notiz rows="3" maxlength="2000"
+                  placeholder="z. B. weniger Salz …" aria-label="Notiz" autocomplete="off">${text(notiz)}</textarea>
+      </div>
+    </details>`;
 }
 
 /** „Geräte: Wok · Ofen 200 °C“ oben im Rezept; ohne Geräte nichts. */
