@@ -12,7 +12,9 @@
 // Deno kann keine Dateien aus js/ laden: Kategorien, Grenzen, eingebaute Zutaten und `zutatId` sind hier
 // Kopien. tests/connector.test.js prüft sie gegen die Originale und dass alles, was diese Funktion speichert,
 // von `bereinigeRezept` (js/rezepte/rezept.js) unverändert übernommen wird.
-// Back-Rezepte (Teigwerte) nimmt der Connector erst mit dem Back-Umbau (Schritt 5) an.
+// Back-Rezepte (`art: 'backen'`, mit Teigwerten) nimmt der Connector seit Etappe 3, Connector-Erweiterung, an:
+// `teig`, `mehl` bzw. `teiglinge`, `modus`, `schrittteig`. Die Teig-Rechnung (Gesamtmehl, Gramm) ist eine Kopie aus
+// js/teig/rechner.js; Claude bekommt die errechneten Gramm zurück und kann so Fehler in den Teigwerten sofort sehen.
 // Bewusst ohne Typen geschrieben: dieselbe Datei läuft in Deno (Supabase) und in den Tests (Node).
 
 const VERSIONEN = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
@@ -39,6 +41,35 @@ export const KOCH_KATEGORIEN = [
   { id: 'fruehstueck', name: 'Frühstück & Süßes' },
   { id: 'sonstiges', name: 'Sonstiges' },
 ];
+/** = KATEGORIEN in js/teig/vorlagen.js (Back-Rezepte) */
+export const BACK_KATEGORIEN = [
+  { id: 'brot', name: 'Brot' },
+  { id: 'broetchen', name: 'Brötchen' },
+  { id: 'pizza', name: 'Pizza' },
+  { id: 'focaccia', name: 'Focaccia' },
+  { id: 'gebaeck', name: 'Gebäck' },
+];
+export const ARTEN = ['kochen', 'backen'];
+/** = MODI in js/teig/vorlagen.js */
+export const MODI = ['mehl', 'teiglinge'];
+/** = TEIG_TEILE in js/rezepte/rezept.js */
+export const TEIG_TEILE = ['mehl', 'wasser', 'starter', 'salz', 'oel', 'hefe', 'saaten', 'quellwasser', 'zusaetze'];
+/** = FORMAT in js/teig/vorlagen.js und STANDARD_VERLUST in js/teig/rechner.js */
+export const TEIG_FORMAT = 2;
+export const STANDARD_VERLUST = 2;
+/** = MEHLE / SAATEN / ZUSAETZE in js/teig/zutaten.js (feste ids; die Werte werden nur für Zusätze gebraucht) */
+export const TEIG_MEHLE = [
+  ['tipo00', 'Tipo 00'], ['weizen550', 'Weizen 550'], ['weizenvollkorn', 'Weizenvollkorn'], ['dinkelvollkorn', 'Dinkelvollkorn'],
+  ['roggen1150', 'Roggen 1150'], ['roggenvollkorn', 'Roggenvollkorn'], ['hafervollkorn', 'Hafervollkorn'],
+].map(([id, name]) => ({ id, name }));
+export const TEIG_SAATEN = [
+  ['leinsamen', 'Leinsamen'], ['sonnenblumenkerne', 'Sonnenblumenkerne'], ['kuerbiskerne', 'Kürbiskerne'],
+  ['sesam', 'Sesam'], ['chiasamen', 'Chiasamen'], ['haferflocken', 'Haferflocken'],
+].map(([id, name]) => ({ id, name }));
+export const TEIG_ZUSAETZE = [
+  { id: 'milch', name: 'Milch', wasser: 87 }, { id: 'ei', name: 'Ei', wasser: 75 }, { id: 'butter', name: 'Butter', wasser: 16 },
+  { id: 'zucker', name: 'Zucker', wasser: 0 }, { id: 'honig', name: 'Honig', wasser: 17 },
+];
 export const PORTIONSARTEN = ['personen', 'stueck', 'laibe'];
 export const REGELN = ['linear', 'ganz', 'fix'];
 export const STATUS = ['erprobt', 'testen'];
@@ -49,7 +80,7 @@ export const MIT_TIER = ['fisch', 'fleisch']; // nur hier gibt es „auch vegeta
 export const ZUTAT_ARTEN = ['mehl', 'saat', 'zusatz', 'gemuese', 'obst', 'fleisch', 'milchprodukt', 'gewuerz', 'vorrat', 'sonstiges'];
 /** = Grenzen in js/rezepte/rezept.js */
 export const GRENZEN = {
-  name: 80, einheit: 20, zutaten: 80, schritte: 60, schritt: 500, notiz: 2000, schrittzutaten: 20, geraet: 40, zahl: 100_000, portionen: 1000,
+  name: 80, einheit: 20, zutaten: 80, schritte: 60, schritt: 500, notiz: 2000, schrittzutaten: 20, geraet: 40, zahl: 100_000, portionen: 1000, teigzeilen: 20,
 };
 /** = EINGEBAUT in js/rezepte/katalog.js (Mehle, Saaten, Zusätze mit festen ids, dazu KOCH_ZUTATEN) */
 export const EINGEBAUT = [
@@ -134,15 +165,209 @@ function finde(liste, name) {
 
 const zutatName = (katalog, id) => katalog.find((z) => z.id === id)?.name ?? id;
 
+// ---------- Teig (Back-Rezepte) ----------
+
+const rund = (x, stellen = 1) => Math.round(x * 10 ** stellen) / 10 ** stellen;
+const inBereich = (x, min, max) => typeof x === 'number' && Number.isFinite(x) && x >= min && x <= max;
+
+/**
+ * Prüft die Teigwerte (Prozent vom Gesamtmehl) streng und gibt sie in der Form von `bereinigeTeig`
+ * (js/teig/pruefung.js) zurück – oder null und Gründe über `f`. Bekannte Mehle, Saaten und Zusätze
+ * bekommen ihre feste id; Zusätze ihren Standard-Wasseranteil, wenn keiner angegeben ist.
+ */
+export function pruefeTeig(roh, fehler) {
+  const f = (t) => { fehler.push(t); };
+  if (!roh || typeof roh !== 'object' || Array.isArray(roh)) return f('teig fehlt oder ist kein Objekt.'), null;
+  const vorher = fehler.length;
+  const fremd = Object.keys(roh).filter((k) => !['format', 'hydration', 'starter', 'salz', 'oel', 'hefe', 'hefeArt', 'mehlsorten', 'saaten', 'quellwasser', 'zusaetze'].includes(k));
+  if (fremd.length) f(`teig: unbekannte Felder ${fremd.join(', ')}.`);
+  if (roh.format !== undefined && roh.format !== TEIG_FORMAT) f(`teig.format muss ${TEIG_FORMAT} sein oder fehlen.`);
+
+  const wert = (name, min, max, standard, hinweis) => {
+    const x = roh[name] ?? standard;
+    if (x === undefined || !inBereich(x, min, max)) { f(`teig.${name} muss eine Zahl von ${min} bis ${max} sein${hinweis ? ` (${hinweis})` : ''}.`); return 0; }
+    return x;
+  };
+  const hydration = wert('hydration', 30, 200, undefined, 'Prozent vom Gesamtmehl');
+  const starter = wert('starter', 0, 150, 0, 'Prozent vom Gesamtmehl, Starter hat 100 % Hydration');
+  const salz = wert('salz', 0, 10, 0, 'Prozent');
+  const oel = wert('oel', 0, 50, 0, 'Prozent');
+  const hefe = wert('hefe', 0, 10, 0, 'Prozent, in der Hefe-Art von hefeArt');
+  const quellwasser = wert('quellwasser', 0, 200, 0, 'Prozent vom Gesamtmehl, nur für Saaten');
+  const hefeArt = roh.hefeArt ?? 'frisch';
+  if (!['frisch', 'trocken'].includes(hefeArt)) f('teig.hefeArt: frisch | trocken.');
+
+  /** Zeilen mit name + Zahl (+ id); bekannte Namen bekommen die feste id und ihre Schreibweise. */
+  const zeilen = (liste, feld, wertName, bekannte, min, max, wasser = false) => {
+    if (liste === undefined || liste === null) return [];
+    if (!Array.isArray(liste) || liste.length > GRENZEN.teigzeilen) {
+      f(`teig.${feld} muss eine Liste mit höchstens ${GRENZEN.teigzeilen} Einträgen sein.`);
+      return [];
+    }
+    const namen = new Set();
+    const aus = [];
+    liste.forEach((z, i) => {
+      const nr = `teig.${feld} ${i + 1}`;
+      if (!z || typeof z !== 'object' || Array.isArray(z)) return f(`${nr}: kein Objekt.`);
+      const extra = Object.keys(z).filter((k) => !['id', 'name', wertName, ...(wasser ? ['wasser'] : [])].includes(k));
+      if (extra.length) f(`${nr}: unbekannte Felder ${extra.join(', ')}.`);
+      const eingabe = sauber(z.name);
+      if (!eingabe || eingabe.length > GRENZEN.name) return f(`${nr}: name fehlt oder ist zu lang.`);
+      const treffer = bekannte.find((b) => b.name.toLowerCase() === eingabe.toLowerCase() || b.id === z.id);
+      const name = treffer?.name ?? eingabe;
+      if (namen.has(name.toLowerCase())) return f(`${nr}: „${name}“ steht doppelt.`);
+      namen.add(name.toLowerCase());
+      if (!inBereich(z[wertName], min, max) || z[wertName] === 0) return f(`${nr} (${name}): ${wertName} muss eine Zahl über 0 bis ${max} sein.`);
+      const id = treffer?.id ?? (gueltigeZutatId(z.id) ? z.id : null);
+      const zeile = { id, name, [wertName]: z[wertName] };
+      if (wasser) {
+        const w = z.wasser ?? treffer?.wasser;
+        if (!inBereich(w, 0, 100)) return f(`${nr} (${name}): wasser (Wasseranteil in %, 0–100) fehlt – für „${name}“ gibt es keinen Standardwert.`);
+        zeile.wasser = w;
+      }
+      aus.push(zeile);
+    });
+    return aus;
+  };
+  const mehlsorten = zeilen(roh.mehlsorten, 'mehlsorten', 'anteil', TEIG_MEHLE, 0, 100);
+  if (!Array.isArray(roh.mehlsorten) || roh.mehlsorten.length === 0) f('teig.mehlsorten fehlt (mindestens eine Mehlsorte, Anteile in % vom zugegebenen Mehl).');
+  else if (Math.abs(mehlsorten.reduce((a, m) => a + m.anteil, 0) - 100) > 0.5) f('teig.mehlsorten: die Anteile müssen zusammen 100 % ergeben.');
+  const saaten = zeilen(roh.saaten, 'saaten', 'prozent', TEIG_SAATEN, 0, 100);
+  const zusaetze = zeilen(roh.zusaetze, 'zusaetze', 'prozent', TEIG_ZUSAETZE, 0, 200, true);
+
+  if (fehler.length > vorher) return null;
+  return { format: TEIG_FORMAT, hydration, starter, salz, oel, hefe, hefeArt, mehlsorten, saaten, quellwasser, zusaetze };
+}
+
+/** Teiglinge-Angabe streng: Anzahl und Gewicht über 0, Verlust 0–100 % (Standard 2 %). */
+export function pruefeTeiglinge(roh, fehler) {
+  const f = (t) => { fehler.push(t); };
+  if (!roh || typeof roh !== 'object' || Array.isArray(roh)) return f('teiglinge fehlt: { anzahl, gewicht (g je Teigling), verlust (% Zuschlag, Standard 2) }.'), null;
+  const fremd = Object.keys(roh).filter((k) => !['anzahl', 'gewicht', 'verlust'].includes(k));
+  if (fremd.length) return f(`teiglinge: unbekannte Felder ${fremd.join(', ')}.`), null;
+  const verlust = roh.verlust ?? STANDARD_VERLUST;
+  if (!inBereich(roh.anzahl, 0, 10_000) || roh.anzahl === 0) return f('teiglinge.anzahl muss eine Zahl über 0 sein (höchstens 10000).'), null;
+  if (!inBereich(roh.gewicht, 0, GRENZEN.zahl) || roh.gewicht === 0) return f('teiglinge.gewicht muss eine Zahl über 0 sein (Gramm je Teigling).'), null;
+  if (!inBereich(verlust, 0, 100)) return f('teiglinge.verlust muss eine Zahl von 0 bis 100 sein (Prozent).'), null;
+  return { anzahl: roh.anzahl, gewicht: roh.gewicht, verlust };
+}
+
+const summe = (zahlen) => zahlen.reduce((a, b) => a + (b || 0), 0);
+
+/** = anteileProGrammMehl in js/teig/rechner.js */
+function anteileProGrammMehl(teig) {
+  const zusatzOhneWasser = summe(teig.zusaetze.map((z) => z.prozent * (1 - z.wasser / 100)));
+  return (teig.hydration + teig.salz + teig.oel + teig.hefe + summe(teig.saaten.map((s) => s.prozent)) + teig.quellwasser + zusatzOhneWasser) / 100;
+}
+
+/** = mehlFuerTeiglinge in js/teig/rechner.js: zugegebenes Mehl (was man abwiegt) für Anzahl × Gewicht. */
+export function mehlFuerTeiglinge(teig, anzahl, gewicht, verlust = 0) {
+  const gesamt = anzahl * gewicht * (1 + Math.max(verlust, 0) / 100);
+  if (gesamt <= 0) return 0;
+  return (gesamt / (1 + anteileProGrammMehl(teig))) * Math.max(1 - teig.starter / 200, 0);
+}
+
+/** = berechne in js/teig/rechner.js (gleiche Gramm, ungerundet) für das zugegebene Mehl. */
+export function rechneTeig(teig, mehl) {
+  const nenner = 1 - teig.starter / 200;
+  const gesamtmehl = mehl > 0 && nenner > 0 ? mehl / nenner : 0;
+  const p = (prozent) => (gesamtmehl * prozent) / 100;
+  const starter = p(teig.starter);
+  const zusaetze = teig.zusaetze.map((z) => ({ name: z.name, gramm: p(z.prozent), wasser: (p(z.prozent) * z.wasser) / 100 }));
+  const zusatzWasser = summe(zusaetze.map((z) => z.wasser));
+  const wasserGesamt = p(teig.hydration);
+  const anteile = summe(teig.mehlsorten.map((s) => s.anteil));
+  const saaten = teig.saaten.map((s) => ({ name: s.name, gramm: p(s.prozent) }));
+  const quellwasser = p(teig.quellwasser);
+  const salz = p(teig.salz);
+  const oel = p(teig.oel);
+  const hefe = p(teig.hefe);
+  return {
+    gesamtmehl,
+    mehl: teig.mehlsorten.map((s) => ({ name: s.name, gramm: anteile > 0 ? (mehl * s.anteil) / anteile : 0 })),
+    wasser: wasserGesamt - starter / 2 - zusatzWasser,
+    starter, salz, oel, hefe, saaten, quellwasser,
+    zusaetze: zusaetze.map(({ name, gramm }) => ({ name, gramm })),
+    teigGesamt: gesamtmehl + wasserGesamt + salz + oel + hefe + summe(saaten.map((s) => s.gramm)) + quellwasser
+      + summe(zusaetze.map((z) => z.gramm)) - zusatzWasser,
+  };
+}
+
+/** Gramm für Claude: gerundet, nur was der Teig wirklich hat. */
+export function teigGramm(teig, mehl) {
+  const r = rechneTeig(teig, mehl);
+  const g = (x) => rund(x, 1);
+  const mit = (name, x) => (x > 0 ? { [name]: g(x) } : {});
+  return {
+    gesamtmehl: g(r.gesamtmehl),
+    mehl: r.mehl.map((m) => ({ name: m.name, gramm: g(m.gramm) })),
+    wasser: g(r.wasser),
+    ...mit('starter', r.starter), ...mit('salz', r.salz), ...mit('oel', r.oel), ...mit('hefe', r.hefe), ...mit('quellwasser', r.quellwasser),
+    ...(r.saaten.length ? { saaten: r.saaten.map((s) => ({ name: s.name, gramm: g(s.gramm) })) } : {}),
+    ...(r.zusaetze.length ? { zusaetze: r.zusaetze.map((z) => ({ name: z.name, gramm: g(z.gramm) })) } : {}),
+    teigGesamt: g(r.teigGesamt),
+  };
+}
+
+/**
+ * Teigteile je Schritt streng prüfen: [{ teil, anteil? }] je Schritt (gleiche Länge wie die Schritte).
+ * Nur Teile, die der Teig hat; je Schritt einmal; über alle Schritte nie mehr als 100 % eines Teils.
+ * Ergebnis { schrittteig, verteilt } – `verteilt` = je Teil, wie viel Prozent in den Schritten vorkommt.
+ */
+export function pruefeSchrittTeig(roh, anzahlSchritte, teig, fehler) {
+  const f = (t) => { fehler.push(t); };
+  if (roh === undefined || roh === null) return null;
+  if (!Array.isArray(roh) || roh.length !== anzahlSchritte) {
+    return f('schrittteig braucht genau so viele Listen wie es Schritte gibt (leere Liste = kein Teigteil in diesem Schritt).'), null;
+  }
+  const vorhanden = {
+    mehl: true, wasser: true, starter: teig.starter > 0, salz: teig.salz > 0, oel: teig.oel > 0, hefe: teig.hefe > 0,
+    saaten: teig.saaten.length > 0, quellwasser: teig.saaten.length > 0, zusaetze: teig.zusaetze.length > 0,
+  };
+  const vorher = fehler.length;
+  const gesamt = {};
+  const je = roh.map((liste, i) => {
+    const nr = `Schritt ${i + 1}`;
+    if (!Array.isArray(liste) || liste.length > TEIG_TEILE.length) return f(`${nr}: schrittteig ist keine Liste.`), [];
+    const gesehen = new Set();
+    const aus = [];
+    for (const e of liste) {
+      if (!e || typeof e !== 'object' || Array.isArray(e) || Object.keys(e).some((k) => !['teil', 'anteil'].includes(k))) {
+        f(`${nr}: Eintrag braucht teil (${TEIG_TEILE.join(' | ')}) und optional anteil (0–1).`);
+        continue;
+      }
+      if (!TEIG_TEILE.includes(e.teil)) { f(`${nr}: teil „${e.teil}“ unbekannt. Erlaubt: ${TEIG_TEILE.join(', ')}.`); continue; }
+      if (!vorhanden[e.teil]) { f(`${nr}: ${e.teil} kommt im Teig nicht vor (Wert ist 0 oder die Liste leer).`); continue; }
+      if (gesehen.has(e.teil)) { f(`${nr}: ${e.teil} steht doppelt.`); continue; }
+      const anteil = e.anteil ?? 1;
+      if (!inBereich(anteil, 0, 1) || anteil === 0) { f(`${nr}: anteil von ${e.teil} muss größer als 0 und höchstens 1 sein.`); continue; }
+      gesehen.add(e.teil);
+      gesamt[e.teil] = (gesamt[e.teil] ?? 0) + anteil;
+      aus.push(anteil === 1 ? { teil: e.teil } : { teil: e.teil, anteil });
+    }
+    return aus;
+  });
+  for (const [teil, x] of Object.entries(gesamt)) {
+    if (x > 1.001) f(`schrittteig: ${teil} ist insgesamt ${rund(x * 100, 0)} % – mehr als 100 %. Teilmengen mit anteil aufteilen (z. B. 0,9 und 0,1).`);
+  }
+  if (fehler.length > vorher) return null;
+  return {
+    schrittteig: je.some((e) => e.length) ? je : null,
+    verteilt: Object.fromEntries(Object.entries(gesamt).map(([t, x]) => [t, rund(x * 100, 0)])),
+  };
+}
+
 // ---------- Prüfen ----------
 
-const FELDER = ['name', 'kategorie', 'portionen', 'portionsart', 'zutaten', 'schritte', 'schrittzutaten', 'schrittgeraete', 'status',
-  'ernaehrung', 'auchVegetarisch', 'notiz', 'quelle'];
+const FELDER = ['art', 'name', 'kategorie', 'portionen', 'portionsart', 'zutaten', 'schritte', 'schrittzutaten', 'schrittgeraete', 'status',
+  'ernaehrung', 'auchVegetarisch', 'notiz', 'quelle', 'teig', 'mehl', 'modus', 'teiglinge', 'schrittteig'];
+/** Felder, die nur Back-Rezepte haben. */
+const BACK_FELDER = ['teig', 'mehl', 'modus', 'teiglinge', 'schrittteig'];
 
-function kategorieVon(x) {
+function kategorieVon(x, liste = KOCH_KATEGORIEN) {
   if (typeof x !== 'string') return null;
   const k = x.trim().toLowerCase();
-  return KOCH_KATEGORIEN.find((e) => e.id === k || e.name.toLowerCase() === k)?.id ?? null;
+  return liste.find((e) => e.id === k || e.name.toLowerCase() === k)?.id ?? null;
 }
 
 /**
@@ -153,8 +378,12 @@ function kategorieVon(x) {
  * Katalogeinträge { id, name, art } – oder { fehler: [Text, …] }.
  * `katalog` wird nicht verändert. `bekannt`: weitere erlaubte Katalog-ids (Zutaten des bisherigen Rezepts).
  * `pflicht`: schrittzutaten und ernaehrung müssen angegeben sein (Anlegen; beim Aktualisieren alter Rezepte nicht).
+ * Back-Rezepte (`art: 'backen'`): Teigwerte (`teig`, `mehl` bzw. `teiglinge`, `modus`, `schrittteig`) werden streng geprüft;
+ * Zutaten und Portionen sind dort freiwillig (Belag u. ä.). `teigDurchreichen`: beim Aktualisieren ohne Teig-Änderung gelten
+ * die gespeicherten Teigwerte unverändert (alte Rezepte vom Handy sollen sich nicht an der strengen Prüfung stoßen).
+ * Ergebnis bei Back-Rezepten zusätzlich: `gramm` (errechnete Mengen) und `verteilt` (Prozent je Teigteil in den Schritten).
  */
-export function pruefeRezept(roh, katalog, { bekannt = [], pflicht = true } = {}) {
+export function pruefeRezept(roh, katalog, { bekannt = [], pflicht = true, teigDurchreichen = false } = {}) {
   if (!roh || typeof roh !== 'object' || Array.isArray(roh)) return { fehler: ['Rezept fehlt oder ist kein Objekt.'] };
   const fehler = [];
   const f = (t) => fehler.push(t);
@@ -166,10 +395,20 @@ export function pruefeRezept(roh, katalog, { bekannt = [], pflicht = true } = {}
   if (!name) f('name fehlt.');
   else if (name.length > GRENZEN.name) f(`name ist zu lang (höchstens ${GRENZEN.name} Zeichen).`);
 
-  const kategorie = kategorieVon(roh.kategorie);
-  if (!kategorie) f(`kategorie fehlt oder ist unbekannt. Erlaubt: ${KOCH_KATEGORIEN.map((k) => k.id).join(', ')}.`);
+  const art = roh.art ?? 'kochen';
+  if (!ARTEN.includes(art)) f(`art: ${ARTEN.join(' | ')}.`);
+  const backen = art === 'backen';
+  if (!backen) {
+    const zuviel = BACK_FELDER.filter((k) => roh[k] !== undefined && roh[k] !== null);
+    if (zuviel.length) f(`${zuviel.join(', ')} gibt es nur bei Back-Rezepten (art: backen).`);
+  }
 
-  if (!istZahl(roh.portionen, GRENZEN.portionen)) f(`portionen muss eine Zahl über 0 sein (höchstens ${GRENZEN.portionen}).`);
+  const kategorienListe = backen ? BACK_KATEGORIEN : KOCH_KATEGORIEN;
+  const kategorie = kategorieVon(roh.kategorie, kategorienListe);
+  if (!kategorie) f(`kategorie fehlt oder ist unbekannt. Erlaubt: ${kategorienListe.map((k) => k.id).join(', ')}.`);
+
+  const ohnePortionen = backen && (roh.portionen === undefined || roh.portionen === null);
+  if (!ohnePortionen && !istZahl(roh.portionen, GRENZEN.portionen)) f(`portionen muss eine Zahl über 0 sein (höchstens ${GRENZEN.portionen}).`);
   const portionsart = roh.portionsart ?? 'personen';
   if (!PORTIONSARTEN.includes(portionsart)) f(`portionsart: ${PORTIONSARTEN.join(' | ')}.`);
 
@@ -178,9 +417,10 @@ export function pruefeRezept(roh, katalog, { bekannt = [], pflicht = true } = {}
   const erlaubt = new Set([...katalog.map((z) => z.id), ...bekannt]);
   const neu = [];
   const zutaten = [];
-  if (!Array.isArray(roh.zutaten) || roh.zutaten.length === 0) f('zutaten fehlt (mindestens eine Zutat).');
-  else if (roh.zutaten.length > GRENZEN.zutaten) f(`Höchstens ${GRENZEN.zutaten} Zutaten.`);
-  else roh.zutaten.forEach((z, i) => {
+  const rohZutaten = backen && (roh.zutaten === undefined || roh.zutaten === null) ? [] : roh.zutaten;
+  if (!Array.isArray(rohZutaten) || (rohZutaten.length === 0 && !backen)) f('zutaten fehlt (mindestens eine Zutat).');
+  else if (rohZutaten.length > GRENZEN.zutaten) f(`Höchstens ${GRENZEN.zutaten} Zutaten.`);
+  else rohZutaten.forEach((z, i) => {
     const nr = `Zutat ${i + 1}`;
     if (!z || typeof z !== 'object' || Array.isArray(z)) return f(`${nr}: kein Objekt.`);
     const extra = Object.keys(z).filter((k) => !['name', 'zutat', 'menge', 'einheit', 'regel', 'art'].includes(k));
@@ -228,7 +468,7 @@ export function pruefeRezept(roh, katalog, { bekannt = [], pflicht = true } = {}
   let schrittzutaten = null;
   const sz = roh.schrittzutaten;
   if (sz === undefined || sz === null) {
-    if (pflicht) f('schrittzutaten fehlt: je Schritt eine Liste der Zutaten dieses Schritts (leere Liste, wenn keine).');
+    if (pflicht && (!backen || zutaten.length)) f('schrittzutaten fehlt: je Schritt eine Liste der Zutaten dieses Schritts (leere Liste, wenn keine).');
   } else if (!Array.isArray(sz) || !Array.isArray(roh.schritte) || sz.length !== roh.schritte.length) {
     f('schrittzutaten braucht genau so viele Listen wie es Schritte gibt.');
   } else {
@@ -274,6 +514,43 @@ export function pruefeRezept(roh, katalog, { bekannt = [], pflicht = true } = {}
     }
   }
 
+  // Teigwerte (nur Back-Rezepte)
+  let teig = null;
+  let mehl = null;
+  let modus = null;
+  let teiglinge = null;
+  let schrittteig = null;
+  let gramm = null;
+  let verteilt = null;
+  if (backen) {
+    modus = roh.modus ?? (roh.teiglinge !== undefined && roh.teiglinge !== null ? 'teiglinge' : 'mehl');
+    if (!MODI.includes(modus)) f(`modus: ${MODI.join(' | ')}.`);
+    if (teigDurchreichen) {
+      teig = roh.teig; mehl = roh.mehl; teiglinge = roh.teiglinge ?? null;
+    } else {
+      teig = pruefeTeig(roh.teig, fehler);
+      if (modus === 'teiglinge') {
+        teiglinge = pruefeTeiglinge(roh.teiglinge, fehler);
+        if (teig && teiglinge) mehl = rund(mehlFuerTeiglinge(teig, teiglinge.anzahl, teiglinge.gewicht, teiglinge.verlust), 2);
+      } else {
+        if (roh.teiglinge !== undefined && roh.teiglinge !== null) f('teiglinge gibt es nur im modus teiglinge.');
+        if (!istZahl(roh.mehl, GRENZEN.zahl)) f('mehl fehlt: zugegebenes Mehl in Gramm (was man abwiegt, ohne das Mehl im Starter), eine Zahl über 0.');
+        else mehl = roh.mehl;
+      }
+    }
+    if (teig && mehl !== null && Array.isArray(roh.schritte)) {
+      if (!teigDurchreichen && mehl > 0) {
+        const r = rechneTeig(teig, mehl);
+        if (r.wasser < -0.05) f(`teig.hydration (${teig.hydration} %) ist zu niedrig: Starter und Zusatzzutaten bringen schon mehr Wasser mit, als der Teig insgesamt hat.`);
+      }
+      const st = pruefeSchrittTeig(roh.schrittteig, roh.schritte.length, teig, fehler);
+      if (st) { schrittteig = st.schrittteig; verteilt = st.verteilt; }
+      if (Number.isFinite(mehl) && mehl > 0 && !fehler.length) {
+        try { gramm = teigGramm(teig, mehl); } catch { gramm = null; }
+      }
+    }
+  }
+
   const quelle = roh.quelle ?? 'claude';
   if (!QUELLEN.includes(quelle)) f(`quelle: ${QUELLEN.join(' | ')}.`);
   const status = roh.status ?? (quelle === 'import' ? 'testen' : 'erprobt');
@@ -293,11 +570,12 @@ export function pruefeRezept(roh, katalog, { bekannt = [], pflicht = true } = {}
   if (fehler.length) return { fehler: fehler.slice(0, 15) };
   const benutzt = new Set(zutaten.map((z) => z.zutat));
   return {
+    ...(backen ? { gramm, verteilt } : {}),
     rezept: {
-      art: 'kochen',
+      art,
       name,
       kategorie,
-      portionen: roh.portionen,
+      ...(ohnePortionen ? {} : { portionen: roh.portionen }),
       portionsart,
       zutaten,
       schritte,
@@ -310,6 +588,12 @@ export function pruefeRezept(roh, katalog, { bekannt = [], pflicht = true } = {}
       ...(auchVegetarisch === true ? { auchVegetarisch } : {}),
       notiz,
       quelle,
+      ...(backen ? {
+        teig, mehl, modus,
+        ...(schrittteig ? { schrittteig } : {}),
+        // wie bei den Teigvorlagen: Teiglinge-Angabe nur im Teiglinge-Modus
+        ...(modus === 'teiglinge' && teiglinge ? { teiglinge } : {}),
+      } : {}),
     },
     neu: neu.filter((z) => benutzt.has(z.id)),
   };
@@ -324,7 +608,7 @@ export function fuerClaude(id, version, d, katalog) {
   const schritte = Array.isArray(d.schritte) ? d.schritte : [];
   return {
     id, version,
-    ...(d.art === 'backen' ? { art: 'backen', hinweis: 'Back-Rezept: Teigwerte kann der Connector noch nicht lesen oder ändern.' } : {}),
+    art: d.art === 'backen' ? 'backen' : 'kochen',
     name: d.name, kategorie: d.kategorie ?? null, portionen: d.portionen ?? null, portionsart: d.portionsart ?? 'personen',
     zutaten,
     schritte,
@@ -336,6 +620,13 @@ export function fuerClaude(id, version, d, katalog) {
     status: d.status ?? 'erprobt',
     ernaehrung: d.ernaehrung ?? null, auchVegetarisch: d.auchVegetarisch === true,
     notiz: d.notiz ?? '', quelle: d.quelle ?? 'hand',
+    ...(d.art === 'backen' ? {
+      teig: d.teig ?? null,
+      mehl: d.mehl ?? null,
+      modus: d.modus === 'teiglinge' ? 'teiglinge' : 'mehl',
+      teiglinge: d.modus === 'teiglinge' ? d.teiglinge ?? null : null,
+      schrittteig: Array.isArray(d.schrittteig) ? d.schrittteig : null,
+    } : {}),
   };
 }
 
@@ -354,12 +645,74 @@ const ZUTAT_SCHEMA = {
   additionalProperties: false,
 };
 
+const PROZENT_ZEILE = (wertName, beschreibung, mitWasser = false) => ({
+  type: 'array',
+  maxItems: GRENZEN.teigzeilen,
+  description: beschreibung,
+  items: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Name; bekannte Namen (Mehl, Saaten, Milch, Ei, Butter, Zucker, Honig) bekommen ihre feste id.' },
+      [wertName]: { type: 'number', exclusiveMinimum: 0 },
+      ...(mitWasser ? { wasser: { type: 'number', minimum: 0, maximum: 100, description: 'Wasseranteil in %; bei Milch, Ei, Butter, Zucker, Honig automatisch.' } } : {}),
+    },
+    required: ['name', wertName],
+    additionalProperties: false,
+  },
+});
+
+const TEIG_SCHEMA = {
+  type: 'object',
+  description: 'Teigwerte in Bäckerprozent: alle Prozente beziehen sich auf das Gesamtmehl (inklusive Mehl im Starter). Starter hat 100 % Hydration.',
+  properties: {
+    hydration: { type: 'number', minimum: 30, maximum: 200, description: 'Gesamtwasser in % vom Gesamtmehl; Wasser im Starter und in Milch/Ei zählt dazu.' },
+    starter: { type: 'number', minimum: 0, maximum: 150, description: 'Starter (Anstellgut) in % vom Gesamtmehl; 0 = ohne.' },
+    salz: { type: 'number', minimum: 0, maximum: 10 },
+    oel: { type: 'number', minimum: 0, maximum: 50 },
+    hefe: { type: 'number', minimum: 0, maximum: 10, description: 'In % vom Gesamtmehl, in der Hefe-Art von hefeArt.' },
+    hefeArt: { type: 'string', enum: ['frisch', 'trocken'] },
+    mehlsorten: PROZENT_ZEILE('anteil', 'Mehlsorten mit Anteil in % vom zugegebenen Mehl; zusammen 100 %. Mindestens eine.'),
+    saaten: PROZENT_ZEILE('prozent', 'Saaten (Quellstück) in % vom Gesamtmehl.'),
+    quellwasser: { type: 'number', minimum: 0, maximum: 200, description: 'Quellwasser für die Saaten in % vom Gesamtmehl; zählt nicht zur Hydration.' },
+    zusaetze: PROZENT_ZEILE('prozent', 'Zusatzzutaten (Milch, Ei, Butter, Zucker, Honig, eigene) in % vom Gesamtmehl.', true),
+  },
+  required: ['hydration', 'mehlsorten'],
+  additionalProperties: false,
+};
+
 const REZEPT_FELDER = {
+  art: { type: 'string', enum: ARTEN, description: 'kochen (Standard) oder backen (Teig mit Teigwerten).' },
   name: { type: 'string', maxLength: GRENZEN.name },
-  kategorie: { type: 'string', enum: KOCH_KATEGORIEN.map((k) => k.id), description: KOCH_KATEGORIEN.map((k) => `${k.id} = ${k.name}`).join('; ') },
-  portionen: { type: 'number', exclusiveMinimum: 0, maximum: GRENZEN.portionen },
+  kategorie: {
+    type: 'string', enum: [...KOCH_KATEGORIEN, ...BACK_KATEGORIEN].map((k) => k.id),
+    description: `Kochen: ${KOCH_KATEGORIEN.map((k) => `${k.id} = ${k.name}`).join('; ')}. Backen: ${BACK_KATEGORIEN.map((k) => `${k.id} = ${k.name}`).join('; ')}.`,
+  },
+  portionen: { type: 'number', exclusiveMinimum: 0, maximum: GRENZEN.portionen, description: 'Pflicht beim Kochen; beim Backen freiwillig.' },
+  teig: TEIG_SCHEMA,
+  mehl: { type: 'number', exclusiveMinimum: 0, maximum: GRENZEN.zahl, description: 'Nur Backen im modus mehl: zugegebenes Mehl in Gramm (was man abwiegt, ohne das Mehl im Starter).' },
+  modus: { type: 'string', enum: MODI, description: 'Nur Backen: mehl (Standard, Menge über das Mehl) oder teiglinge (Anzahl × Gewicht, z. B. Brötchen, Pizza).' },
+  teiglinge: {
+    type: 'object', description: 'Nur Backen im modus teiglinge: das Mehl wird daraus errechnet.',
+    properties: {
+      anzahl: { type: 'number', exclusiveMinimum: 0 }, gewicht: { type: 'number', exclusiveMinimum: 0, description: 'Gramm je Teigling.' },
+      verlust: { type: 'number', minimum: 0, maximum: 100, description: 'Zuschlag in % (Rest an Schüssel und Händen), Standard 2.' },
+    },
+    required: ['anzahl', 'gewicht'], additionalProperties: false,
+  },
+  schrittteig: {
+    type: 'array', maxItems: GRENZEN.schritte,
+    description: 'Nur Backen, optional: je Schritt (gleiche Länge wie schritte) die Teigteile, die dort gebraucht werden: [{ teil, anteil? }]. teil: mehl, wasser, starter, salz, oel, hefe, saaten, quellwasser, zusaetze (Mehl, Saaten und Zusätze je Sorte). anteil 0–1 für eine Teilmenge (Wasser 0,9 in Schritt 2 und 0,1 in Schritt 3); ohne anteil = alles. Ein Teil darf insgesamt nicht mehr als 100 % ergeben. Leere Liste = kein Teigteil.',
+    items: {
+      type: 'array', maxItems: TEIG_TEILE.length,
+      items: {
+        type: 'object',
+        properties: { teil: { type: 'string', enum: TEIG_TEILE }, anteil: { type: 'number', exclusiveMinimum: 0, maximum: 1 } },
+        required: ['teil'], additionalProperties: false,
+      },
+    },
+  },
   portionsart: { type: 'string', enum: PORTIONSARTEN },
-  zutaten: { type: 'array', items: ZUTAT_SCHEMA, minItems: 1, maxItems: GRENZEN.zutaten },
+  zutaten: { type: 'array', items: ZUTAT_SCHEMA, maxItems: GRENZEN.zutaten, description: 'Beim Kochen mindestens eine. Beim Backen nur weitere Zutaten (Belag, Füllung …): Mehl, Wasser, Salz, Starter, Hefe, Saaten rechnet der Teig.' },
   schritte: { type: 'array', items: { type: 'string', maxLength: GRENZEN.schritt }, minItems: 1, maxItems: GRENZEN.schritte, description: 'Kurz, ein Handgriff pro Schritt.' },
   schrittgeraete: {
     type: 'array',
@@ -402,7 +755,7 @@ export const WERKZEUGE = [
   },
   {
     name: 'rezepte_finden',
-    description: 'Sucht Rezepte nach Namen (Teilwort; leer = alle, höchstens 100). Mit id: das ganze Rezept samt version (für rezept_aktualisieren).',
+    description: 'Sucht Rezepte (Kochen und Backen) nach Namen (Teilwort; leer = alle, höchstens 100). Mit id: das ganze Rezept samt version (für rezept_aktualisieren), bei Back-Rezepten mit Teigwerten.',
     inputSchema: {
       type: 'object',
       properties: { suche: { type: 'string' }, id: { type: 'string' } },
@@ -412,7 +765,7 @@ export const WERKZEUGE = [
   },
   {
     name: 'rezept_anlegen',
-    description: 'Legt Koch-Rezepte neu an (eins oder mehrere, höchstens 50). Gibt es ein Rezept mit gleichem Namen schon, wird es nicht angelegt – dann rezept_aktualisieren. Unbekannte Zutatennamen werden neue Zutaten.',
+    description: 'Legt Rezepte neu an (eins oder mehrere, höchstens 50): Koch-Rezepte und Back-Rezepte (art: backen, mit teig, mehl bzw. teiglinge, schrittteig). Gibt es ein Rezept mit gleichem Namen schon, wird es nicht angelegt – dann rezept_aktualisieren. Unbekannte Zutatennamen werden neue Zutaten. Bei Back-Rezepten kommen die errechneten Gramm (gramm) und die Verteilung auf die Schritte (schrittteig_verteilt) zurück: bitte gegen das Rezept prüfen.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -420,7 +773,7 @@ export const WERKZEUGE = [
           type: 'array', minItems: 1, maxItems: MAX_REZEPTE,
           items: {
             type: 'object', properties: REZEPT_FELDER, additionalProperties: false,
-            required: ['name', 'kategorie', 'portionen', 'zutaten', 'schritte', 'schrittzutaten', 'ernaehrung'],
+            required: ['name', 'kategorie', 'schritte', 'ernaehrung'],
           },
         },
       },
@@ -431,7 +784,7 @@ export const WERKZEUGE = [
   },
   {
     name: 'rezept_aktualisieren',
-    description: 'Ändert ein vorhandenes Rezept. Nötig: id und version aus rezepte_finden. Nur die angegebenen Felder werden ersetzt (notiz ersetzt die alte Notiz ganz). Wer zutaten oder schritte ändert, liefert schrittzutaten neu mit (und schrittgeraete, falls das Rezept Geräte hat). Wurde das Rezept inzwischen anders geändert, bleibt es unverändert und die Änderung wird eine Kopie.',
+    description: 'Ändert ein vorhandenes Rezept. Nötig: id und version aus rezepte_finden. Nur die angegebenen Felder werden ersetzt (notiz ersetzt die alte Notiz ganz). Wer zutaten oder schritte ändert, liefert schrittzutaten neu mit (und schrittgeraete bzw. schrittteig, falls das Rezept sie hat). Back-Rezepte: teig wird als Ganzes ersetzt (erst mit rezepte_finden lesen und ändern); die art lässt sich nicht ändern. Wurde das Rezept inzwischen anders geändert, bleibt es unverändert und die Änderung wird eine Kopie.',
     inputSchema: {
       type: 'object',
       properties: { id: { type: 'string' }, version: { type: 'integer', minimum: 1 }, ...REZEPT_FELDER },
@@ -442,10 +795,11 @@ export const WERKZEUGE = [
   },
 ];
 
-const ANLEITUNG = 'Kochbuch der Familie (nur Koch-Rezepte). Vor dem Speichern zutaten_liste abfragen und diese Namen benutzen. '
+const ANLEITUNG = 'Kochbuch der Familie (Koch- und Back-Rezepte). Vor dem Speichern zutaten_liste abfragen und diese Namen benutzen. '
   + 'Vorher mit rezepte_finden prüfen, ob es das Rezept schon gibt; dann rezept_aktualisieren statt neu anlegen. '
   + 'Mengen für die angegebenen Portionen, Schritte kurz, zu jedem Schritt schrittzutaten und, wenn bekannt, das Gerät (schrittgeraete). '
-  + 'Immer die Ernährungsform (ernaehrung, bei Fisch/Fleisch ggf. auchVegetarisch). Löschen geht nicht.';
+  + 'Immer die Ernährungsform (ernaehrung, bei Fisch/Fleisch ggf. auchVegetarisch). '
+  + 'Back-Rezepte (art: backen): Teigwerte in Bäckerprozent (teig), zugegebenes Mehl (mehl) oder Anzahl × Gewicht (teiglinge), Teigmengen je Schritt (schrittteig); die Antwort nennt die errechneten Gramm. Löschen geht nicht.';
 
 /** Fehler, den Claude sieht (isError), statt eines Protokollfehlers. */
 class Hinweis extends Error {}
@@ -496,6 +850,16 @@ function speicherErgebnis(e, name) {
   return { name, gespeichert: false, fehler: `Von der Datenbank abgewiesen (${e?.grund ?? 'unbekannt'}).` };
 }
 
+/** Back-Rezept: was der Teig in Gramm ergibt und wie die Schritte ihn verteilen – damit Claude Fehler sieht. */
+function rechnungFuerClaude(geprueft) {
+  if (!geprueft.gramm) return {};
+  return {
+    gramm: geprueft.gramm,
+    ...(geprueft.rezept.mehl !== undefined && geprueft.rezept.modus === 'teiglinge' ? { mehl_errechnet: geprueft.rezept.mehl } : {}),
+    ...(geprueft.verteilt && Object.keys(geprueft.verteilt).length ? { schrittteig_verteilt: geprueft.verteilt } : {}),
+  };
+}
+
 async function rezeptAnlegen(db, a) {
   if (!Array.isArray(a.rezepte) || a.rezepte.length === 0) throw new Hinweis('rezepte fehlt (Liste mit mindestens einem Rezept).');
   if (a.rezepte.length > MAX_REZEPTE) throw new Hinweis(`Höchstens ${MAX_REZEPTE} Rezepte auf einmal.`);
@@ -527,7 +891,7 @@ async function rezeptAnlegen(db, a) {
     }
     namen.add(schluessel);
     for (const z of geprueft.neu) neu.set(z.id, z);
-    zuSpeichern.push({ index: i, daten: geprueft.rezept });
+    zuSpeichern.push({ index: i, daten: geprueft.rezept, rechnung: rechnungFuerClaude(geprueft) });
   }
 
   if (neu.size > MAX_NEUE_ZUTATEN) throw new Hinweis('Zu viele neue Zutaten auf einmal – bitte weniger Rezepte je Aufruf.');
@@ -535,7 +899,7 @@ async function rezeptAnlegen(db, a) {
     const benutzt = new Set(zuSpeichern.flatMap((r) => r.daten.zutaten.map((z) => z.zutat)));
     const zutaten = [...neu.values()].filter((z) => benutzt.has(z.id));
     const antwort = await mitDb(db, (d) => d.rezeptSpeichern({ zutaten, rezepte: zuSpeichern.map((r) => ({ daten: r.daten })) }));
-    zuSpeichern.forEach((r, j) => { antworten[r.index] = speicherErgebnis(antwort?.rezepte?.[j], r.daten.name); });
+    zuSpeichern.forEach((r, j) => { antworten[r.index] = { ...speicherErgebnis(antwort?.rezepte?.[j], r.daten.name), ...r.rechnung }; });
     if (zutaten.length) return ergebnis({ rezepte: antworten, neue_zutaten: zutaten.map((z) => z.name) });
   }
   return ergebnis({ rezepte: antworten });
@@ -549,15 +913,21 @@ async function rezeptAktualisieren(db, a) {
   const fremd = Object.keys(aenderung).filter((k) => !FELDER.includes(k));
   if (fremd.length) throw new Hinweis(`Unbekannte Felder: ${fremd.join(', ')}.`);
   if (Object.keys(aenderung).length === 0) throw new Hinweis('Keine Änderung angegeben.');
-  if ((aenderung.zutaten !== undefined || aenderung.schritte !== undefined) && aenderung.schrittzutaten === undefined) {
-    throw new Hinweis('Wer zutaten oder schritte ändert, muss schrittzutaten neu mitliefern.');
-  }
-
 
   const [katalog, gelesen] = await Promise.all([katalogLaden(db), mitDb(db, (d) => d.rezeptLesen(id))]);
   if (!gelesen) throw new Hinweis('Kein Rezept mit dieser id (vielleicht gelöscht). Dann mit rezept_anlegen neu anlegen.');
   const alt = gelesen.daten ?? {};
-  if (alt.art !== 'kochen') throw new Hinweis('Back-Rezepte kann der Connector noch nicht ändern.');
+  const altArt = alt.art === 'backen' ? 'backen' : 'kochen';
+  // Beim Backen ohne weitere Zutaten gibt es nichts zu verteilen
+  const ohneZutaten = altArt === 'backen' && !(Array.isArray(alt.zutaten) && alt.zutaten.length) && !aenderung.zutaten?.length;
+  if ((aenderung.zutaten !== undefined || aenderung.schritte !== undefined) && aenderung.schrittzutaten === undefined && !ohneZutaten) {
+    throw new Hinweis('Wer zutaten oder schritte ändert, muss schrittzutaten neu mitliefern.');
+  }
+  if (aenderung.art !== undefined && aenderung.art !== altArt) throw new Hinweis(`Die art eines Rezepts lässt sich nicht ändern (hier: ${altArt}).`);
+  if (altArt === 'backen' && aenderung.schritte !== undefined && aenderung.schrittteig === undefined
+    && Array.isArray(alt.schrittteig) && alt.schrittteig.some((e) => e?.length)) {
+    throw new Hinweis('Wer schritte ändert, muss schrittteig neu mitliefern (je Schritt eine Liste, leer = kein Teigteil).');
+  }
   // Geräte gehören zu den Schritten: Ändern sich die Schritte, müssen sie mitkommen (sonst verrutschen sie)
   if (aenderung.schritte !== undefined && aenderung.schrittgeraete === undefined
     && Array.isArray(alt.schrittgeraete) && alt.schrittgeraete.some(Boolean)) {
@@ -570,18 +940,25 @@ async function rezeptAktualisieren(db, a) {
     zutaten: alt.zutaten, schritte: alt.schritte, schrittzutaten: alt.schrittzutaten, schrittgeraete: alt.schrittgeraete,
     status: alt.status, ernaehrung: alt.ernaehrung, auchVegetarisch: alt.auchVegetarisch, notiz: alt.notiz,
     quelle: QUELLEN.includes(alt.quelle) ? alt.quelle : 'claude',
+    art: altArt,
+    ...(altArt === 'backen' ? {
+      teig: alt.teig, mehl: alt.mehl, modus: alt.modus, teiglinge: alt.teiglinge, schrittteig: alt.schrittteig,
+    } : {}),
     ...aenderung,
   };
+  // Back-Rezept: Teigwerte unverändert durchreichen, solange Claude sie nicht anfasst (alte Rezepte vom Handy)
+  const teigAngefasst = ['teig', 'mehl', 'modus', 'teiglinge'].some((k) => aenderung[k] !== undefined);
+  if (altArt === 'backen' && aenderung.modus === 'mehl' && aenderung.teiglinge === undefined) delete zusammen.teiglinge;
   // Neue Ernährungsform ohne Angabe zu „auch vegetarisch“: die alte Angabe passt evtl. nicht mehr
   if (aenderung.ernaehrung !== undefined && aenderung.auchVegetarisch === undefined) delete zusammen.auchVegetarisch;
   const bekannt = (Array.isArray(alt.zutaten) ? alt.zutaten : []).map((z) => z?.zutat).filter(gueltigeZutatId);
-  const geprueft = pruefeRezept(zusammen, katalog, { bekannt, pflicht: false });
+  const geprueft = pruefeRezept(zusammen, katalog, { bekannt, pflicht: false, teigDurchreichen: altArt === 'backen' && !teigAngefasst });
   if (geprueft.fehler) throw new Hinweis(`Nicht gespeichert: ${geprueft.fehler.join(' ')}`);
 
   const antwort = await mitDb(db, (d) => d.rezeptSpeichern({
     zutaten: geprueft.neu, rezepte: [{ id, basis: version, daten: geprueft.rezept }],
   }));
-  const e = speicherErgebnis(antwort?.rezepte?.[0], geprueft.rezept.name);
+  const e = { ...speicherErgebnis(antwort?.rezepte?.[0], geprueft.rezept.name), ...rechnungFuerClaude(geprueft) };
   return ergebnis(geprueft.neu.length ? { ...e, neue_zutaten: geprueft.neu.map((z) => z.name) } : e);
 }
 
