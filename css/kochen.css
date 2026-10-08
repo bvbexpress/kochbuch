@@ -293,3 +293,66 @@
 .zutat > span {
   overflow-wrap: anywhere;
 }
+
+/* ---------- Backplan (Klappe im Back-Rezept) ---------- */
+.backplan {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr); /* sonst weitet das Datumsfeld die Karte über den Rand */
+  gap: 12px;
+}
+
+.backplan .umschaltgruppe {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.backplan .eingabe {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.bp-liste {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bp-tag {
+  margin-top: 8px;
+  font-weight: 700;
+  color: var(--holz);
+}
+
+.bp-zeile {
+  display: grid;
+  grid-template-columns: 4.2rem minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--linie);
+}
+
+.bp-zeit {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.bp-inhalt {
+  display: grid;
+  gap: 2px;
+}
+
+.bp-starter .bp-text,
+.bp-ofen .bp-text,
+.bp-fertig .bp-text {
+  font-weight: 700;
+}
+
+.backplan .mit-einheit .eingabe {
+  padding-right: 3.5rem; /* Platz für „Std.“ */
+}
+
+.backplan > .knopf[aria-pressed="true"] {
+  background: var(--akzent);
+  color: var(--akzent-text);
+}

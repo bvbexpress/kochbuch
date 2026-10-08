@@ -56,6 +56,7 @@ import {
   startBacken, backenSchritteHtml, backenZutatenHtml, aktualisiereBacken, speichereNotizJetzt,
 } from '../rezepte/backen.js';
 import { statusHtml, geraeteHtml, notizKlappeHtml } from '../rezepte/teile.js';
+import { startBackplan, backplanKlappeHtml } from '../rezepte/backplan.js';
 import { alleRezepte, holeRezept, speichereRezept, SAMMLUNG as REZEPTE } from '../rezepte/rezept.js';
 import { gesehen, markiereGesehen, ernaehrungAnzeige } from '../rezepte/liste.js';
 
@@ -113,6 +114,8 @@ export function zeigeTeigrechner(ziel) {
   startKochen(wurzel, { zurueck: () => zeige('start'), beiOeffnen: () => { ansicht = 'kochen'; }, rueckgaengig: zeigeRueckgaengig });
   // Rezept-Teil der Back-Rezepte (Status, Notiz, Schritte): rezepte/backen.js
   startBacken(wurzel, { neuZeichnen: zeichneAnOrt });
+  // Backplan rückwärts (Klappe im Back-Rezept): rezepte/backplan.js
+  startBackplan(wurzel, { rezept: aktuellesRezept, neuZeichnen: zeichneAnOrt });
   wischen = erstelleWischen(wurzel, {
     beiEnde() {
       if (nachholen) datenAktualisiert();
@@ -513,6 +516,8 @@ function zeichneRezept() {
     </section>
 
     ${notizKlappeHtml(r.notiz, 'b', offeneKlappen.has('notiz'))}
+
+    ${backplanKlappeHtml(r, zustand.teig, offeneKlappen.has('backplan'))}
 
     ${backenSchritteHtml(r, zustand.teig)}
 

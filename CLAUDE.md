@@ -290,7 +290,7 @@ Bäckerprozente, Mehlmischungen, Starter, Quellstück, Vorlagen, Teilen per Link
   > die man nur als Ganzes nimmt (Ei, Zwiebel), „fix“ für Mengen, die nicht mitwachsen (Lorbeerblatt, Salz nach Geschmack).
   > Keine Menge = „nach Geschmack“.
   >
-  > **Schritte** kurz und kleinteilig, ein Handgriff pro Schritt. **Zu jedem Schritt `schrittzutaten`:** alle Zutaten, die in diesem
+  > **Schritte** kurz und kleinteilig, ein Handgriff pro Schritt. **Pro Schritt höchstens eine Dauer, die der Schritt selbst braucht** (die App rechnet daraus den Backplan); Wartezeiten sind ein eigener Schritt, „über Nacht“ steht nur in einem eigenen Schritt. **Zu jedem Schritt `schrittzutaten`:** alle Zutaten, die in diesem
   > Schritt gebraucht werden (Verweis auf die Zutat des Rezepts). Wird eine Zutat auf mehrere Schritte verteilt, gib bei jedem Schritt
   > die Teilmenge an (z. B. Wasser 1500 ml in Schritt 2, 500 ml in Schritt 4), sonst gilt die ganze Menge. Schritte ohne Zutaten
   > bekommen eine leere Liste. **Zu jedem Schritt `schrittgeraete`** (gleiche Länge wie die Schritte): das Gerät kurz mit Einstellung,
@@ -467,6 +467,17 @@ Attribute `data-b…`). Gemeinsame HTML-Bausteine mit Kochen in
   Datenbank: `intern.connector_pruefe_rezept` kennt `schrittteig` (Länge, bekannte Teile, anteil 0–1); der Teig selbst wird dort nur als Objekt geprüft (die App prüft beim Laden).
   Reihenfolge beim Einrichten: SQL ausführen → Edge Function neu einfügen → Projektanweisung ersetzen. Tests: `tests/connector.test.js` (Back-Teil), `tests/datenbank.test.js`.
 
+- **Backplan rückwärts** *(fertig, nach E-Vorarbeit; Kalender-Datei erst nach Test auf dem iPhone)* – Klappe „Backplan“ im Back-Rezept (über den Schritten),
+  `js/rezepte/backplan.js` (Rechnung `berechneBackplan` + Oberfläche, `data-bp…`), Zeiterkennung gemeinsam mit der Hervorhebung in `js/rezepte/zeit.js`.
+  Nichts wird gespeichert, kein neues Datenmodell. „Fertig um …“ (Tag + Uhrzeit, rückwärts) oder „Ab jetzt“ (vorwärts, zeigt die Fertig-Zeit); Ergebnis = Liste Uhrzeit – Schritt.
+  Regeln: Zeit eines Schritts = **längste** Angabe im Text (Spanne = Mitte, auf 5 Min.), ohne Zeit 5 Min. („angenommen“), nur in Minuten gerechnet (Sommerzeit-fest).
+  „Fertig“ = Ende des **letzten Back-Schritts** (Gerät „Ofen …“ oder „back…“ im Text); Schritte danach (auskühlen) nur als Hinweis „Danach“.
+  **„Über Nacht“** = Fenster: Feld „Abends in den Kühlschrank um“ (Vorgabe 21:30, nur bei Nachtschritt), der Abend liegt mindestens 8 Std. vor dem Morgen, so spät wie möglich;
+  Hinweis, wenn die Nacht länger als 14 Std. wird. „Ab jetzt“: Nacht fest 10 Std. („ca.“). **Ofen vorheizen**: Zeile 45 Min. vor dem ersten Ofen-Schritt ab 150 °C (oder ohne Gradangabe),
+  nur wenn kein Schritt „vorheiz…“ sagt. **Starter vorher auffrischen** (nur wenn der Teig Starter hat): Schalter plus Feld Reifezeit (Vorgabe 6 Std.), Zeile vor dem ersten Schritt mit
+  Starter (`schrittteig`, sonst Text). „Ab jetzt“ schiebt alles nach hinten, wenn ein Vorlauf vor jetzt läge; rückwärts Hinweis, wenn der Anfang schon vorbei ist.
+  Kalender-Datei (`.ics` mit Erinnerungen, nur Schritte mit Uhrzeit) bewusst noch nicht gebaut: erst prüfen, was das iPhone-Teilen-Menü aus einer Homescreen-App mit `.ics` macht.
+
 **Was der Nutzer selbst einrichtet:** Funktions-Secret (Schlüssel) in Supabase; Datenbank-Skript ausführen; Edge Function im
 Dashboard einfügen; in claude.ai Connector hinzufügen (Name, URL, Schlüssel) und im Projekt aktivieren; Projektanweisung
 einfügen; Praxistest auf beiden iPhones.
@@ -512,7 +523,7 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 | `css/<bereich>.css` | Design eines Bereichs (z. B. `teig.css`, `kochen.css`) |
 | `js/app.js` | Start und (später) Navigation |
 | `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse, öffentlicher Schlüssel, Abfragen), `anmeldung.js` (Anmeldung, stilles Erneuern), `abgleich.js` (versteckte Verwaltung: Anmelde-Formular, Status und Punkt auf dem Verwalter-Handy, Sichern/Wiederherstellen), `sicherung.js` (Sicherungsdatei: erstellen, prüfen, wiederherstellen), `ausloeser.js` (wann abgeglichen wird) |
-| `js/rezepte/` | Rezepte (Etappe 3): `rezept.js` (Modell, Prüfung, Speichern), `katalog.js` (Zutatenkatalog), `rechner.js` (Skalieren), `liste.js` (Ordnen, Favoriten, Mengen in Schritten), `kochen.js` (Oberfläche Kochen), `backen.js` (Rezept-Teil der Back-Rezepte im Rechner), `teile.js` (gemeinsame HTML-Bausteine), `umzug.js` (Vorlagen → Back-Rezepte, eingebaute Back-Rezepte) |
+| `js/rezepte/` | Rezepte (Etappe 3): `rezept.js` (Modell, Prüfung, Speichern), `katalog.js` (Zutatenkatalog), `rechner.js` (Skalieren), `liste.js` (Ordnen, Favoriten, Mengen in Schritten), `kochen.js` (Oberfläche Kochen), `backen.js` (Rezept-Teil der Back-Rezepte im Rechner), `teile.js` (gemeinsame HTML-Bausteine), `zeit.js` (Zeitangaben im Schritttext), `backplan.js` (Backplan rückwärts), `umzug.js` (Vorlagen → Back-Rezepte, eingebaute Back-Rezepte) |
 | `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js` (inkl. Kategorien, Ordnen der Liste), `zutaten.js` (Mehle/Saaten/Zusatzzutaten), `pruefung.js` (Vorlagen von außen prüfen), `startseite.js` (HTML der Vorlagenliste), `ansicht.js` (Oberfläche, Navigation inkl. Startseite mit Kacheln) |
 | `supabase/functions/` | Edge Functions: `kochbuch/index.ts` (Connector), im Dashboard eingefügt; nicht Teil der App |
 | `datenbank/schema.sql` | Supabase-Datenbank (Tabellen, Zugriffsschutz, Sync-Funktionen, Connector-Rolle); nicht Teil der App |

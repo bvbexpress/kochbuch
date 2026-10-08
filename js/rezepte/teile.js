@@ -9,15 +9,9 @@
 import { text } from '../kern/html.js';
 import { mengeText } from './rechner.js';
 import { geraeteListe } from './liste.js';
+import { ZEIT } from './zeit.js';
 
-// Zeitangaben im Schritttext: „8–10 Min.“, „1,5 Std.“, „1 Stunde 30 Minuten“, „über Nacht“.
-// Nur Anzeige: Der gespeicherte Text bleibt unverändert. Grad („200 °C“) und Gramm sind keine Zeiten.
-const ZAHL = String.raw`\d+(?:[.,]\d+)?`;
-const EINHEIT = String.raw`(?:Sekunden?|Sek\.?|Minuten?|Min\.?|Stunden?|Std\.?|Stdn\.?|h|Tage?n?)`;
-const DAUER = String.raw`${ZAHL}(?:\s*(?:[–—−-]|bis)\s*${ZAHL})?\s*${EINHEIT}`;
-const WORT = String.raw`(?:(?:eine?\s+)?(?:halbe|viertel)\s+Stunde|eine\s+(?:Stunde|Minute|Viertelstunde)|über\s+Nacht)`;
-const ZEIT = new RegExp(
-  String.raw`(?<![\p{L}\d])(?:${DAUER}(?:\s*(?:und\s+)?${DAUER})?|${WORT})(?![\p{L}\d])`, 'giu');
+// Zeitangaben im Schritttext (zeit.js) werden hervorgehoben. Nur Anzeige: Der gespeicherte Text bleibt unverändert.
 
 /** Schritttext als HTML (maskiert), Zeitangaben in `<span class="zeit">`. */
 export function schrittTextHtml(s) {
