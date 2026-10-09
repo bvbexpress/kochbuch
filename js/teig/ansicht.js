@@ -55,7 +55,7 @@ import { startKochen, zeichneKochen } from '../rezepte/kochen.js';
 import {
   startBacken, backenSchritteHtml, backenZutatenHtml, aktualisiereBacken, speichereNotizJetzt,
 } from '../rezepte/backen.js';
-import { statusHtml, geraeteHtml, notizKlappeHtml } from '../rezepte/teile.js';
+import { statusHtml, geraeteHtml, notizKlappeHtml, teilenHtml } from '../rezepte/teile.js';
 import { startBackplan, backplanKlappeHtml } from '../rezepte/backplan.js';
 import { alleRezepte, holeRezept, speichereRezept, SAMMLUNG as REZEPTE } from '../rezepte/rezept.js';
 import { gesehen, markiereGesehen, ernaehrungAnzeige } from '../rezepte/liste.js';
@@ -113,7 +113,12 @@ export function zeigeTeigrechner(ziel) {
   // Kochen (Etappe 3): eigene Oberfläche in rezepte/kochen.js, hier nur Einstieg und Rückweg
   startKochen(wurzel, { zurueck: () => zeige('start'), beiOeffnen: () => { ansicht = 'kochen'; }, rueckgaengig: zeigeRueckgaengig });
   // Rezept-Teil der Back-Rezepte (Status, Notiz, Schritte): rezepte/backen.js
-  startBacken(wurzel, { neuZeichnen: zeichneAnOrt });
+  startBacken(wurzel, {
+    neuZeichnen: zeichneAnOrt,
+    aktuell: () => (zustand ? {
+      teig: zustand.teig, mehl: zustand.mehl, teiglinge: imTeiglingeModus() ? zustand.teiglinge : null,
+    } : null),
+  });
   // Backplan rückwärts (Klappe im Back-Rezept): rezepte/backplan.js
   startBackplan(wurzel, { rezept: aktuellesRezept, neuZeichnen: zeichneAnOrt });
   wischen = erstelleWischen(wurzel, {
@@ -525,6 +530,8 @@ function zeichneRezept() {
       <summary>Zutaten (${zutaten.anzahl})</summary>
       <div class="klappe-inhalt">${zutaten.html}${geraeteHtml(r)}</div>
     </details>
+
+    ${teilenHtml(r, 'b')}
 
     <button type="button" class="knopf" data-aktion="teigrechner-voll">Im Teigrechner anpassen</button>
     <button type="button" class="knopf knopf-voll" data-aktion="speichern-karte"

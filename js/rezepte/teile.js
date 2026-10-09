@@ -5,11 +5,13 @@
 // (rezepte/backen.js) – so stören sich die Klick-Zuhörer der beiden Oberflächen nicht.
 //   data-<p>schritt="i"  Schritt abhaken      data-<p>status="erprobt|testen"
 //   data-<p>notiz        Notizfeld            data-<p>="haken-weg|behalten|loeschen"
+//   data-<p>teilen       Knopf „Rezept teilen“   data-<p>teilennotiz  Schalter „mit Notiz“
 
 import { text } from '../kern/html.js';
 import { mengeText } from './rechner.js';
 import { geraeteListe } from './liste.js';
 import { ZEIT } from './zeit.js';
+import { notizMitteilen } from './teilen.js';
 
 // Zeitangaben im Schritttext (zeit.js) werden hervorgehoben. Nur Anzeige: Der gespeicherte Text bleibt unverändert.
 
@@ -101,4 +103,15 @@ export function vermerkHtml(vermerk, p) {
           <button type="button" class="knopf knopf-leise" data-${p}="loeschen">Diese löschen</button>
         </div>
       </section>` : '';
+}
+
+/** Knopf „Rezept teilen“ mit Schalter „mit Notiz“ (standardmäßig aus, nicht gespeichert); Text und Teilen: teilen.js. */
+export function teilenHtml(r, p) {
+  return `<section class="karte teilen" aria-label="Rezept teilen">
+      <label class="teilen-notiz">
+        <input type="checkbox" data-${p}teilennotiz ${notizMitteilen(r.id) ? 'checked' : ''}>
+        <span>mit Notiz</span>
+      </label>
+      <button type="button" class="knopf" data-${p}teilen>Rezept teilen</button>
+    </section>`;
 }

@@ -16,7 +16,8 @@ import {
   SUCHE_AB, ordneRezepte, rezeptFavoriten, schalteRezeptFavorit, gesehen, markiereGesehen,
   portionenText, mengenInSchritten, ernaehrungAnzeige,
 } from './liste.js';
-import { schritteHtml, statusHtml, notizKlappeHtml, geraeteHtml, vermerkHtml } from './teile.js';
+import { schritteHtml, statusHtml, notizKlappeHtml, geraeteHtml, vermerkHtml, teilenHtml } from './teile.js';
+import { rezeptAlsText, teileAusKnopf, notizMitteilen, setzeNotizMitteilen } from './teilen.js';
 import { vermerkText } from '../teig/vorlagen.js';
 
 const MAX_PORTIONEN = 99;
@@ -180,7 +181,8 @@ function rezeptHtml(r) {
     <details class="klappe" data-kklappe="zutaten" ${zutatenOffen ? 'open' : ''}>
       <summary>Zutaten (${r.zutaten.length})</summary>
       <div class="klappe-inhalt"><ul class="zutaten-liste">${zutatenZeilen || '<li class="leise">Keine Zutaten.</li>'}</ul>${geraeteHtml(r)}</div>
-    </details>`;
+    </details>
+    ${teilenHtml(r, 'k')}`;
 }
 
 function oeffneRezept(id) {
@@ -248,6 +250,9 @@ function beiEingabe(ereignis) {
 }
 
 function beiAenderung(ereignis) {
+  if (ereignis.target.dataset.kteilennotiz !== undefined && rezeptId) {
+    setzeNotizMitteilen(rezeptId, ereignis.target.checked);
+  }
   if (ereignis.target.dataset.knotiz !== undefined) speichereNotizJetzt();
 }
 
@@ -264,6 +269,8 @@ function beiKlick(ereignis) {
   }
   const weg = ziel.closest('[data-kweg]');
   if (weg) return entferne(weg.dataset.kweg);
+  const teilen = ziel.closest('[data-kteilen]');
+  if (teilen) return teileJetzt(teilen);
   const schritt = ziel.closest('[data-kschritt]');
   if (schritt) return schalteSchritt(Number(schritt.dataset.kschritt));
   const status = ziel.closest('[data-kstatus]');
@@ -279,6 +286,17 @@ function beiKlick(ereignis) {
     zeichneKochen({ scroll: true });
   } else if (aktion === 'behalten') behalte();
   else if (aktion === 'loeschen') loesche();
+}
+
+/** „Rezept teilen“ mit den eingestellten Portionen. */
+function teileJetzt(knopf) {
+  speichereNotizJetzt(); // eine gerade getippte Notiz soll mit
+  const r = holeRezept(speicher, rezeptId);
+  if (!r) return;
+  const portionen = portionenWahl.get(r.id) ?? r.portionen;
+  teileAusKnopf(knopf, r, rezeptAlsText(r, {
+    katalog: alleZutaten(speicher), portionen, mitNotiz: notizMitteilen(r.id),
+  }));
 }
 
 function zurueck() {
