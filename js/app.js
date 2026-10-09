@@ -4,6 +4,7 @@
 import { zeigeTeigrechner, datenAktualisiert } from './teig/ansicht.js';
 import { starteOfflineBetrieb, frageVersion } from './kern/aktualisierung.js';
 import { bildschirmAnLassen } from './kern/bildschirm.js';
+import { startZurueckwischen } from './kern/zurueckwischen.js';
 import { speicher } from './kern/speicher.js';
 import { erstelleAnmeldung } from './kern/anmeldung.js';
 import { erstelleServer } from './kern/server.js';
@@ -44,6 +45,7 @@ const ausloeser = erstelleAusloeser({
 
 if (!abgleich.bereit()) umzug(); // nicht angemeldet: gleich, es gibt ohnehin keinen Abgleich
 zeigeTeigrechner(document.getElementById('inhalt'));
+startZurueckwischen(document.getElementById('inhalt'));
 abgleich.verbindeVerwaltung(
   document.getElementById('versionszeile'), document.getElementById('verwaltung'), document.getElementById('punkt'),
 );
