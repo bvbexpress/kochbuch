@@ -467,6 +467,12 @@ Attribute `data-b…`). Gemeinsame HTML-Bausteine mit Kochen in
   Datenbank: `intern.connector_pruefe_rezept` kennt `schrittteig` (Länge, bekannte Teile, anteil 0–1); der Teig selbst wird dort nur als Objekt geprüft (die App prüft beim Laden).
   Reihenfolge beim Einrichten: SQL ausführen → Edge Function neu einfügen → Projektanweisung ersetzen. Tests: `tests/connector.test.js` (Back-Teil), `tests/datenbank.test.js`.
 
+- **Rezept teilen** *(fertig)* – Knopf „Rezept teilen“ unter der Zutaten-Klappe in Koch- und Back-Rezepten (schlanke Ansicht), dazu Schalter „mit Notiz“
+  (standardmäßig aus, nicht gespeichert, nach dem Teilen wieder aus). `js/rezepte/teilen.js` (`rezeptAlsText`, `teileText`): einfacher Text für WhatsApp/Mail
+  (`*Name*`, Zutaten mit •, Schritte mit „Gerät:“ und „Dazu:“ = Mengen je Schritt, Zeiten stehen im Schrittext), **mit den eingestellten Werten**
+  (Portionen, Mehl bzw. Teiglinge, Teig wie im Rechner), nicht den gespeicherten. Stückzahl ohne Einheit: „2 × Zwiebel“. Teilen übers Teilen-Menü
+  (`navigator.share`), sonst Zwischenablage („Kopiert ✓“); Fehler bleiben still. Kein Server, keine Links, kein Datenmodell. Attribute `data-kteilen`/`data-bteilen`.
+
 - **Backplan rückwärts** *(fertig, nach E-Vorarbeit; Kalender-Datei erst nach Test auf dem iPhone)* – Klappe „Backplan“ im Back-Rezept (über den Schritten),
   `js/rezepte/backplan.js` (Rechnung `berechneBackplan` + Oberfläche, `data-bp…`), Zeiterkennung gemeinsam mit der Hervorhebung in `js/rezepte/zeit.js`.
   Nichts wird gespeichert, kein neues Datenmodell. „Fertig um …“ (Tag + Uhrzeit, rückwärts) oder „Ab jetzt“ (vorwärts, zeigt die Fertig-Zeit); Ergebnis = Liste Uhrzeit – Schritt.
@@ -523,7 +529,7 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 | `css/<bereich>.css` | Design eines Bereichs (z. B. `teig.css`, `kochen.css`) |
 | `js/app.js` | Start und (später) Navigation |
 | `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse, öffentlicher Schlüssel, Abfragen), `anmeldung.js` (Anmeldung, stilles Erneuern), `abgleich.js` (versteckte Verwaltung: Anmelde-Formular, Status und Punkt auf dem Verwalter-Handy, Sichern/Wiederherstellen), `sicherung.js` (Sicherungsdatei: erstellen, prüfen, wiederherstellen), `ausloeser.js` (wann abgeglichen wird) |
-| `js/rezepte/` | Rezepte (Etappe 3): `rezept.js` (Modell, Prüfung, Speichern), `katalog.js` (Zutatenkatalog), `rechner.js` (Skalieren), `liste.js` (Ordnen, Favoriten, Mengen in Schritten), `kochen.js` (Oberfläche Kochen), `backen.js` (Rezept-Teil der Back-Rezepte im Rechner), `teile.js` (gemeinsame HTML-Bausteine), `zeit.js` (Zeitangaben im Schritttext), `backplan.js` (Backplan rückwärts), `umzug.js` (Vorlagen → Back-Rezepte, eingebaute Back-Rezepte) |
+| `js/rezepte/` | Rezepte (Etappe 3): `rezept.js` (Modell, Prüfung, Speichern), `katalog.js` (Zutatenkatalog), `rechner.js` (Skalieren), `liste.js` (Ordnen, Favoriten, Mengen in Schritten), `kochen.js` (Oberfläche Kochen), `backen.js` (Rezept-Teil der Back-Rezepte im Rechner), `teile.js` (gemeinsame HTML-Bausteine), `teilen.js` (Rezept als Text teilen), `zeit.js` (Zeitangaben im Schritttext), `backplan.js` (Backplan rückwärts), `umzug.js` (Vorlagen → Back-Rezepte, eingebaute Back-Rezepte) |
 | `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js` (inkl. Kategorien, Ordnen der Liste), `zutaten.js` (Mehle/Saaten/Zusatzzutaten), `pruefung.js` (Vorlagen von außen prüfen), `startseite.js` (HTML der Vorlagenliste), `ansicht.js` (Oberfläche, Navigation inkl. Startseite mit Kacheln) |
 | `supabase/functions/` | Edge Functions: `kochbuch/index.ts` (Connector), im Dashboard eingefügt; nicht Teil der App |
 | `datenbank/schema.sql` | Supabase-Datenbank (Tabellen, Zugriffsschutz, Sync-Funktionen, Connector-Rolle); nicht Teil der App |

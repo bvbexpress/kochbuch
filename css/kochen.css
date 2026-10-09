@@ -356,3 +356,24 @@
   background: var(--akzent);
   color: var(--akzent-text);
 }
+
+/* ---------- Rezept teilen: Schalter „mit Notiz“ und Knopf ---------- */
+.teilen {
+  display: grid;
+  gap: 8px;
+}
+
+.teilen-notiz {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--tipp-hoehe);
+  cursor: pointer;
+}
+
+.teilen-notiz input {
+  width: 24px;
+  height: 24px;
+  accent-color: var(--akzent);
+  flex: none;
+}

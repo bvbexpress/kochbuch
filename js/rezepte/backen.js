@@ -11,6 +11,7 @@ import { holeRezept, speichereRezept } from './rezept.js';
 import { alleZutaten, zutatName } from './katalog.js';
 import { skaliere, mengeText } from './rechner.js';
 import { schritteHtml } from './teile.js';
+import { rezeptAlsText, teileAusKnopf, notizMitteilen, setzeNotizMitteilen } from './teilen.js';
 import { teigInSchritten } from '../teig/rechner.js';
 import { formatGramm, formatGrammFein } from '../kern/zahlen.js';
 
@@ -18,14 +19,17 @@ const NOTIZ_PAUSE = 500; // ms nach dem letzten Tippen, dann wird die Notiz gesp
 
 let wurzel = null;
 let neuZeichnen = () => {};
+let aktuell = () => null;       // eingestellter Teig, Mehl, Teiglinge (kommt aus der Teig-Oberfläche)
 let offen = null;               // id des gerade gezeigten Back-Rezepts
 let notizZeitgeber = null;
 const erledigt = new Map();     // rezept-id → Set der abgehakten Schritte
 
-/** Einmal beim Start. neuZeichnen = Rechner neu zeichnen, ohne dass die Seite springt. */
-export function startBacken(ziel, { neuZeichnen: zeichnen }) {
+/** Einmal beim Start. neuZeichnen = Rechner neu zeichnen, ohne dass die Seite springt.
+ *  aktuell() = { teig, mehl, teiglinge (nur im Teiglinge-Modus, sonst null) } wie gerade eingestellt, für „Rezept teilen“. */
+export function startBacken(ziel, { neuZeichnen: zeichnen, aktuell: stand }) {
   wurzel = ziel;
   neuZeichnen = zeichnen;
+  aktuell = stand ?? aktuell;
   wurzel.addEventListener('click', beiKlick);
   wurzel.addEventListener('input', (e) => {
     if (e.target.dataset?.bnotiz === undefined) return;
@@ -34,6 +38,7 @@ export function startBacken(ziel, { neuZeichnen: zeichnen }) {
   });
   wurzel.addEventListener('change', (e) => {
     if (e.target.dataset?.bnotiz !== undefined) speichereNotizJetzt();
+    if (e.target.dataset?.bteilennotiz !== undefined && offen) setzeNotizMitteilen(offen, e.target.checked);
   });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') speichereNotizJetzt();
@@ -118,12 +123,25 @@ function beiKlick(ereignis) {
   const ziel = ereignis.target;
   const schritt = ziel.closest('[data-bschritt]');
   if (schritt) return schalteSchritt(Number(schritt.dataset.bschritt));
+  const teilen = ziel.closest('[data-bteilen]');
+  if (teilen) return teileJetzt(teilen);
   const status = ziel.closest('[data-bstatus]');
   if (status) return setzeStatus(status.dataset.bstatus);
   if (ziel.closest('[data-b]')?.dataset.b === 'haken-weg') {
     erledigt.delete(offen);
     neuZeichnen();
   }
+}
+
+/** „Rezept teilen“ mit dem Teig, wie er gerade eingestellt ist. */
+function teileJetzt(knopf) {
+  speichereNotizJetzt(); // eine gerade getippte Notiz soll mit
+  const r = holeRezept(speicher, offen);
+  const stand = aktuell();
+  if (!r || !stand) return;
+  teileAusKnopf(knopf, r, rezeptAlsText(r, {
+    katalog: alleZutaten(speicher), ...stand, mitNotiz: notizMitteilen(r.id),
+  }));
 }
 
 function schalteSchritt(index) {

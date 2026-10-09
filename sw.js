@@ -11,7 +11,7 @@
 //
 // Alle Pfade relativ, weil die App unter /kochbuch/ läuft.
 
-const VERSION = 'fcd25edb'; // = Prüfsumme der Dateien unten, siehe tests/pwa.test.js
+const VERSION = '1baf1edb'; // = Prüfsumme der Dateien unten, siehe tests/pwa.test.js
 const CACHE = `kochbuch-${VERSION}`;
 
 // Alles, was die App zum Laufen braucht (außer sw.js selbst)
@@ -41,6 +41,7 @@ const DATEIEN = [
   './js/rezepte/rechner.js',
   './js/rezepte/rezept.js',
   './js/rezepte/teile.js',
+  './js/rezepte/teilen.js',
   './js/rezepte/umzug.js',
   './js/rezepte/zeit.js',
   './js/teig/ansicht.js',
