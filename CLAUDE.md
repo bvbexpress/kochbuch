@@ -528,7 +528,7 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 | `css/basis.css` | Farben (hell/dunkel), Schrift, Knöpfe, Felder |
 | `css/<bereich>.css` | Design eines Bereichs (z. B. `teig.css`, `kochen.css`) |
 | `js/app.js` | Start und (später) Navigation |
-| `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse, öffentlicher Schlüssel, Abfragen), `anmeldung.js` (Anmeldung, stilles Erneuern), `abgleich.js` (versteckte Verwaltung: Anmelde-Formular, Status und Punkt auf dem Verwalter-Handy, Sichern/Wiederherstellen), `sicherung.js` (Sicherungsdatei: erstellen, prüfen, wiederherstellen), `ausloeser.js` (wann abgeglichen wird) |
+| `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse, öffentlicher Schlüssel, Abfragen), `anmeldung.js` (Anmeldung, stilles Erneuern), `abgleich.js` (versteckte Verwaltung: Anmelde-Formular, Status und Punkt auf dem Verwalter-Handy, Sichern/Wiederherstellen), `sicherung.js` (Sicherungsdatei: erstellen, prüfen, wiederherstellen), `ausloeser.js` (wann abgeglichen wird), `zurueckwischen.js` (Zurück per Wischen vom linken Rand) |
 | `js/rezepte/` | Rezepte (Etappe 3): `rezept.js` (Modell, Prüfung, Speichern), `katalog.js` (Zutatenkatalog), `rechner.js` (Skalieren), `liste.js` (Ordnen, Favoriten, Mengen in Schritten), `kochen.js` (Oberfläche Kochen), `backen.js` (Rezept-Teil der Back-Rezepte im Rechner), `teile.js` (gemeinsame HTML-Bausteine), `teilen.js` (Rezept als Text teilen), `zeit.js` (Zeitangaben im Schritttext), `backplan.js` (Backplan rückwärts), `umzug.js` (Vorlagen → Back-Rezepte, eingebaute Back-Rezepte) |
 | `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js` (inkl. Kategorien, Ordnen der Liste), `zutaten.js` (Mehle/Saaten/Zusatzzutaten), `pruefung.js` (Vorlagen von außen prüfen), `startseite.js` (HTML der Vorlagenliste), `ansicht.js` (Oberfläche, Navigation inkl. Startseite mit Kacheln) |
 | `supabase/functions/` | Edge Functions: `kochbuch/index.ts` (Connector), im Dashboard eingefügt; nicht Teil der App |
@@ -607,6 +607,7 @@ Gespeicherte Daten beim Laden immer auf Gültigkeit prüfen.
 - **Sehr schnell:** sofortiger Start, offline nutzbar, keine unnötigen Bibliotheken.
 - **Küchentauglich:** große Schaltflächen (mind. **56 px**, `--tipp-hoehe`), mit einer Hand und Teig an den Fingern bedienbar.
 - **Live-Ergebnisse** beim Tippen, kein „Berechnen“-Knopf.
+- **Zurück per Wischen:** vom linken Rand (24 px) nach rechts ziehen = Zurück-Pfeil antippen (`kern/zurueckwischen.js`, Touch-Ereignisse; gleiche Wege und Rückfrage wie der Pfeil, auf der Startseite ohne Wirkung). Die Seite folgt dem Finger ein Stück, aus bei „Bewegung reduzieren“. Wischen nach links (Löschen) und Scrollen sind nicht betroffen.
 - Häufigster Weg (Vorlage laden → Mehlmenge ändern → ablesen) in **höchstens drei Tippern**
   (Kachel „Backen“ → Rezept antippen → Menge eintippen; ab C).
 - **Bildschirm bleibt an**, solange die App offen ist.
