@@ -484,6 +484,14 @@ Attribute `data-b…`). Gemeinsame HTML-Bausteine mit Kochen in
   Starter (`schrittteig`, sonst Text). „Ab jetzt“ schiebt alles nach hinten, wenn ein Vorlauf vor jetzt läge; rückwärts Hinweis, wenn der Anfang schon vorbei ist.
   Kalender-Datei (`.ics` mit Erinnerungen, nur Schritte mit Uhrzeit) bewusst noch nicht gebaut: erst prüfen, was das iPhone-Teilen-Menü aus einer Homescreen-App mit `.ics` macht.
 
+- **Timer je Schritt** *(fertig, Praxistest auf dem iPhone offen)* – reiner Timer, keine Einstellungen. `js/kern/timer.js`: Die hervorgehobenen Zeiten in Koch- und
+  Back-Schritten (`schrittTextHtml` in `teile.js` mit Timer-Angabe; Backplan bleibt ohne) sind antippbar und starten einen Timer, bei Spannen gilt die untere Zahl;
+  „über Nacht“ und Zeiten über 24 Std. nicht. Mehrere gleichzeitig. Leiste unten (`#timer-leiste` in `index.html`, außerhalb von `#inhalt`) mit Restzeit und
+  „Rezept · Schritt n“, ✕ stoppt. **Gerechnet wird nur mit der Endzeit**; die Endzeiten stehen als Geräte-Einstellung `timer` (kein Sync, nicht in der Sicherung),
+  überleben also ein Beenden der App. Abgelaufen: Ton (Web Audio, wird beim ersten Tipper entsperrt) und blinkende Leiste, bis sie angetippt wird; nach der Rückkehr aus dem
+  Hintergrund steht dort „Abgelaufen · seit 14:32“. Dieselbe Zeit nochmal antippen, solange sie läuft: nichts. **Grenze:** Im Hintergrund klingelt nichts (keine Push-Nachricht
+  ohne Server); der Bildschirm bleibt wegen des Wake Locks an. Tests: `tests/timer.test.js`.
+
 **Was der Nutzer selbst einrichtet:** Funktions-Secret (Schlüssel) in Supabase; Datenbank-Skript ausführen; Edge Function im
 Dashboard einfügen; in claude.ai Connector hinzufügen (Name, URL, Schlüssel) und im Projekt aktivieren; Projektanweisung
 einfügen; Praxistest auf beiden iPhones.
@@ -528,7 +536,7 @@ Bis dahin: neue Zutaten immer mit stabiler `id` und einheitlichem deutschen Name
 | `css/basis.css` | Farben (hell/dunkel), Schrift, Knöpfe, Felder |
 | `css/<bereich>.css` | Design eines Bereichs (z. B. `teig.css`, `kochen.css`) |
 | `js/app.js` | Start und (später) Navigation |
-| `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse, öffentlicher Schlüssel, Abfragen), `anmeldung.js` (Anmeldung, stilles Erneuern), `abgleich.js` (versteckte Verwaltung: Anmelde-Formular, Status und Punkt auf dem Verwalter-Handy, Sichern/Wiederherstellen), `sicherung.js` (Sicherungsdatei: erstellen, prüfen, wiederherstellen), `ausloeser.js` (wann abgeglichen wird), `zurueckwischen.js` (Zurück per Wischen vom linken Rand) |
+| `js/kern/` | Gemeinsames: `speicher.js`, `zahlen.js`, `html.js` (`text()` maskiert Namen), `aktualisierung.js` (Service Worker, Update-Hinweis), `bildschirm.js` (Wake Lock), `sync.js` (Abgleich), `server.js` (Supabase-Adresse, öffentlicher Schlüssel, Abfragen), `anmeldung.js` (Anmeldung, stilles Erneuern), `abgleich.js` (versteckte Verwaltung: Anmelde-Formular, Status und Punkt auf dem Verwalter-Handy, Sichern/Wiederherstellen), `sicherung.js` (Sicherungsdatei: erstellen, prüfen, wiederherstellen), `ausloeser.js` (wann abgeglichen wird), `zurueckwischen.js` (Zurück per Wischen vom linken Rand), `timer.js` (Timer je Schritt) |
 | `js/rezepte/` | Rezepte (Etappe 3): `rezept.js` (Modell, Prüfung, Speichern), `katalog.js` (Zutatenkatalog), `rechner.js` (Skalieren), `liste.js` (Ordnen, Favoriten, Mengen in Schritten), `kochen.js` (Oberfläche Kochen), `backen.js` (Rezept-Teil der Back-Rezepte im Rechner), `teile.js` (gemeinsame HTML-Bausteine), `teilen.js` (Rezept als Text teilen), `zeit.js` (Zeitangaben im Schritttext), `backplan.js` (Backplan rückwärts), `umzug.js` (Vorlagen → Back-Rezepte, eingebaute Back-Rezepte) |
 | `js/teig/` | Teigrechner: `rechner.js` (Logik), `vorlagen.js` (inkl. Kategorien, Ordnen der Liste), `zutaten.js` (Mehle/Saaten/Zusatzzutaten), `pruefung.js` (Vorlagen von außen prüfen), `startseite.js` (HTML der Vorlagenliste), `ansicht.js` (Oberfläche, Navigation inkl. Startseite mit Kacheln) |
 | `supabase/functions/` | Edge Functions: `kochbuch/index.ts` (Connector), im Dashboard eingefügt; nicht Teil der App |

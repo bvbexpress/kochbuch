@@ -40,6 +40,6 @@ test('Text wird maskiert und bleibt sonst unverändert', () => {
 });
 
 test('Schritte im Rezept zeigen die Hervorhebung (Kochen und Backen gleich)', () => {
-  const html = schritteHtml({ schritte: ['Im Ofen 12 Min. backen.'] }, { haken: new Set(), p: 'b' });
-  assert.match(html, /<span class="zeit">12 Min\.<\/span>/);
+  const html = schritteHtml({ id: 'r1', name: 'Brot', schritte: ['Im Ofen 12 Min. backen.'] }, { haken: new Set(), p: 'b' });
+  assert.match(html, /<span class="zeit"[^>]*>12 Min\.<\/span>/);
 });

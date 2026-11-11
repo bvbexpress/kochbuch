@@ -10,18 +10,28 @@
 import { text } from '../kern/html.js';
 import { mengeText } from './rechner.js';
 import { geraeteListe } from './liste.js';
-import { ZEIT } from './zeit.js';
+import { ZEIT, dauerVon } from './zeit.js';
+import { timerDauerMs } from '../kern/timer.js';
 import { notizMitteilen } from './teilen.js';
 
 // Zeitangaben im Schritttext (zeit.js) werden hervorgehoben. Nur Anzeige: Der gespeicherte Text bleibt unverändert.
 
-/** Schritttext als HTML (maskiert), Zeitangaben in `<span class="zeit">`. */
-export function schrittTextHtml(s) {
+/**
+ * Schritttext als HTML (maskiert), Zeitangaben in `<span class="zeit">`.
+ * Mit `timer` ({ id: Rezept-id, nr: Schrittnummer ab 1, name: Rezeptname }) werden die Zeiten antippbar
+ * (`data-timer-…`, kern/timer.js): bei Spannen gilt die untere Zahl, „über Nacht“ und Zeiten über einem Tag nicht.
+ */
+export function schrittTextHtml(s, timer = null) {
   const t = String(s);
   let html = '';
   let ab = 0;
   for (const treffer of t.matchAll(ZEIT)) {
-    html += `${text(t.slice(ab, treffer.index))}<span class="zeit">${text(treffer[0])}</span>`;
+    const min = timer ? dauerVon(treffer[0]).min : undefined;
+    const daten = timer && timerDauerMs(min) !== null
+      ? ` data-timer-id="${text(`${timer.id}|${timer.nr}|${treffer.index}`)}" data-timer-min="${min}"`
+        + ` data-timer-label="${text(`${timer.name} · Schritt ${timer.nr}`)}"`
+      : '';
+    html += `${text(t.slice(ab, treffer.index))}<span class="zeit"${daten}>${text(treffer[0])}</span>`;
     ab = treffer.index + treffer[0].length;
   }
   return html + text(t.slice(ab));
@@ -48,7 +58,7 @@ export function schritteHtml(r, { mengen = null, haken, p }) {
           <span class="schritt-nr" aria-hidden="true">${fertig ? '✓' : i + 1}</span>
           <span class="schritt-inhalt">
             ${geraet ? `<span class="geraet-tag">${text(geraet)}</span>` : ''}
-            <span class="schritt-text">${schrittTextHtml(s)}</span>
+            <span class="schritt-text">${schrittTextHtml(s, { id: r.id, nr: i + 1, name: r.name })}</span>
             ${chips ? `<span class="schritt-mengen">${chips}</span>` : ''}
           </span>
         </button>
