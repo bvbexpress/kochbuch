@@ -377,3 +377,118 @@
   accent-color: var(--akzent);
   flex: none;
 }
+
+/* ---------- Timer je Schritt (kern/timer.js) ---------- */
+/* Zeit im Schritt antippbar: etwas größere Fläche, läuft der Timer, steht sie in Moosgrün */
+.zeit[data-timer-id] {
+  padding: 6px 10px;
+  margin: -6px 0;
+  border: 1px solid var(--fokus);
+  cursor: pointer;
+}
+
+.zeit-laeuft {
+  background: var(--akzent);
+  border-color: var(--akzent);
+  color: var(--akzent-text);
+}
+
+.timer-leiste {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  padding: 8px var(--abstand) calc(8px + env(safe-area-inset-bottom));
+  max-height: 40vh;
+  overflow-y: auto;
+  background: var(--flaeche);
+  border-top: 1px solid var(--linie);
+  box-shadow: 0 -4px 14px rgba(90, 60, 30, 0.12);
+}
+
+.timer-leiste[hidden] {
+  display: none;
+}
+
+.timer-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.timer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--tipp-hoehe);
+  padding: 0 4px 0 12px;
+  border-radius: 14px;
+  background: var(--akzent-weich);
+}
+
+.timer-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timer-zeit {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--zahl);
+  font-variant-numeric: tabular-nums;
+}
+
+.timer-stopp {
+  min-width: var(--tipp-hoehe);
+  min-height: var(--tipp-hoehe);
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 1.3rem;
+}
+
+/* Abgelaufen: ganze Zeile ist ein Knopf, blinkt in kräftiger Farbe (auch ohne Ton gut zu sehen) */
+.timer-fertig {
+  display: block;
+  padding: 0;
+  background: var(--gefahr);
+  animation: timer-blinken 0.9s steps(2, start) infinite;
+}
+
+.timer-knopf {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  gap: 2px;
+  width: 100%;
+  min-height: var(--tipp-hoehe);
+  padding: 6px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--gefahr-text);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+}
+
+.timer-knopf .timer-zeit {
+  font-size: 1rem;
+  color: inherit;
+}
+
+@keyframes timer-blinken {
+  50% {
+    background: var(--akzent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timer-fertig {
+    animation: none;
+  }
+}

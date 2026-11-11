@@ -4,6 +4,7 @@
 import { zeigeTeigrechner, datenAktualisiert } from './teig/ansicht.js';
 import { starteOfflineBetrieb, frageVersion } from './kern/aktualisierung.js';
 import { bildschirmAnLassen } from './kern/bildschirm.js';
+import { erstelleTimer, starteTimerLeiste } from './kern/timer.js';
 import { startZurueckwischen } from './kern/zurueckwischen.js';
 import { speicher } from './kern/speicher.js';
 import { erstelleAnmeldung } from './kern/anmeldung.js';
@@ -53,6 +54,7 @@ abgleich.start();
 speicher.beiAenderung(() => ausloeser.nachAenderung());
 ausloeser.start();
 bildschirmAnLassen();
+starteTimerLeiste({ timer: erstelleTimer({ speicher }), ziel: document.getElementById('timer-leiste') });
 
 starteOfflineBetrieb((aktualisieren) => {
   const leiste = document.getElementById('update');
